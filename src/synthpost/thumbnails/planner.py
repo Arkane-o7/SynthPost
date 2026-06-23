@@ -15,6 +15,7 @@ FALLBACK_BACKGROUND = ThumbnailAsset(
 
 def _candidate_templates(brief: ThumbnailBrief) -> list[str]:
     preferred = brief.render_preferences.get("preferred_templates")
+    avoid = {str(template) for template in brief.render_preferences.get("avoid_templates", [])}
     if isinstance(preferred, list) and preferred:
         templates = [str(template) for template in preferred]
     else:
@@ -34,8 +35,11 @@ def _candidate_templates(brief: ThumbnailBrief) -> list[str]:
         elif template in {"device_shock"}:
             mapped.append("clean_market_surge")
     for fallback in ["authority_warning", "money_deal_bomb", "logo_collision"]:
-        if fallback not in mapped:
+        if fallback not in mapped and fallback not in avoid:
             mapped.append(fallback)
+    mapped = [template for template in mapped if template not in avoid]
+    if not mapped:
+        mapped = ["authority_warning", "money_deal_bomb"]
     return mapped
 
 

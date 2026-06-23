@@ -55,6 +55,7 @@ def write_candidates(
     *,
     min_score: int = 72,
     auto_select: bool = True,
+    visual_asset_candidates: dict | None = None,
 ) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     accepted = [concept for concept in concepts if not rejection_reasons(concept, min_score=min_score)]
@@ -87,6 +88,7 @@ def write_candidates(
             "accepted_concept_ids": [concept.concept_id for concept in accepted],
             "rejected": rejected,
         },
+        "visual_asset_candidates": visual_asset_candidates,
         "ab_test_variants": [
             {
                 "concept_id": concept.concept_id,

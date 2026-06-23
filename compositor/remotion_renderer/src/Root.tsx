@@ -48,6 +48,8 @@ const fallbackProps: StoryProps = {
 const calculateStoryMetadata = async ({props}: {props: StoryProps}) => {
   const typed = props as StoryProps;
   const fps = typed.fps || 24;
+  const width = typed.width || 1920;
+  const height = typed.height || 1080;
   let durationSeconds = typed.durationSeconds || 12;
   if (typed.anchor?.publicPath) {
     try {
@@ -59,8 +61,8 @@ const calculateStoryMetadata = async ({props}: {props: StoryProps}) => {
   }
   return {
     fps,
-    width: 1920,
-    height: 1080,
+    width,
+    height,
     durationInFrames: Math.max(1, Math.ceil(durationSeconds * fps)),
   };
 };

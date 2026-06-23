@@ -4,13 +4,15 @@ import argparse
 import subprocess
 from pathlib import Path
 
+from . import evidence
 from .content_writing import ollama as content_writing
 from .direction import avatar
 from .news_points import default as news_points
 from .visuals import default as visuals
 from .compositor import render_story
 from . import thumbnails
-from .storage import read_manifest
+from .render_profiles import apply_manifest_runtime, resolve_profile
+from .storage import read_manifest, write_manifest
 
 
 def run_story(
@@ -25,23 +27,47 @@ def run_story(
     thumbnail: bool = False,
     force_thumbnail: bool = False,
     auto_select_thumbnail: bool = False,
+    render_profile: str = "production",
 ) -> None:
+    profile = resolve_profile(render_profile)
+    manifest = read_manifest(story_json_path)
+    apply_manifest_runtime(manifest, render_profile=profile, test_mode=test_mode)
+    write_manifest(story_json_path, manifest)
+    if test_mode:
+        print("[TEST_MODE] WARNING: Story run is labeled TEST_MODE and must not be treated as production output.")
+
+    evidence.run(story_json_path)
     content_writing.run(story_json_path)
     news_points.run(story_json_path)
-    visuals.run(story_json_path, force=force_visuals)
+    visuals.run(story_json_path, force=force_visuals, test_mode=test_mode, render_profile=profile.name)
     manifest = read_manifest(story_json_path)
     template_name = manifest.get("composition", {}).get("template")
     if avatar.template_requires_avatar(template_name):
-        avatar.run(story_json_path, force=force_avatar, render=not skip_avatar_render, test_mode=test_mode)
+        avatar.run(
+            story_json_path,
+            force=force_avatar,
+            render=not skip_avatar_render,
+            test_mode=test_mode,
+            render_profile=profile.name,
+        )
     else:
         print(f"[direction] Skipping Avatar-Engine for visual-only template: {template_name}")
-    render_story(story_json_path, force=force_composite)
+    render_story(story_json_path, force=force_composite, test_mode=test_mode, render_profile=profile.name)
     if thumbnail:
-        thumbnails.run(story_json_path, force=force_thumbnail, manual_review=not auto_select_thumbnail)
+        thumbnails.run(
+            story_json_path,
+            force=force_thumbnail,
+            manual_review=not auto_select_thumbnail,
+            test_mode=test_mode,
+            render_profile=profile.name,
+        )
 
     if assemble:
         manifest = read_manifest(story_json_path)
-        subprocess.run(["python3", "assembly/stitch_episode.py", str(manifest["episode_id"])], check=True)
+        command = ["python3", "assembly/stitch_episode.py", str(manifest["episode_id"]), "--render-profile", profile.name]
+        if test_mode:
+            command.append("--test-mode")
+        subprocess.run(command, check=True)
 
 
 def main() -> None:
@@ -52,6 +78,12 @@ def main() -> None:
     parser.add_argument("--force-composite", action="store_true")
     parser.add_argument("--skip-avatar-render", action="store_true", help="Use an existing direction.anchor_output_path.")
     parser.add_argument("--test-mode", action="store_true", help="Forward Avatar-Engine test mode when rendering.")
+    parser.add_argument(
+        "--render-profile",
+        choices=["preview", "production", "final_master"],
+        default="production",
+        help="Render quality profile to record and apply where supported.",
+    )
     parser.add_argument("--assemble", action="store_true", help="Run episode assembly after story compositing.")
     parser.add_argument("--thumbnail", action="store_true", help="Generate episode thumbnail candidates from this story.")
     parser.add_argument("--force-thumbnail", action="store_true", help="Regenerate thumbnail candidates even if a best thumbnail exists.")
@@ -68,6 +100,7 @@ def main() -> None:
         thumbnail=args.thumbnail,
         force_thumbnail=args.force_thumbnail,
         auto_select_thumbnail=args.auto_select_thumbnail,
+        render_profile=args.render_profile,
     )
 
 

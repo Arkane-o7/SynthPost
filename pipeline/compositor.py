@@ -4,13 +4,22 @@ import subprocess
 from pathlib import Path
 
 from . import config
+from .provenance import artifact_record, record_story_artifact
+from .render_profiles import resolve_profile
 from .storage import output_is_fresh, read_manifest, resolve_project_path
 
 
-def render_story(story_json_path: str | Path, *, force: bool = False) -> Path:
+def render_story(
+    story_json_path: str | Path,
+    *,
+    force: bool = False,
+    test_mode: bool = False,
+    render_profile: str = "production",
+) -> Path:
     manifest = read_manifest(story_json_path)
     composition = manifest.get("composition", {})
     output_path = resolve_project_path(composition.get("output_path", ""))
+    profile = resolve_profile(render_profile)
 
     inputs = [story_json_path]
     direction = manifest.get("direction", {})
@@ -22,6 +31,38 @@ def render_story(story_json_path: str | Path, *, force: bool = False) -> Path:
 
     if output_is_fresh(output_path, inputs) and not force:
         print(f"[compositor] Reusing fresh render: {output_path}")
+        preview_path = resolve_project_path(composition.get("preview_path", output_path.with_name("preview.png").as_posix()))
+        record_story_artifact(
+            story_json_path,
+            "composited_video",
+            artifact_record(
+                path=output_path,
+                stage="compositor",
+                input_paths=inputs,
+                provider="remotion",
+                fresh=False,
+                reused=True,
+                test_mode=test_mode,
+                render_profile=profile.name,
+                flags={"force": force},
+            ),
+        )
+        if preview_path.exists():
+            record_story_artifact(
+                story_json_path,
+                "composition_preview",
+                artifact_record(
+                    path=preview_path,
+                    stage="compositor",
+                    input_paths=inputs,
+                    provider="remotion",
+                    fresh=False,
+                    reused=True,
+                    test_mode=test_mode,
+                    render_profile=profile.name,
+                    flags={"force": force},
+                ),
+            )
         return output_path
 
     remotion_dir = config.remotion_dir()
@@ -32,8 +73,46 @@ def render_story(story_json_path: str | Path, *, force: bool = False) -> Path:
     command = ["npm", "run", "render:story", "--", str(resolve_project_path(story_json_path))]
     if force:
         command.append("--force")
+    if test_mode:
+        print("[TEST_MODE] WARNING: Remotion composition is using TEST_MODE inputs.")
     print(f"[compositor] Running Remotion renderer: {' '.join(command)}")
     subprocess.run(command, cwd=remotion_dir, check=True)
     if not output_path.exists():
         raise FileNotFoundError(f"Remotion did not create expected composition: {output_path}")
+    rendered_manifest = read_manifest(story_json_path)
+    rendered_composition = rendered_manifest.get("composition", {}) if isinstance(rendered_manifest.get("composition"), dict) else {}
+    preview_path = resolve_project_path(rendered_composition.get("preview_path", output_path.with_name("preview.png").as_posix()))
+    record_story_artifact(
+        story_json_path,
+        "composited_video",
+        artifact_record(
+            path=output_path,
+            stage="compositor",
+            input_paths=inputs,
+            provider="remotion",
+            fresh=True,
+            reused=False,
+            test_mode=test_mode,
+            render_profile=profile.name,
+            command=command,
+            flags={"force": force},
+        ),
+    )
+    if preview_path.exists():
+        record_story_artifact(
+            story_json_path,
+            "composition_preview",
+            artifact_record(
+                path=preview_path,
+                stage="compositor",
+                input_paths=inputs,
+                provider="remotion",
+                fresh=True,
+                reused=False,
+                test_mode=test_mode,
+                render_profile=profile.name,
+                command=command,
+                flags={"force": force},
+            ),
+        )
     return output_path

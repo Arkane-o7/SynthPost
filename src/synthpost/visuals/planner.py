@@ -50,7 +50,7 @@ def default_providers(project_root: Path) -> list[VisualProvider]:
         PexelsPixabayProvider(project_root),
     ]
     if _context_graphics_enabled():
-        providers.append(ScreenshotProvider(project_root))
+        providers.insert(-2, ScreenshotProvider(project_root))
     if os.environ.get("SYNTHPOST_INCLUDE_VISUAL_LEADS", "0") == "1":
         providers.extend([WebSearchProvider(project_root), YouTubeMetadataProvider(project_root)])
     return providers
@@ -178,7 +178,8 @@ def _target_segment_count(duration_seconds: float) -> int:
 
 
 def _context_graphics_enabled() -> bool:
-    return os.environ.get("SYNTHPOST_ENABLE_CONTEXT_GRAPHICS", "0") == "1"
+    value = os.environ.get("SYNTHPOST_ENABLE_CONTEXT_GRAPHICS", "auto").strip().lower()
+    return value not in {"0", "false", "no", "off", "disabled"}
 
 
 def _dedupe(assets: list[VisualAsset]) -> list[VisualAsset]:

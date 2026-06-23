@@ -25,6 +25,9 @@ PUBLIC_OR_OPEN_HOST_SUFFIXES = (
     "noaa.gov",
     "loc.gov",
 )
+BRANDING_URL_TERMS = ("logo", "wordmark", "favicon", "brandmark", "brand_mark")
+GENERIC_SPACE_URL_TERMS = ("skywatching", "solar-system", "solar_system", "stars", "starfield", "galaxy", "nebula")
+SPACE_STORY_TERMS = {"space", "orbit", "orbital", "moon", "mars", "asteroid", "telescope", "galaxy", "stars", "skywatching"}
 
 
 class _MediaLinkParser(html.parser.HTMLParser):
@@ -91,6 +94,10 @@ class SourcePageProvider(VisualProvider):
             if url in seen:
                 continue
             seen.add(url)
+            reject_reason = self._reject_reason(url, role=role, manifest=manifest)
+            if reject_reason:
+                report.warnings.append(f"Rejected source-page media `{url}`: {reject_reason}")
+                continue
             asset = self._asset(url, role=role, index=index, manifest=manifest, source_url=source_url, host_is_open=host_is_open)
             assets.append(asset)
             if len(assets) >= self.max_assets:
@@ -165,3 +172,58 @@ class SourcePageProvider(VisualProvider):
             return True
         host = (urllib.parse.urlparse(url).hostname or "").lower().removeprefix("www.")
         return any(host == suffix or host.endswith(suffix) for suffix in PUBLIC_OR_OPEN_HOST_SUFFIXES)
+
+    def _reject_reason(self, url: str, *, role: str, manifest: dict[str, Any]) -> str | None:
+        parsed = urllib.parse.urlparse(url)
+        haystack = " ".join(
+            [
+                parsed.path.lower(),
+                parsed.query.lower(),
+                Path(parsed.path).stem.lower(),
+            ]
+        )
+        if any(term in haystack for term in BRANDING_URL_TERMS):
+            return "publisher logo or source branding, not story visual"
+        if any(term in haystack for term in GENERIC_SPACE_URL_TERMS) and not self._story_is_space_related(manifest):
+            return "generic space/skywatching media unrelated to current story"
+        if role not in {"og:image", "twitter:image", "og:video", "twitter:player:stream", "source_url"}:
+            story_terms = self._story_terms(manifest)
+            url_terms = set(tokenize(haystack))
+            if story_terms and not (story_terms & url_terms):
+                return "inline source-page media filename/path does not match current story terms"
+        return None
+
+    def _story_is_space_related(self, manifest: dict[str, Any]) -> bool:
+        raw = manifest.get("raw") if isinstance(manifest.get("raw"), dict) else {}
+        script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
+        text = " ".join(
+            compact_text(value)
+            for value in [
+                raw.get("headline_source"),
+                raw.get("summary"),
+                raw.get("category"),
+                script.get("headline"),
+                script.get("text"),
+                script.get("category"),
+            ]
+            if value
+        )
+        return bool(set(tokenize(text)) & SPACE_STORY_TERMS)
+
+    def _story_terms(self, manifest: dict[str, Any]) -> set[str]:
+        raw = manifest.get("raw") if isinstance(manifest.get("raw"), dict) else {}
+        script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
+        text = " ".join(
+            compact_text(value)
+            for value in [
+                raw.get("headline_source"),
+                raw.get("summary"),
+                raw.get("category"),
+                script.get("headline"),
+                script.get("text"),
+                script.get("category"),
+            ]
+            if value
+        )
+        generic = {"2026", "nasa", "science", "gov", "general", "source", "page", "media", "the", "and"}
+        return {token for token in tokenize(text) if len(token) > 2 and token not in generic}

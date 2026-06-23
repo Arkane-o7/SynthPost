@@ -181,7 +181,10 @@ render_profiles:
   production:
     fps: 24
     resolution: [1920, 1080]
-    camera_resolution_scale: 2.0
+    camera_resolution_scale: 1.0
+    camera_resolution_overrides:
+      portrait_main:
+        scale: 1.0
     export_mode: native_segments
 ```
 
@@ -366,9 +369,9 @@ Profiles fill in render/export defaults before the job is validated and before B
 Built-in profiles:
 
 - `preview`: fast draft mode, `12 fps`, `960x540`, low samples, shadows disabled, `combined` MP4 export.
-- `production`: final-news mode, `24 fps`, `1920x1080`, higher camera scale, `native_segments` export.
+- `production`: final-news mode, `24 fps`, `1920x1080`, native camera scale, portrait camera override, `native_segments` export.
 
-With the current template camera settings, `production` renders native segment clips around `3840x2160` for landscape cameras and `1800x2656` for the portrait camera. Use `preview` for iteration and `production` only when you are ready for the backend/editor-quality output.
+With the current template camera settings, `production` renders native segment clips around `1920x1080` for landscape cameras and about `900x1328` for the portrait camera. These source clips are close to the final `1920x1080` episode canvas instead of being oversized. Use `preview` for iteration and `production` only when you are ready for the backend/editor-quality output.
 
 For the automated news backend, use `production` as the normal path:
 
@@ -383,11 +386,21 @@ The runner writes the merged job used by Blender to:
 assets/temp/<job_id>/effective_job.json
 ```
 
-Profiles already set common resolution and quality values. When you need a one-off override, use `camera_resolution_scale` to render camera POVs at higher resolution while preserving their aspect ratio:
+Profiles already set common resolution and quality values. `camera_resolution_scale` is the global multiplier applied to every Blender camera's saved custom resolution:
 
 ```json
 "resolution": [1920, 1080],
-"camera_resolution_scale": 2.0
+"camera_resolution_scale": 1.0
+```
+
+Use `camera_resolution_overrides` when only one camera should change. The nested `scale` is also a resolution multiplier, but it applies only to that camera and wins over `camera_resolution_scale`:
+
+```json
+"camera_resolution_overrides": {
+  "portrait_main": {
+    "scale": 1.0
+  }
+}
 ```
 
 For fast previews:

@@ -221,7 +221,17 @@ def build_story_segments(manifest: dict[str, Any], *, target_count: int = 5) -> 
     script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
     duration = _duration(manifest)
     category = compact_text((script or {}).get("category") or (raw or {}).get("category"))
-    facts = [compact_text(fact) for fact in (raw or {}).get("facts", []) if compact_text(fact)]
+    claim_texts = [
+        compact_text(claim.get("text"))
+        for claim in (raw or {}).get("claims", [])
+        if isinstance(claim, dict) and compact_text(claim.get("text"))
+    ]
+    facts = unique(
+        [
+            *claim_texts,
+            *[compact_text(fact) for fact in (raw or {}).get("facts", []) if compact_text(fact)],
+        ]
+    )
     summary = compact_text((raw or {}).get("summary"))
     script_text = compact_text((script or {}).get("text"))
     items: list[dict[str, Any]] = []

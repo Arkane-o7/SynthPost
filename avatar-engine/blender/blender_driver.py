@@ -20,6 +20,12 @@ from mouth_mapping import MOUTH_CUE_INDEX, RHU_BARBS, SHAPE_KEY_MOUTH_MAP, shape
 
 MOUTH_TEXTURE_HANDLER_NAME = "desk_avatar_sync_2d_mouth_texture"
 
+CAMERA_RESOLUTION_KEYS = {
+    "landscape_intro": {"CAM_Landscape_Intro"},
+    "portrait_main": {"CAM_Portrait_Main"},
+    "landscape_conclusion": {"CAM_Landscape_Conclusion"},
+}
+
 
 def parse_blender_args() -> Path:
     if "--" not in sys.argv:
@@ -63,14 +69,32 @@ def add_audio_to_timeline(audio_path: Path) -> None:
         print(f"[blender] WARNING: Could not add audio to timeline: {exc}")
 
 
+def camera_resolution_override(job: dict[str, Any], object_name: str) -> dict[str, Any]:
+    overrides = job.get("camera_resolution_overrides")
+    if not isinstance(overrides, dict):
+        return {}
+    direct_keys = {object_name, object_name.lower()}
+    for key, aliases in CAMERA_RESOLUTION_KEYS.items():
+        if object_name in aliases:
+            direct_keys.add(key)
+    for key in direct_keys:
+        value = overrides.get(key)
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
 def configure_per_camera_resolution(job: dict[str, Any], width: int, height: int, percentage: int = 100) -> None:
     if bool(job.get("use_per_camera_resolution", True)):
         scale = max(0.01, float(job.get("camera_resolution_scale", 1.0)))
-        if scale == 1.0:
+        overrides = job.get("camera_resolution_overrides")
+        has_overrides = isinstance(overrides, dict) and bool(overrides)
+        if scale == 1.0 and not has_overrides:
             print("[blender] Keeping template per-camera resolution settings.")
             return
 
         updated = 0
+        overridden = 0
         for obj in bpy.data.objects:
             if getattr(obj, "type", "") != "CAMERA":
                 continue
@@ -78,10 +102,27 @@ def configure_per_camera_resolution(job: dict[str, Any], width: int, height: int
             props = getattr(camera_data, "per_camera_resolution", None)
             if props is None or not bool(props.use_custom_resolution):
                 continue
-            props.resolution_x = max(1, int(round(float(props.resolution_x) * scale)))
-            props.resolution_y = max(1, int(round(float(props.resolution_y) * scale)))
+            base_x = float(props.resolution_x)
+            base_y = float(props.resolution_y)
+            override = camera_resolution_override(job, str(obj.name))
+            override_resolution = override.get("resolution") if override else None
+            if isinstance(override_resolution, list) and len(override_resolution) == 2:
+                props.resolution_x = max(1, int(override_resolution[0]))
+                props.resolution_y = max(1, int(override_resolution[1]))
+                overridden += 1
+            else:
+                camera_scale = max(0.01, float(override.get("scale", scale))) if override else scale
+                props.resolution_x = max(1, int(round(base_x * camera_scale)))
+                props.resolution_y = max(1, int(round(base_y * camera_scale)))
+                if override:
+                    overridden += 1
+            if override and "percentage" in override:
+                props.resolution_percentage = max(1, min(100, int(override["percentage"])))
             updated += 1
-        print(f"[blender] Scaled template per-camera resolution settings by {scale:g} for {updated} camera(s).")
+        print(
+            f"[blender] Scaled template per-camera resolution settings by {scale:g} "
+            f"for {updated} camera(s), with {overridden} override(s)."
+        )
         return
 
     updated = 0

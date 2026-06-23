@@ -9,6 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline import config
+from pipeline.provenance import artifact_record, record_episode_artifact
+from pipeline.render_profiles import profile_record, resolve_profile
 from pipeline.storage import PROJECT_ROOT, episode_dir, read_manifest, resolve_project_path
 
 
@@ -54,7 +56,7 @@ def duration_seconds(path: Path) -> float:
         return 1.0
 
 
-def ensure_placeholder_clip(path: Path, label: str, duration: float) -> None:
+def ensure_placeholder_clip(path: Path, label: str, duration: float, *, width: int = WIDTH, height: int = HEIGHT, fps: int = FPS) -> None:
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,7 +70,7 @@ def ensure_placeholder_clip(path: Path, label: str, duration: float) -> None:
         "-f",
         "lavfi",
         "-i",
-        f"color=c=#050A14:s={WIDTH}x{HEIGHT}:d={duration}",
+        f"color=c=#050A14:s={width}x{height}:d={duration}",
         "-f",
         "lavfi",
         "-i",
@@ -77,7 +79,7 @@ def ensure_placeholder_clip(path: Path, label: str, duration: float) -> None:
         "format=yuv420p",
         "-shortest",
         "-r",
-        str(FPS),
+        str(fps),
         "-c:v",
         "libx264",
         "-pix_fmt",
@@ -89,12 +91,12 @@ def ensure_placeholder_clip(path: Path, label: str, duration: float) -> None:
     run(command)
 
 
-def normalize_clip(input_path: Path, output_path: Path) -> None:
+def normalize_clip(input_path: Path, output_path: Path, *, width: int = WIDTH, height: int = HEIGHT, fps: int = FPS) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg = config.ffmpeg_binary()
     video_filter = (
-        f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=decrease,"
-        f"pad={WIDTH}:{HEIGHT}:(ow-iw)/2:(oh-ih)/2:color=#050A14,"
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=#050A14,"
         "setsar=1"
     )
     audio_filter = "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000"
@@ -121,7 +123,7 @@ def normalize_clip(input_path: Path, output_path: Path) -> None:
             "-vf",
             video_filter,
             "-r",
-            str(FPS),
+            str(fps),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -160,7 +162,7 @@ def normalize_clip(input_path: Path, output_path: Path) -> None:
             "-vf",
             video_filter,
             "-r",
-            str(FPS),
+            str(fps),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -188,7 +190,7 @@ def normalize_clip(input_path: Path, output_path: Path) -> None:
         raise
 
 
-def concat_clips(clips: list[Path], output_path: Path, work_dir: Path) -> None:
+def concat_clips(clips: list[Path], output_path: Path, work_dir: Path, *, fps: int = FPS) -> None:
     list_path = work_dir / "concat.txt"
     with list_path.open("w", encoding="utf-8") as handle:
         for clip in clips:
@@ -207,7 +209,7 @@ def concat_clips(clips: list[Path], output_path: Path, work_dir: Path) -> None:
             "-i",
             str(list_path),
             "-r",
-            str(FPS),
+            str(fps),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -226,10 +228,10 @@ def concat_clips(clips: list[Path], output_path: Path, work_dir: Path) -> None:
         run(command)
     except subprocess.CalledProcessError:
         print("[assembly] Concat demuxer failed, retrying with safe filter re-encode concat.")
-        concat_clips_filter(clips, output_path)
+        concat_clips_filter(clips, output_path, fps=fps)
 
 
-def concat_clips_filter(clips: list[Path], output_path: Path) -> None:
+def concat_clips_filter(clips: list[Path], output_path: Path, *, fps: int = FPS) -> None:
     command = [
         config.ffmpeg_binary(),
         "-hide_banner",
@@ -250,7 +252,7 @@ def concat_clips_filter(clips: list[Path], output_path: Path) -> None:
             "-map",
             "[a]",
             "-r",
-            str(FPS),
+            str(fps),
             "-c:v",
             "libx264",
             "-pix_fmt",
@@ -274,7 +276,16 @@ def story_manifests(episode_id: str) -> list[Path]:
     return sorted(stories_root.glob("*/story.json"))
 
 
-def stitch_episode(episode_id: str, *, force: bool = False) -> Path:
+def stitch_episode(
+    episode_id: str,
+    *,
+    force: bool = False,
+    test_mode: bool = False,
+    render_profile: str = "production",
+) -> Path:
+    profile = resolve_profile(render_profile)
+    if test_mode:
+        print("[TEST_MODE] WARNING: Assembly output will be labeled TEST_MODE and written as final_TEST_MODE.mp4.")
     episode = episode_dir(episode_id)
     manifests = story_manifests(episode_id)
     if not manifests:
@@ -282,8 +293,8 @@ def stitch_episode(episode_id: str, *, force: bool = False) -> Path:
 
     intro = PROJECT_ROOT / "assets" / "brand" / "intro.mp4"
     outro = PROJECT_ROOT / "assets" / "brand" / "outro.mp4"
-    ensure_placeholder_clip(intro, "SYNTHPOST", 1.6)
-    ensure_placeholder_clip(outro, "SYNTHPOST", 1.2)
+    ensure_placeholder_clip(intro, "SYNTHPOST", 1.6, width=profile.width, height=profile.height, fps=profile.fps)
+    ensure_placeholder_clip(outro, "SYNTHPOST", 1.2, width=profile.width, height=profile.height, fps=profile.fps)
 
     source_clips = [intro]
     for manifest_path in manifests:
@@ -303,13 +314,42 @@ def stitch_episode(episode_id: str, *, force: bool = False) -> Path:
     work_dir.mkdir(parents=True, exist_ok=True)
     normalized: list[Path] = []
     for index, clip in enumerate(source_clips):
-        out = work_dir / f"{index:03d}_{clip.stem}_normalized.mp4"
+        out = work_dir / f"{index:03d}_{clip.stem}_{profile.name}_normalized.mp4"
         if force or not out.exists() or clip.stat().st_mtime > out.stat().st_mtime:
-            normalize_clip(clip, out)
+            normalize_clip(clip, out, width=profile.width, height=profile.height, fps=profile.fps)
         normalized.append(out)
 
-    final_path = episode / "final.mp4"
-    concat_clips(normalized, final_path, work_dir)
+    final_path = episode / ("final_TEST_MODE.mp4" if test_mode else "final.mp4")
+    concat_clips(normalized, final_path, work_dir, fps=profile.fps)
+    command = ["python3", "assembly/stitch_episode.py", episode_id, "--render-profile", profile.name]
+    if force:
+        command.append("--force")
+    if test_mode:
+        command.append("--test-mode")
+    story_inputs = [*manifests, *source_clips]
+    runtime = {
+        "render_profile": profile.name,
+        "render_profile_settings": profile_record(profile),
+        "test_mode": bool(test_mode),
+        "mode": "TEST_MODE" if test_mode else "production",
+    }
+    record_episode_artifact(
+        episode_id,
+        "final_video",
+        artifact_record(
+            path=final_path,
+            stage="assembly",
+            input_paths=story_inputs,
+            provider="ffmpeg",
+            fresh=True,
+            reused=False,
+            test_mode=test_mode,
+            render_profile=profile.name,
+            command=command,
+            flags={"force": force},
+        ),
+        runtime=runtime,
+    )
     print(f"[assembly] Final episode: {final_path}")
     return final_path
 
@@ -318,8 +358,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Stitch SynthPost story clips into one episode MP4.")
     parser.add_argument("episode_id")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--test-mode", action="store_true", help="Write TEST_MODE provenance and final_TEST_MODE.mp4.")
+    parser.add_argument(
+        "--render-profile",
+        choices=["preview", "production", "final_master"],
+        default="production",
+        help="Render quality profile for output normalization.",
+    )
     args = parser.parse_args()
-    stitch_episode(args.episode_id, force=args.force)
+    stitch_episode(args.episode_id, force=args.force, test_mode=args.test_mode, render_profile=args.render_profile)
 
 
 if __name__ == "__main__":

@@ -290,6 +290,8 @@ const main = async () => {
 
   const direction = manifest.direction ?? {};
   const compositionManifest = manifest.composition ?? {};
+  const runtime = manifest.runtime ?? {};
+  const profileSettings = runtime.render_profile_settings ?? {};
   const script = manifest.script ?? {};
   const raw = manifest.raw ?? {};
   const templateName = String(compositionManifest.template ?? 'split_main');
@@ -335,7 +337,9 @@ const main = async () => {
   const props: StoryProps = {
     storyId,
     episodeId,
-    fps: Number(direction.fps ?? 24),
+    fps: Number(direction.fps ?? profileSettings.fps ?? 24),
+    width: Number(profileSettings.width ?? direction.resolution?.[0] ?? 1920),
+    height: Number(profileSettings.height ?? direction.resolution?.[1] ?? 1080),
     durationSeconds: Number(
       compositionManifest.duration_seconds ??
         direction.estimated_duration_seconds ??
@@ -392,6 +396,11 @@ const main = async () => {
     output_path: path.relative(projectRoot, outputPath).split(path.sep).join('/'),
     preview_path: path.relative(projectRoot, previewPath).split(path.sep).join('/'),
     duration_seconds: composition.durationInFrames / composition.fps,
+    fps: composition.fps,
+    width: composition.width,
+    height: composition.height,
+    render_profile: runtime.render_profile ?? manifest.render_profile,
+    test_mode: Boolean(runtime.test_mode ?? manifest.test_mode),
   };
   await writeJson(storyPath, manifest);
 

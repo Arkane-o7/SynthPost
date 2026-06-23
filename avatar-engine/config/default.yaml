@@ -23,13 +23,16 @@ render_profiles:
     render_quality: draft
     render_samples: 4
     disable_shadows: true
-    camera_resolution_scale: 1.0
+    camera_resolution_scale: 0.5
     export_mode: combined
     use_per_camera_resolution: true
   production:
     fps: 24
     resolution: [1920, 1080]
-    camera_resolution_scale: 2.0
+    camera_resolution_scale: 1.0
+    camera_resolution_overrides:
+      portrait_main:
+        scale: 0.5
     export_mode: native_segments
     use_per_camera_resolution: true
 

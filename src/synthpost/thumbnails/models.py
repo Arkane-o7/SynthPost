@@ -68,6 +68,7 @@ class ThumbnailAsset:
     attribution: str | None = None
     usage_status: str = "needs_review"
     label: str | None = None
+    notes: str | None = None
 
     @classmethod
     def from_record(cls, record: dict[str, Any]) -> "ThumbnailAsset":
@@ -81,6 +82,7 @@ class ThumbnailAsset:
             attribution=str(record["attribution"]) if record.get("attribution") else None,
             usage_status=str(record.get("usage_status", "needs_review")),
             label=str(record["label"]) if record.get("label") else None,
+            notes=str(record["notes"]) if record.get("notes") else None,
         )
 
     def to_record(self) -> dict[str, Any]:
@@ -96,6 +98,7 @@ class ThumbnailAsset:
                 "attribution": self.attribution,
                 "usage_status": self.usage_status,
                 "label": self.label,
+                "notes": self.notes,
             }.items()
             if value not in (None, "", [], {})
         }

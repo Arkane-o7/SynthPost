@@ -74,6 +74,16 @@ Each stage reads `episodes/<episode_id>/stories/<story_id>/story.json` and write
 
 The schema lives at `pipeline/schemas/story_manifest.schema.json`.
 
+## Evidence Ledger
+
+Before script generation, `pipeline.evidence` normalizes `raw.sources[]` and `raw.claims[]`.
+Each claim gets a stable `claim_id`, source ids, evidence quote, confidence, and status.
+The writing stage must return `claim_ids`; SynthPost then writes `script.source_ids`,
+`script.evidence_summary`, and a top-level `editorial_review`.
+
+This keeps the AI writer inside the sourced ledger instead of asking it to improvise from
+RSS summaries or loose facts.
+
 ## News Visuals
 
 `pipeline/visuals/default.py` is now a thin adapter over `src/synthpost/visuals`. It builds a timed visual rundown from the story manifest, writes rich provenance metadata into `visuals[]` and `visual_assets[]`, and saves an audit file at:
@@ -89,6 +99,7 @@ Provider priority is newsroom-style and rights-aware:
 - Global official/public-domain drop folders: `dvids`, `nasa_media`, `eu_av`, `white_house_media`, `us_state_department_flickr`, `noaa_media`, `usgs_media`, `copernicus_data`
 - Open/public archives: `wikimedia`, `openverse`, `library_of_congress`, `nara_archives`, `internet_archive`, `natural_earth_maps`
 - Context/document sources: `official_page_screenshot`, `document_screenshot`, `court_document_source`, `parliament_or_legislature_source`, `company_press_kit`
+- Generated context cards: `screenshot_provider` creates story-specific source/document/chart-style SVGs from the evidence-backed manifest when real event media is sparse. Set `SYNTHPOST_ENABLE_CONTEXT_GRAPHICS=0` to disable.
 - Social: `social_media_leads` collects leads; `social_reference_ingest` only renders approved yellow references when `SYNTHPOST_ALLOW_RISKY_SOCIAL=1`
 - Stock fallback: `pexels_pixabay_optional` remains available, but is marked as `content_role: atmosphere` and ranks last
 

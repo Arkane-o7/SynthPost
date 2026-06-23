@@ -33,11 +33,11 @@ Use these for the final anchor segment:
 "render_profile": "production"
 ```
 
-The production profile sets `24 fps`, `1920x1080`, higher camera resolution scale, and native segment export. Do not set `disable_shadows` for final renders.
+The production profile sets `24 fps`, `1920x1080`, native camera resolution scale, and native segment export. Do not set `disable_shadows` for final renders.
 
-With the current template camera settings, the production profile renders native segments at about `3840x2160` for landscape cameras and `1800x2656` for the portrait camera. That is intentionally higher quality, but it is much slower than preview mode. Use `preview` while iterating on script, timing, mouth sync, and camera cuts.
+With the current template camera settings, the production profile renders native segments at about `1920x1080` for landscape cameras and about `900x1328` for the portrait camera. These source clips are close to the final episode canvas instead of being oversized.
 
-`camera_resolution_scale` multiplies each Blender camera's saved per-camera resolution. If the template camera is `960x540`, a scale of `2.0` renders that camera as `1920x1080`. If the portrait camera is `450x664`, a scale of `2.0` renders it as `900x1328`, then FFmpeg fits it into the final MP4 canvas with padding.
+`camera_resolution_scale` multiplies each Blender camera's saved per-camera resolution. `camera_resolution_overrides` can replace that scale for individual semantic cameras. The nested `scale` is the same kind of multiplier, but scoped to one camera and applied instead of the global value.
 
 For backend/editor use, prefer:
 

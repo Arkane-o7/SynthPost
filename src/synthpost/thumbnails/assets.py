@@ -56,6 +56,8 @@ class AssetMatch:
     asset: ThumbnailAsset
     score: int
     reasons: list[str]
+    relevance_score: float = 0.0
+    reject_reason: str | None = None
 
 
 def brief_asset_groups(assets: list[ThumbnailAsset]) -> dict[str, list[dict[str, Any]]]:
@@ -108,19 +110,72 @@ def select_assets_for_brief(
         and asset.usage_status != "do_not_use"
         and (not require_approved or asset.usage_status == "approved")
     ]
-    matches = [_score_asset(brief, asset) for asset in candidates]
-    useful = [match for match in matches if match.score >= 12]
+    matches = [score_asset_for_brief(brief, asset) for asset in candidates]
+    useful = [match for match in matches if _is_useful_library_match(match)]
     useful.sort(key=lambda match: (match.score, _asset_priority(match.asset)), reverse=True)
     return useful[:max_assets]
 
 
 def resolve_brief_assets(brief: ThumbnailBrief, *, library_path: str | Path | None = None) -> tuple[ThumbnailBrief, list[AssetMatch]]:
+    has_story_image = any(
+        asset.id.startswith("story_visual_")
+        and asset.type in {"background_image", "generated_background", "map", "screenshot"}
+        and asset.usage_status == "approved"
+        for asset in brief.assets
+    )
+    if has_story_image:
+        return brief, []
+    if _has_only_generic_subjects(brief):
+        return brief, []
+
     has_foreground = any(asset.type in {"hero_composite", "foreground_composite", "person_image", "object"} for asset in brief.assets)
     max_assets = 1 if has_foreground else 2
     matches = select_assets_for_brief(brief, library_path=library_path, max_assets=max_assets)
     if matches:
         brief.assets = [*brief.assets, *(match.asset for match in matches)]
     return brief, matches
+
+
+def library_asset_candidate_records(
+    brief: ThumbnailBrief,
+    *,
+    library_path: str | Path | None = None,
+    selected: list[AssetMatch] | None = None,
+    limit: int = 24,
+) -> list[dict[str, Any]]:
+    selected_ids = {match.asset.id for match in selected or []}
+    existing_ids = {asset.id for asset in brief.assets}
+    candidates = [
+        asset
+        for asset in load_asset_library(library_path)
+        if asset.id not in existing_ids and asset.usage_status != "do_not_use"
+    ]
+    matches = [score_asset_for_brief(brief, asset) for asset in candidates]
+    matches.sort(key=lambda match: (match.asset.id not in selected_ids, -match.score, match.asset.id))
+    records: list[dict[str, Any]] = []
+    for match in matches[:limit]:
+        accepted = match.asset.id in selected_ids
+        reject_reason = None if accepted else match.reject_reason or _library_reject_reason(match)
+        records.append(
+            {
+                key: value
+                for key, value in {
+                    "asset_id": match.asset.id,
+                    "source": "asset_library",
+                    "path_or_url": match.asset.path_or_url,
+                    "type": match.asset.type,
+                    "subject": match.asset.subject_name,
+                    "label": match.asset.label,
+                    "raw_score": match.score,
+                    "relevance_score": match.relevance_score,
+                    "accepted": accepted,
+                    "reject_reason": reject_reason,
+                    "reasons": match.reasons,
+                }.items()
+                if value not in (None, "", [], {})
+            }
+        )
+    return records
 
 
 def write_resolved_brief_record(brief: ThumbnailBrief, path: str | Path, *, selected: list[AssetMatch] | None = None) -> Path:
@@ -179,7 +234,7 @@ def _scan_generated_assets() -> list[ThumbnailAsset]:
     return assets
 
 
-def _score_asset(brief: ThumbnailBrief, asset: ThumbnailAsset) -> AssetMatch:
+def score_asset_for_brief(brief: ThumbnailBrief, asset: ThumbnailAsset) -> AssetMatch:
     haystack = " ".join(
         str(value)
         for value in [
@@ -193,19 +248,24 @@ def _score_asset(brief: ThumbnailBrief, asset: ThumbnailAsset) -> AssetMatch:
     ).lower()
     topic = brief.topic.lower()
     subject_terms = [_slug(subject.name).replace("-", " ") for subject in brief.main_subjects]
+    haystack_tokens = set(_tokens(haystack))
     query_terms = set(_tokens(" ".join([brief.video_title, brief.episode_headline, brief.story_angle, topic])))
     score = 0
     reasons: list[str] = []
 
-    if topic in haystack:
+    if topic and topic in haystack_tokens:
         score += 8
         reasons.append(f"topic:{topic}")
     for term in subject_terms:
+        term_tokens = set(_tokens(term))
         if term and term in haystack:
             score += 10
             reasons.append(f"subject:{term}")
+        elif term_tokens and term_tokens.issubset(haystack_tokens):
+            score += 8
+            reasons.append(f"subject_tokens:{term}")
     for token in query_terms:
-        if len(token) > 2 and token in haystack:
+        if len(token) > 2 and token in haystack_tokens:
             score += 2
             if len(reasons) < 5:
                 reasons.append(f"keyword:{token}")
@@ -214,10 +274,55 @@ def _score_asset(brief: ThumbnailBrief, asset: ThumbnailAsset) -> AssetMatch:
         reasons.append("foreground_composite")
     if asset.usage_status == "approved":
         score += 3
+    if _is_branding_asset(asset):
+        score -= 30
+        reasons.append("reject:publisher_logo_or_branding")
+    if _is_generic_space_asset(asset) and not _story_is_space_related(brief):
+        score -= 24
+        reasons.append("reject:generic_space_asset")
     if not _asset_exists(asset):
         score -= 20
         reasons.append("missing_file")
-    return AssetMatch(asset=asset, score=score, reasons=reasons)
+    reject_reason = _library_reject_reason(AssetMatch(asset=asset, score=score, reasons=reasons))
+    return AssetMatch(
+        asset=asset,
+        score=score,
+        reasons=reasons,
+        relevance_score=_normalized_relevance(score),
+        reject_reason=reject_reason,
+    )
+
+
+def _is_useful_library_match(match: AssetMatch) -> bool:
+    if match.reject_reason:
+        return False
+    if match.score < 18:
+        return False
+    strong_reasons = [
+        reason
+        for reason in match.reasons
+        if reason.startswith(("subject:", "subject_tokens:", "topic:", "keyword:"))
+    ]
+    return len(strong_reasons) >= 2
+
+
+def _library_reject_reason(match: AssetMatch) -> str | None:
+    if any(reason.startswith("reject:publisher_logo") for reason in match.reasons):
+        return "publisher logo or source branding, not a story visual"
+    if any(reason.startswith("reject:generic_space") for reason in match.reasons):
+        return "generic space image unrelated to current story entities"
+    if "missing_file" in match.reasons:
+        return "asset file is missing"
+    if match.score < 18:
+        return "low match to current story headline, topic, and entities"
+    strong_reasons = [
+        reason
+        for reason in match.reasons
+        if reason.startswith(("subject:", "subject_tokens:", "topic:", "keyword:"))
+    ]
+    if len(strong_reasons) < 2:
+        return "insufficient story-specific match"
+    return None
 
 
 def _asset_exists(asset: ThumbnailAsset) -> bool:
@@ -244,6 +349,33 @@ def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_") or "asset"
 
 
+def _normalized_relevance(score: int) -> float:
+    return round(max(0.0, min(score / 40.0, 1.0)), 2)
+
+
+def _is_branding_asset(asset: ThumbnailAsset) -> bool:
+    haystack = " ".join(
+        str(value)
+        for value in [asset.id, asset.path_or_url, asset.subject_name, asset.label]
+        if value
+    ).lower()
+    return any(token in haystack for token in ["logo", "wordmark", "favicon", "brandmark", "brand_mark"])
+
+
+def _is_generic_space_asset(asset: ThumbnailAsset) -> bool:
+    haystack = " ".join(
+        str(value)
+        for value in [asset.id, asset.path_or_url, asset.subject_name, asset.label]
+        if value
+    ).lower()
+    return any(token in haystack for token in ["star", "stars", "skywatching", "solar-system", "galaxy", "nebula"])
+
+
+def _story_is_space_related(brief: ThumbnailBrief) -> bool:
+    tokens = set(_tokens(" ".join([brief.video_title, brief.episode_headline, brief.story_angle, brief.topic])))
+    return bool(tokens & {"space", "orbit", "orbital", "moon", "mars", "asteroid", "telescope", "galaxy", "stars"})
+
+
 def _dedupe_assets(assets: list[ThumbnailAsset]) -> list[ThumbnailAsset]:
     seen_ids: set[str] = set()
     seen_paths: set[str] = set()
@@ -256,3 +388,17 @@ def _dedupe_assets(assets: list[ThumbnailAsset]) -> list[ThumbnailAsset]:
         seen_paths.add(normalized_path)
         deduped.append(asset)
     return deduped
+
+
+def _has_only_generic_subjects(brief: ThumbnailBrief) -> bool:
+    generic_subjects = {
+        "ai model",
+        "company strategy",
+        "global map",
+        "market chart",
+        "power grid",
+        "source image",
+        "technology shift",
+    }
+    names = {subject.name.strip().lower() for subject in brief.main_subjects if subject.name.strip()}
+    return bool(names) and names <= generic_subjects

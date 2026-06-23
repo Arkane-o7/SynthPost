@@ -36,6 +36,8 @@ export type StoryProps = {
   storyId: string;
   episodeId: string;
   fps: number;
+  width?: number;
+  height?: number;
   durationSeconds: number;
   headline: string;
   headlineItems: HeadlineItem[];

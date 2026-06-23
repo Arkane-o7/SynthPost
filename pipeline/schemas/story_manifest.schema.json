@@ -17,7 +17,58 @@
         "source_name": { "type": "string" },
         "category": { "type": "string" },
         "published_at": { "type": "string" },
-        "facts": { "type": "array", "items": { "type": "string" } }
+        "facts": { "type": "array", "items": { "type": "string" } },
+        "sources": {
+          "type": "array",
+          "description": "Normalized source ledger used to support generated copy.",
+          "items": {
+            "type": "object",
+            "required": ["source_id", "name"],
+            "properties": {
+              "source_id": { "type": "string" },
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "title": { "type": "string" },
+              "published_at": { "type": "string" },
+              "retrieved_at": { "type": "string" },
+              "source_type": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "claims": {
+          "type": "array",
+          "description": "Claim-level evidence ledger. Script copy should cite these claim_ids.",
+          "items": {
+            "type": "object",
+            "required": ["claim_id", "text", "source_ids"],
+            "properties": {
+              "claim_id": { "type": "string" },
+              "text": { "type": "string" },
+              "source_ids": { "type": "array", "items": { "type": "string" } },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "source_id": { "type": "string" },
+                    "url": { "type": "string" },
+                    "quote": { "type": "string" }
+                  },
+                  "additionalProperties": true
+                }
+              },
+              "confidence": { "type": "string" },
+              "status": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        },
+        "evidence_summary": {
+          "type": "object",
+          "description": "Readiness summary for the source and claim ledger.",
+          "additionalProperties": true
+        }
       },
       "additionalProperties": true
     },
@@ -27,7 +78,15 @@
       "properties": {
         "text": { "type": "string" },
         "headline": { "type": "string" },
-        "category": { "type": "string" }
+        "category": { "type": "string" },
+        "claim_ids": { "type": "array", "items": { "type": "string" } },
+        "source_ids": { "type": "array", "items": { "type": "string" } },
+        "caveats": { "type": "array", "items": { "type": "string" } },
+        "evidence_summary": {
+          "type": "object",
+          "description": "Evidence citation summary for the generated script.",
+          "additionalProperties": true
+        }
       },
       "additionalProperties": true
     },
@@ -156,6 +215,19 @@
     "visual_plan": {
       "type": "object",
       "description": "Planner audit summary: segments, providers, warnings, and counts.",
+      "additionalProperties": true
+    },
+    "editorial_review": {
+      "type": "object",
+      "description": "Automated evidence review for generated or reused script copy.",
+      "properties": {
+        "status": { "type": "string" },
+        "claim_ids": { "type": "array", "items": { "type": "string" } },
+        "source_ids": { "type": "array", "items": { "type": "string" } },
+        "unknown_claim_ids": { "type": "array", "items": { "type": "string" } },
+        "sentence_count": { "type": "number" },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      },
       "additionalProperties": true
     },
     "points": {

@@ -65,9 +65,11 @@ class ScreenshotProvider(VisualProvider):
         script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
         source_name = compact_text(raw.get("source_name") or "SynthPost")
         category = compact_text(script.get("category") or raw.get("category") or "News").upper()
-        title_lines = self._wrap(segment.title.upper(), 36, 3)
+        title_lines = self._wrap(segment.title.upper(), 24, 3)
+        title_font_size = self._fit_font_size(title_lines, base_size=58, min_size=42, max_width=1260)
+        title_step = int(title_font_size * 1.28)
         fact_source = segment.text.replace(segment.title, "", 1).strip()
-        fact_lines = self._wrap(fact_source or raw.get("summary") or "", 58, 4)
+        fact_lines = self._wrap(fact_source or raw.get("summary") or "", 52, 3)
         keywords = [item.upper() for item in segment.keywords[:5]]
         keyword_nodes = []
         x = 120
@@ -83,7 +85,7 @@ class ScreenshotProvider(VisualProvider):
                 break
 
         title_svg = "\n".join(
-            f'<text x="120" y="{245 + index * 78}" font-size="64" fill="#F5F7FA" font-family="Georgia, serif" font-weight="700">{html.escape(line)}</text>'
+            f'<text x="120" y="{245 + index * title_step}" font-size="{title_font_size}" fill="#F5F7FA" font-family="Georgia, serif" font-weight="700">{html.escape(line)}</text>'
             for index, line in enumerate(title_lines)
         )
         fact_svg = "\n".join(
@@ -115,6 +117,32 @@ class ScreenshotProvider(VisualProvider):
 </svg>
 """
         path.write_text(svg, encoding="utf-8")
+
+    def _fit_font_size(self, lines: list[str], *, base_size: int, min_size: int, max_width: int) -> int:
+        if not lines:
+            return base_size
+        widest_units = max(self._line_width_units(line) for line in lines)
+        if widest_units <= 0:
+            return base_size
+        estimated_width = widest_units * base_size * 0.58
+        if estimated_width <= max_width:
+            return base_size
+        return max(min_size, int(base_size * (max_width / estimated_width)))
+
+    def _line_width_units(self, line: str) -> float:
+        units = 0.0
+        for char in line:
+            if char == " ":
+                units += 0.48
+            elif char in {"M", "W"}:
+                units += 1.28
+            elif char in {"I", "J", "L", "T"}:
+                units += 0.72
+            elif char.isupper():
+                units += 1.02
+            else:
+                units += 0.9
+        return units
 
     def _wrap(self, value: object, width: int, max_lines: int) -> list[str]:
         words = compact_text(value).split()

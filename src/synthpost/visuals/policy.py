@@ -51,6 +51,7 @@ OPEN_ARCHIVE_PROVIDERS = {
 
 STOCK_PROVIDERS = {"pexels", "pixabay", "pexels_pixabay_optional"}
 SOCIAL_PROVIDERS = {"social_media_leads", "social_reference_ingest", "youtube_metadata"}
+GENERATED_PROVIDERS = {"screenshot_provider"}
 CC_USAGE = {UsageBasis.CC0.value, UsageBasis.CC_BY.value, UsageBasis.CC_BY_SA.value}
 
 
@@ -164,6 +165,8 @@ def _source_authority(provider: str) -> str:
         return SourceAuthority.STOCK.value
     if provider in SOCIAL_PROVIDERS:
         return SourceAuthority.PLATFORM.value
+    if provider in GENERATED_PROVIDERS:
+        return SourceAuthority.CREATOR.value
     if provider in {"local_library", "manifest_media"}:
         return SourceAuthority.CREATOR.value
     return SourceAuthority.UNKNOWN.value
@@ -183,6 +186,8 @@ def _usage_basis(asset: VisualAsset) -> str:
         return UsageBasis.PUBLIC_DOMAIN.value
     if asset.provider in OFFICIAL_PROVIDERS:
         return UsageBasis.OFFICIAL_PRESS.value
+    if asset.provider in GENERATED_PROVIDERS:
+        return UsageBasis.USER_PROVIDED.value
     if asset.provider in {"local_library", "manifest_media"}:
         return UsageBasis.USER_PROVIDED.value
     if asset.provider in SOCIAL_PROVIDERS:
@@ -195,6 +200,8 @@ def _rights_tier(asset: VisualAsset) -> str:
         return RightsTier.YELLOW.value
     if asset.provider in STOCK_PROVIDERS:
         return RightsTier.GREEN.value
+    if asset.provider in GENERATED_PROVIDERS:
+        return RightsTier.GREEN.value
     if asset.provider in OFFICIAL_PROVIDERS | OPEN_ARCHIVE_PROVIDERS | {"local_library", "manifest_media"}:
         return RightsTier.GREEN.value if asset.safe_to_use else RightsTier.RED.value
     return RightsTier.RED.value
@@ -203,6 +210,8 @@ def _rights_tier(asset: VisualAsset) -> str:
 def _rights_confidence(asset: VisualAsset) -> str:
     if asset.provider in {"manifest_media", "local_library"}:
         return RightsConfidence.VERIFIED.value if asset.safe_to_use else RightsConfidence.UNKNOWN.value
+    if asset.provider in GENERATED_PROVIDERS:
+        return RightsConfidence.VERIFIED.value
     if asset.provider in OFFICIAL_PROVIDERS:
         return RightsConfidence.VERIFIED.value
     if asset.provider in OPEN_ARCHIVE_PROVIDERS | STOCK_PROVIDERS | SOCIAL_PROVIDERS:

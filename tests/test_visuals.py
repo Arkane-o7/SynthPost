@@ -12,12 +12,15 @@ sys.path.insert(0, str(ROOT / "src"))
 from synthpost.visuals.providers.manifest_media import ManifestMediaProvider
 from synthpost.visuals.models import AssetType, StorySegment, VisualAsset, VisualQuery
 from synthpost.visuals.policy import asset_is_selectable, normalize_asset_metadata
+from synthpost.visuals.providers.source_page import SourcePageProvider
 from synthpost.visuals.providers.free_sources import (
     DropfolderSourceProvider,
     SOURCE_PROFILES,
     SocialReferenceIngestProvider,
 )
+from synthpost.visuals.providers.screenshot_provider import ScreenshotProvider
 from synthpost.visuals.query_builder import build_story_segments, build_visual_queries
+from synthpost.visuals.planner import build_visual_plan
 from synthpost.visuals.ranker import rank_assets_for_segment
 
 
@@ -237,6 +240,125 @@ class VisualPlanningTests(unittest.TestCase):
         self.assertTrue(commons.attribution_required)
         self.assertIn("Example Author", commons.attribution_text or "")
         self.assertEqual(commons.motion["preset"], "push_in")
+
+    def test_generated_context_graphics_fill_story_specific_visuals_by_default(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "episode_id": "ep_test",
+            "raw": {
+                "headline_source": "Grid operators face new power rules",
+                "summary": "A regulator is changing the process for large electricity users.",
+                "source_url": "https://example.gov/news",
+                "source_name": "Example Agency",
+                "category": "energy",
+                "claims": [
+                    {
+                        "claim_id": "claim_01",
+                        "text": "Operators must file revised tariffs within thirty days.",
+                        "source_ids": ["source_01"],
+                    },
+                    {
+                        "claim_id": "claim_02",
+                        "text": "Large data centers are part of the load growth pressure.",
+                        "source_ids": ["source_01"],
+                    },
+                ],
+            },
+            "script": {
+                "headline": "GRID RULES",
+                "category": "ENERGY",
+                "text": "Grid operators face new filing requirements. Data centers are increasing power demand.",
+            },
+            "direction": {"estimated_duration_seconds": 24},
+            "composition": {},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            "os.environ",
+            {"SYNTHPOST_ENABLE_CONTEXT_GRAPHICS": "auto", "SYNTHPOST_VISUAL_MIN_SEGMENTS": "2"},
+        ):
+            root = Path(temp_dir)
+            (root / "pipeline").mkdir()
+            (root / "compositor").mkdir()
+            story_path = root / "episodes" / "ep_test" / "stories" / "story_001" / "story.json"
+            story_path.parent.mkdir(parents=True)
+            story_path.write_text("{}", encoding="utf-8")
+
+            plan = build_visual_plan(manifest, story_path, providers=[ScreenshotProvider(root)])
+
+        self.assertEqual(len(plan.manifest_visuals), len(plan.segments))
+        self.assertTrue(all(visual["provider"] == "screenshot_provider" for visual in plan.manifest_visuals))
+        self.assertTrue(any(visual["asset_type"] == "document" for visual in plan.manifest_visuals))
+        self.assertTrue(all(visual["safe_to_use"] for visual in plan.manifest_visuals))
+        self.assertTrue(all(visual["rights_tier"] == "green" for visual in plan.manifest_visuals))
+
+    def test_source_page_provider_rejects_logos_and_generic_space_media(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "raw": {
+                "headline_source": "Rising Waters Swamp Lake Naivasha",
+                "summary": "Relentless rains are threatening a lake in Kenya's Great Rift Valley.",
+                "source_url": "https://science.nasa.gov/earth/earth-observatory/rising-waters-swamp-lake-naivasha/",
+                "source_name": "NASA",
+                "category": "general",
+            },
+        }
+        provider = SourcePageProvider(ROOT)
+
+        with patch.object(
+            provider,
+            "_extract_links",
+            return_value=[
+                (
+                    "https://assets.science.nasa.gov/content/dam/science/esd/eo/images/iotd/2026/rising-waters-swamp-lake-naivasha/kenyawater_oli_20260126_th.jpg",
+                    "og:image",
+                ),
+                ("https://science.nasa.gov/wp-content/uploads/2023/10/NASA_logo-1.png", "img"),
+                ("https://science.nasa.gov/wp-content/themes/nasa-child/assets/images/nasa-logo@2x.png", "img"),
+                (
+                    "https://assets.science.nasa.gov/dynamicimage/assets/science/psd/solar-system/skywatching/2026/june/stars.jpg",
+                    "img",
+                ),
+                ("https://www.nasa.gov/wp-content/uploads/2026/06/daphne-concept-artwork-1.jpg", "img"),
+            ],
+        ):
+            assets, report = provider.search(
+                manifest=manifest,
+                story_json_path=ROOT / "episodes" / "ep" / "stories" / "story_001" / "story.json",
+                segments=[],
+                queries=[],
+            )
+
+        self.assertEqual([asset.asset_id for asset in assets], ["official_source_01_kenyawater_oli_20260126_th"])
+        self.assertEqual(report.candidate_count, 1)
+        self.assertTrue(any("publisher logo" in warning for warning in report.warnings))
+        self.assertTrue(any("generic space" in warning for warning in report.warnings))
+        self.assertTrue(any("does not match current story terms" in warning for warning in report.warnings))
+
+    def test_generated_context_svg_wraps_long_titles_for_frame(self) -> None:
+        segment = StorySegment(
+            "seg_01",
+            "THE AMERICAN LIBRARY ASSOCIATION ANNUAL CONFERENCE WILL TAKE PLACE FROM JUNE 25 TO JUNE 29, 2026",
+            "The American Library Association annual conference will take place from June 25 to June 29, 2026. NASA will host Hyperwall sessions.",
+            0,
+            8,
+            ["american", "library", "association", "conference", "nasa"],
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "context.svg"
+            provider = ScreenshotProvider(Path(temp_dir))
+
+            provider._write_context_svg(
+                path,
+                manifest={"raw": {"source_name": "NASA"}, "script": {"category": "general"}},
+                segment=segment,
+            )
+
+            svg = path.read_text(encoding="utf-8")
+
+        self.assertIn('font-size="58"', svg)
+        self.assertIn("THE AMERICAN LIBRARY", svg)
+        self.assertIn("ASSOCIATION ANNUAL", svg)
+        self.assertNotIn("THE AMERICAN LIBRARY ASSOCIATION ANNUAL", svg)
 
 
 if __name__ == "__main__":

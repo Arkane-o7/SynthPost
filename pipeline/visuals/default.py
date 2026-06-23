@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..provenance import artifact_record, record_story_artifact
 from ..storage import read_manifest, write_manifest
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -38,11 +39,33 @@ def _has_visual_metadata(visuals: Any) -> bool:
     return all(isinstance(visual, dict) and REQUIRED_VISUAL_METADATA.issubset(visual.keys()) for visual in visuals)
 
 
-def run(story_json_path: str | Path, *, force: bool = False) -> list[dict[str, Any]]:
+def run(
+    story_json_path: str | Path,
+    *,
+    force: bool = False,
+    test_mode: bool = False,
+    render_profile: str = "production",
+) -> list[dict[str, Any]]:
     manifest = read_manifest(story_json_path)
     existing = manifest.get("visuals")
     if existing and not force and _has_visual_metadata(existing):
         print("[visuals] Reusing planned visuals from manifest.")
+        for index, visual in enumerate(existing, start=1):
+            if isinstance(visual, dict) and visual.get("path"):
+                record_story_artifact(
+                    story_json_path,
+                    f"visual_{index:03d}",
+                    artifact_record(
+                        path=visual["path"],
+                        stage="visuals",
+                        input_paths=[story_json_path],
+                        provider=visual.get("provider"),
+                        fresh=False,
+                        reused=True,
+                        test_mode=test_mode,
+                        render_profile=render_profile,
+                    ),
+                )
         return existing
 
     plan = build_visual_plan(manifest, story_json_path)
@@ -55,4 +78,21 @@ def run(story_json_path: str | Path, *, force: bool = False) -> list[dict[str, A
         f"{report.provider}:{report.selected_count}/{report.candidate_count}" for report in plan.provider_reports
     )
     print(f"[visuals] Planned {len(plan.manifest_visuals)} timed visuals ({provider_counts}).")
+    for index, visual in enumerate(plan.manifest_visuals, start=1):
+        if isinstance(visual, dict) and visual.get("path"):
+            record_story_artifact(
+                story_json_path,
+                f"visual_{index:03d}",
+                artifact_record(
+                    path=visual["path"],
+                    stage="visuals",
+                    input_paths=[story_json_path],
+                    provider=visual.get("provider"),
+                    fresh=True,
+                    reused=False,
+                    test_mode=test_mode,
+                    render_profile=render_profile,
+                    metadata={"asset_type": visual.get("asset_type")},
+                ),
+            )
     return plan.manifest_visuals
