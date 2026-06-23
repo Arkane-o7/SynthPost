@@ -1,0 +1,26 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+assets/temp/
+assets/renders/
+assets/output/
+
+*.mp4
+*.wav
+*.mov
+
+# Local Blender backups and scratch scenes.
+# Keep blender/avatar_template.blend as the production scene.
+*.blend1
+blender/avatar_template_BASIC.blend
+blender/avatar_template_WORKING.blend
+blender/avatar_template[0-9]*.blend
+blender/ball*.blend
+blender/df.blend
+blender/main*.blend
+
+# Accidental Finder duplicates.
+assets/characters/avatar_01/mouth_textures/untitled folder/

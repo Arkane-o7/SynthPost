@@ -1,0 +1,88 @@
+{
+  "story_id": "full_screen_anchor",
+  "episode_id": "template-previews",
+  "raw": {
+    "headline_source": "FERC moves to speed grid review for AI data centers and other large power users",
+    "summary": "Template preview for the full-screen anchor format.",
+    "source_url": "https://www.ferc.gov/news-events/news/ferc-launches-aggressive-targeted-action-speed-large-load-integration",
+    "source_name": "SYNTHPOST",
+    "category": "energy",
+    "published_at": "2026-06-18T12:00:00Z",
+    "facts": [
+      "Opening remarks use the anchor as the primary visual.",
+      "The lower third and logo are shared with Split Main.",
+      "This template requests the landscape intro camera for new Avatar-Engine renders."
+    ]
+  },
+  "script": {
+    "text": "Good evening. This is the full screen anchor format for opening remarks, conclusions, and our take segments. The anchor carries the frame, while the shared SynthPost lower third rotates through the key headlines.",
+    "headline": "FULL SCREEN ANCHOR FORMAT",
+    "category": "SYNTHPOST"
+  },
+  "direction": {
+    "job_id": "full_screen_anchor",
+    "voice": {
+      "engine": "kokoro",
+      "voice_id": "af_heart",
+      "speed": 1.08,
+      "sample_rate": 24000
+    },
+    "camera_cuts": [
+      {
+        "start": 0,
+        "camera": "landscape_intro"
+      }
+    ],
+    "performance_beats": [
+      {
+        "start": 0,
+        "end": 4.55,
+        "gesture": "seated_idle",
+        "expression": "calm"
+      },
+      {
+        "start": 4.55,
+        "end": 9.1,
+        "gesture": "explain_small",
+        "expression": "focused"
+      },
+      {
+        "start": 9.1,
+        "end": 13.66,
+        "gesture": "nod_yes",
+        "expression": "focused"
+      }
+    ],
+    "anchor_output_path": "episodes/template-previews/stories/full_screen_anchor/anchor_landscape_real_voice.mp4",
+    "avatar_job_path": "episodes/template-previews/stories/full_screen_anchor/avatar_job.json",
+    "estimated_duration_seconds": 13.66,
+    "duration_source": "words_per_minute"
+  },
+  "visuals": [],
+  "points": [],
+  "composition": {
+    "template": "full_screen_anchor",
+    "headlines": [
+      {
+        "text": "FULL SCREEN ANCHOR FORMAT",
+        "start": 0
+      },
+      {
+        "text": "OPENING REMARKS AND CLOSING TAKES",
+        "start": 5
+      },
+      {
+        "text": "SHARED SYNTHPOST LOWER THIRD",
+        "start": 10
+      },
+      {
+        "text": "LANDSCAPE INTRO CAMERA FOR NEW RENDERS",
+        "start": 15
+      }
+    ],
+    "output_path": "episodes/template-previews/stories/full_screen_anchor/composited.mp4",
+    "composition_id": "full-screen-anchor",
+    "preview_path": "episodes/template-previews/stories/full_screen_anchor/preview.png",
+    "duration_seconds": 8.5
+  }
+}

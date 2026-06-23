@@ -1,0 +1,46 @@
+{
+  "brief_id": "v2_10_satellite_internet_race",
+  "video_title": "The satellite internet race is becoming a geopolitical infrastructure fight",
+  "episode_headline": "Orbital networks turn internet access into a strategic global asset.",
+  "topic": "infrastructure",
+  "main_subjects": [
+    {"type": "object", "name": "satellite constellation", "importance": "primary", "visual_priority": 5},
+    {"type": "country", "name": "global south", "importance": "secondary", "visual_priority": 3},
+    {"type": "company", "name": "orbital network", "importance": "context", "visual_priority": 4}
+  ],
+  "story_angle": "An infrastructure and geopolitics story about internet access, orbital networks, and strategic leverage.",
+  "emotion": "serious",
+  "stakes": "Connectivity is becoming national infrastructure above the atmosphere.",
+  "curiosity_gap": "Who controls internet access when the network is in orbit?",
+  "key_numbers": [
+    {"label": "Coverage race", "value": "GLOBAL", "confidence": "reported"}
+  ],
+  "approved_thumbnail_text": ["internet moves orbit", "satellite power shift", "orbital network race"],
+  "forbidden_thumbnail_text": [],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "v2_satellite_orbital_network",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/satellite_orbital_network.png",
+        "type": "hero_composite",
+        "subject_name": "satellite orbital network internet constellation global coverage",
+        "label": "Satellite orbital network",
+        "usage_status": "approved",
+        "license": "Generated local test asset"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": ["clean_market_surge", "logo_collision", "money_deal_bomb"],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  }
+}

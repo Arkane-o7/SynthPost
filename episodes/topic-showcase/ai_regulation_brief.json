@@ -1,0 +1,64 @@
+{
+  "brief_id": "topic_showcase_ai_regulation",
+  "video_title": "New AI Rules Could Reshape Big Tech",
+  "episode_headline": "Governments are moving from AI warnings to enforceable rules.",
+  "topic": "AI",
+  "main_subjects": [
+    {
+      "type": "object",
+      "name": "AI chip",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "AI regulation",
+      "importance": "secondary",
+      "visual_priority": 4
+    }
+  ],
+  "story_angle": "A serious policy turn: AI moves from hype cycle to rulebook.",
+  "emotion": "serious",
+  "stakes": "The next AI winners may be decided by regulation as much as models.",
+  "curiosity_gap": "Which AI companies are most exposed to the new rules?",
+  "key_numbers": [],
+  "approved_thumbnail_text": [
+    "ai rules arrive",
+    "big tech on notice",
+    "the ai crackdown"
+  ],
+  "forbidden_thumbnail_text": [],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "ai_regulation_composite",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_regulation.png",
+        "type": "hero_composite",
+        "subject_name": "AI chip, policy document, and motion streaks",
+        "label": "AI-generated combined foreground",
+        "usage_status": "approved",
+        "license": "AI-generated project asset"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "clean_market_surge"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Topic showcase generated composite for layout evaluation."
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "briefId": "topic_showcase_us_china_chip_race",
+  "conceptId": "concept_01",
+  "templateId": "clean_market_surge",
+  "videoTitle": "The US-China AI Chip Race Is Escalating",
+  "episodeHeadline": "Export controls and AI compute demand are turning chips into strategic leverage.",
+  "topic": "geopolitics",
+  "emotion": "urgent",
+  "headlineText": "CHIP WAR ESCALATES",
+  "subtitleText": "The chip supply chain is now a geopolitical pressure point.",
+  "accentWords": [
+    "CHIP"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Clean editorial market-surge layout with United States, a symbolic prop, and upward motion.",
+  "mainSubjects": [
+    {
+      "type": "country",
+      "name": "United States",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "country",
+      "name": "China",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "AI chip",
+      "importance": "context",
+      "visual_priority": 5
+    }
+  ],
+  "assets": [
+    {
+      "id": "us_china_chip_race_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/us_china_chip_race.png",
+      "type": "hero_composite",
+      "subject_name": "AI chip, geopolitical panels, map lines, and motion streaks",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "AI-generated combined foreground"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 86,
+  "outputPath": "episodes/topic-showcase/us_china_chip_race_brief_thumbnails/renders/concept_01.png",
+  "rendered_png": "episodes/topic-showcase/us_china_chip_race_brief_thumbnails/renders/concept_01.png",
+  "rationale": "A clean white editorial canvas, celebrity subject, symbolic object, and upward chart motion make the momentum story obvious.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 9,
+    "topic_relevance": 9,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 9
+  }
+}

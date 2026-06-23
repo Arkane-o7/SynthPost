@@ -1,0 +1,77 @@
+{
+  "brief_id": "v2_06_quantum_security_clock",
+  "video_title": "Quantum security is becoming a real boardroom problem",
+  "episode_headline": "Quantum computers threaten old encryption as companies race to upgrade security.",
+  "topic": "technology",
+  "main_subjects": [
+    {
+      "type": "object",
+      "name": "quantum computer",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "encryption lock",
+      "importance": "secondary",
+      "visual_priority": 5
+    },
+    {
+      "type": "company",
+      "name": "cloud security",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "story_angle": "A cybersecurity explainer about post-quantum encryption, infrastructure risk, and timing.",
+  "emotion": "mysterious",
+  "stakes": "Security upgrades may need to happen before quantum machines fully arrive.",
+  "curiosity_gap": "Why are companies preparing for a threat that is not fully here yet?",
+  "key_numbers": [
+    {
+      "label": "Security clock",
+      "value": "Q-DAY",
+      "confidence": "estimated"
+    }
+  ],
+  "approved_thumbnail_text": [
+    "quantum breaks locks",
+    "Q-day countdown",
+    "encryption panic"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "robot_labor_shift_composite",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/robot_labor_shift.png",
+        "type": "hero_composite",
+        "subject_name": "robot automation labor jobs technology",
+        "license": "AI-generated project asset",
+        "usage_status": "approved",
+        "label": "Robot labor shift composite"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "logo_collision",
+      "authority_warning",
+      "money_deal_bomb"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Auto-resolved by SynthPost thumbnail asset selector."
+  }
+}

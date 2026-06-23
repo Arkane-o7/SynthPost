@@ -1,0 +1,77 @@
+{
+  "briefId": "v2_06_quantum_security_clock",
+  "conceptId": "concept_03",
+  "templateId": "money_deal_bomb",
+  "videoTitle": "Quantum security is becoming a real boardroom problem",
+  "episodeHeadline": "Quantum computers threaten old encryption as companies race to upgrade security.",
+  "topic": "technology",
+  "emotion": "mysterious",
+  "headlineText": "ENCRYPTION PANIC",
+  "subtitleText": "Security upgrades may need to happen before quantum machines fully arrive.",
+  "accentWords": [
+    "PANIC"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Large proof number and quantum computer against infrastructure context.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "quantum computer",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "encryption lock",
+      "importance": "secondary",
+      "visual_priority": 5
+    },
+    {
+      "type": "company",
+      "name": "cloud security",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Security clock",
+      "value": "Q-DAY",
+      "confidence": "estimated"
+    }
+  ],
+  "assets": [
+    {
+      "id": "robot_labor_shift_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/robot_labor_shift.png",
+      "type": "hero_composite",
+      "subject_name": "robot automation labor jobs technology",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "Robot labor shift composite"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 81,
+  "outputPath": "episodes/topic-showcase-v2/outputs/06_quantum_security_clock/renders/concept_03.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs/06_quantum_security_clock/renders/concept_03.png",
+  "rationale": "A concrete number makes the business stakes readable on mobile.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 7,
+    "topic_relevance": 7,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

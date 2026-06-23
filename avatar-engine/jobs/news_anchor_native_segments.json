@@ -1,0 +1,41 @@
+{
+  "job_id": "news_anchor_native_segments",
+  "script": "Good evening. This backend render exports each camera view as its own native aspect clip for downstream editing.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "render_profile": "preview",
+  "export_mode": "native_segments",
+  "segment_output_dir": "assets/output/news_anchor_native_segments",
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {"start": 0.0, "camera": "landscape_intro"},
+    {"start": 2.0, "camera": "portrait_main"},
+    {"start": 4.0, "camera": "landscape_conclusion"}
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 2.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 2.0,
+      "end": 4.0,
+      "gesture": "explain_small",
+      "expression": "focused"
+    },
+    {
+      "start": 4.0,
+      "end": 6.0,
+      "gesture": "nod_yes",
+      "expression": "smile"
+    }
+  ],
+  "output_path": "assets/output/news_anchor_native_segments.mp4"
+}

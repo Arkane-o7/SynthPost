@@ -1,0 +1,47 @@
+{
+  "job_id": "sample_desk_avatar",
+  "script": "Good evening. Here is the quick version. The market moved fast today, but the real story is what happened underneath the headline numbers. Let me walk you through the three things that matter.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "fps": 30,
+  "resolution": [1920, 1080],
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {"start": 0.0, "camera": "landscape_intro"},
+    {"start": 2.5, "camera": "portrait_main"},
+    {"start": 5.5, "camera": "landscape_conclusion"},
+    {"start": 8.0, "camera": "portrait_main"}
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 2.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 2.0,
+      "end": 5.0,
+      "gesture": "explain_small",
+      "expression": "focused"
+    },
+    {
+      "start": 5.0,
+      "end": 7.5,
+      "gesture": "nod_yes",
+      "expression": "smile"
+    },
+    {
+      "start": 7.5,
+      "end": 10.0,
+      "gesture": "point_camera",
+      "expression": "serious"
+    }
+  ],
+  "output_path": "assets/output/sample_desk_avatar.mp4"
+}

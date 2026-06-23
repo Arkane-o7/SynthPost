@@ -1,0 +1,77 @@
+{
+  "briefId": "v2_10_satellite_internet_race",
+  "conceptId": "concept_02",
+  "templateId": "money_deal_bomb",
+  "videoTitle": "The satellite internet race is becoming a geopolitical infrastructure fight",
+  "episodeHeadline": "Orbital networks turn internet access into a strategic global asset.",
+  "topic": "infrastructure",
+  "emotion": "serious",
+  "headlineText": "SATELLITE POWER SHIFT",
+  "subtitleText": "Connectivity is becoming national infrastructure above the atmosphere.",
+  "accentWords": [
+    "SHIFT"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Large proof number and satellite constellation against infrastructure context.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "satellite constellation",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "country",
+      "name": "global south",
+      "importance": "secondary",
+      "visual_priority": 3
+    },
+    {
+      "type": "company",
+      "name": "orbital network",
+      "importance": "context",
+      "visual_priority": 4
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Coverage race",
+      "value": "GLOBAL",
+      "confidence": "reported"
+    }
+  ],
+  "assets": [
+    {
+      "id": "us_china_chip_race_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/us_china_chip_race.png",
+      "type": "hero_composite",
+      "subject_name": "US China AI chip race semiconductor geopolitics",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "US China chip race composite"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 81,
+  "outputPath": "episodes/topic-showcase-v2/outputs/10_satellite_internet_race/renders/concept_02.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs/10_satellite_internet_race/renders/concept_02.png",
+  "rationale": "A concrete number makes the business stakes readable on mobile.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 7,
+    "topic_relevance": 7,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

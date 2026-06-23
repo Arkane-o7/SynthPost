@@ -1,0 +1,298 @@
+{
+  "recommended_concept_id": "concept_01",
+  "recommended_png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_01.png",
+  "contact_sheet": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/thumbnail_contact_sheet.jpg",
+  "quality_gate": {
+    "min_score": 72,
+    "passed": true,
+    "accepted_concept_ids": [
+      "concept_01",
+      "concept_02",
+      "concept_03"
+    ],
+    "rejected": []
+  },
+  "ab_test_variants": [
+    {
+      "concept_id": "concept_01",
+      "template_id": "clean_market_surge",
+      "headline_text": "QUANTUM BREAKS LOCKS",
+      "score": 84,
+      "png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_01.png"
+    },
+    {
+      "concept_id": "concept_02",
+      "template_id": "logo_collision",
+      "headline_text": "Q DAY COUNTDOWN",
+      "score": 82,
+      "png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_02.png"
+    },
+    {
+      "concept_id": "concept_03",
+      "template_id": "authority_warning",
+      "headline_text": "ENCRYPTION PANIC",
+      "score": 82,
+      "png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_03.png"
+    }
+  ],
+  "concepts": [
+    {
+      "briefId": "v2_06_quantum_security_clock",
+      "conceptId": "concept_01",
+      "templateId": "clean_market_surge",
+      "videoTitle": "Quantum security is becoming a real boardroom problem",
+      "episodeHeadline": "Quantum computers threaten old encryption as companies race to upgrade security.",
+      "topic": "technology",
+      "emotion": "mysterious",
+      "headlineText": "QUANTUM BREAKS LOCKS",
+      "subtitleText": "Security upgrades may need to happen before quantum machines fully arrive.",
+      "accentWords": [
+        "LOCKS"
+      ],
+      "sourceTag": "SYNTHPOST BRIEFING",
+      "visualHook": "Clean editorial market-surge layout with quantum computer, a symbolic prop, and upward motion.",
+      "mainSubjects": [
+        {
+          "type": "object",
+          "name": "quantum computer",
+          "importance": "primary",
+          "visual_priority": 5
+        },
+        {
+          "type": "object",
+          "name": "encryption lock",
+          "importance": "secondary",
+          "visual_priority": 5
+        },
+        {
+          "type": "company",
+          "name": "cloud security",
+          "importance": "context",
+          "visual_priority": 3
+        }
+      ],
+      "keyNumbers": [
+        {
+          "label": "Security clock",
+          "value": "Q-DAY",
+          "confidence": "estimated"
+        }
+      ],
+      "assets": [
+        {
+          "id": "v2_quantum_encryption_lock",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/quantum_encryption_lock.png",
+          "type": "hero_composite",
+          "subject_name": "quantum computer encryption lock post quantum security",
+          "license": "Generated local test asset",
+          "usage_status": "approved",
+          "label": "Quantum encryption lock"
+        },
+        {
+          "id": "generated_topic_showcase_v2_quantum_encryption_lock",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/quantum_encryption_lock.png",
+          "type": "hero_composite",
+          "subject_name": "quantum encryption lock",
+          "license": "AI-generated project asset",
+          "usage_status": "approved",
+          "label": "Auto-discovered generated composite"
+        },
+        {
+          "id": "synthpost_gradient_context",
+          "path_or_url": "brand/synthpost-gradient-landscape.png",
+          "type": "background_image",
+          "usage_status": "approved",
+          "label": "SynthPost brand gradient"
+        }
+      ],
+      "score": 84,
+      "outputPath": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_01.png",
+      "rendered_png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_01.png",
+      "rationale": "A clean white editorial canvas, celebrity subject, symbolic object, and upward chart motion make the momentum story obvious.",
+      "score_breakdown": {
+        "mobile_readability": 9,
+        "subject_clarity": 8,
+        "curiosity_gap": 8,
+        "emotional_tension": 7,
+        "topic_relevance": 9,
+        "brand_consistency": 9,
+        "visual_contrast": 8,
+        "simplicity": 9,
+        "title_thumbnail_synergy": 8,
+        "premium_feel": 9
+      }
+    },
+    {
+      "briefId": "v2_06_quantum_security_clock",
+      "conceptId": "concept_02",
+      "templateId": "logo_collision",
+      "videoTitle": "Quantum security is becoming a real boardroom problem",
+      "episodeHeadline": "Quantum computers threaten old encryption as companies race to upgrade security.",
+      "topic": "technology",
+      "emotion": "mysterious",
+      "headlineText": "Q DAY COUNTDOWN",
+      "subtitleText": "Security upgrades may need to happen before quantum machines fully arrive.",
+      "accentWords": [
+        "COUNTDOWN"
+      ],
+      "sourceTag": "SYNTHPOST BRIEFING",
+      "visualHook": "Two-sided technology conflict with clear brand or subject cards.",
+      "mainSubjects": [
+        {
+          "type": "object",
+          "name": "quantum computer",
+          "importance": "primary",
+          "visual_priority": 5
+        },
+        {
+          "type": "object",
+          "name": "encryption lock",
+          "importance": "secondary",
+          "visual_priority": 5
+        },
+        {
+          "type": "company",
+          "name": "cloud security",
+          "importance": "context",
+          "visual_priority": 3
+        }
+      ],
+      "keyNumbers": [
+        {
+          "label": "Security clock",
+          "value": "Q-DAY",
+          "confidence": "estimated"
+        }
+      ],
+      "assets": [
+        {
+          "id": "v2_quantum_encryption_lock",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/quantum_encryption_lock.png",
+          "type": "hero_composite",
+          "subject_name": "quantum computer encryption lock post quantum security",
+          "license": "Generated local test asset",
+          "usage_status": "approved",
+          "label": "Quantum encryption lock"
+        },
+        {
+          "id": "generated_topic_showcase_v2_quantum_encryption_lock",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/quantum_encryption_lock.png",
+          "type": "hero_composite",
+          "subject_name": "quantum encryption lock",
+          "license": "AI-generated project asset",
+          "usage_status": "approved",
+          "label": "Auto-discovered generated composite"
+        },
+        {
+          "id": "synthpost_gradient_context",
+          "path_or_url": "brand/synthpost-gradient-landscape.png",
+          "type": "background_image",
+          "usage_status": "approved",
+          "label": "SynthPost brand gradient"
+        }
+      ],
+      "score": 82,
+      "outputPath": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_02.png",
+      "rendered_png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_02.png",
+      "rationale": "A direct comparison or conflict creates an immediate curiosity gap.",
+      "score_breakdown": {
+        "mobile_readability": 9,
+        "subject_clarity": 8,
+        "curiosity_gap": 8,
+        "emotional_tension": 7,
+        "topic_relevance": 8,
+        "brand_consistency": 9,
+        "visual_contrast": 8,
+        "simplicity": 9,
+        "title_thumbnail_synergy": 8,
+        "premium_feel": 8
+      }
+    },
+    {
+      "briefId": "v2_06_quantum_security_clock",
+      "conceptId": "concept_03",
+      "templateId": "authority_warning",
+      "videoTitle": "Quantum security is becoming a real boardroom problem",
+      "episodeHeadline": "Quantum computers threaten old encryption as companies race to upgrade security.",
+      "topic": "technology",
+      "emotion": "mysterious",
+      "headlineText": "ENCRYPTION PANIC",
+      "subtitleText": "Security upgrades may need to happen before quantum machines fully arrive.",
+      "accentWords": [
+        "PANIC"
+      ],
+      "sourceTag": "SYNTHPOST BRIEFING",
+      "visualHook": "Authority-led warning frame centered on quantum computer.",
+      "mainSubjects": [
+        {
+          "type": "object",
+          "name": "quantum computer",
+          "importance": "primary",
+          "visual_priority": 5
+        },
+        {
+          "type": "object",
+          "name": "encryption lock",
+          "importance": "secondary",
+          "visual_priority": 5
+        },
+        {
+          "type": "company",
+          "name": "cloud security",
+          "importance": "context",
+          "visual_priority": 3
+        }
+      ],
+      "keyNumbers": [
+        {
+          "label": "Security clock",
+          "value": "Q-DAY",
+          "confidence": "estimated"
+        }
+      ],
+      "assets": [
+        {
+          "id": "v2_quantum_encryption_lock",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/quantum_encryption_lock.png",
+          "type": "hero_composite",
+          "subject_name": "quantum computer encryption lock post quantum security",
+          "license": "Generated local test asset",
+          "usage_status": "approved",
+          "label": "Quantum encryption lock"
+        },
+        {
+          "id": "generated_topic_showcase_v2_quantum_encryption_lock",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/quantum_encryption_lock.png",
+          "type": "hero_composite",
+          "subject_name": "quantum encryption lock",
+          "license": "AI-generated project asset",
+          "usage_status": "approved",
+          "label": "Auto-discovered generated composite"
+        },
+        {
+          "id": "synthpost_gradient_context",
+          "path_or_url": "brand/synthpost-gradient-landscape.png",
+          "type": "background_image",
+          "usage_status": "approved",
+          "label": "SynthPost brand gradient"
+        }
+      ],
+      "score": 82,
+      "outputPath": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_03.png",
+      "rendered_png": "episodes/topic-showcase-v2/outputs_clean/06_quantum_security_clock/renders/concept_03.png",
+      "rationale": "A recognizable authority plus a concise warning creates urgency and credibility.",
+      "score_breakdown": {
+        "mobile_readability": 9,
+        "subject_clarity": 8,
+        "curiosity_gap": 8,
+        "emotional_tension": 7,
+        "topic_relevance": 8,
+        "brand_consistency": 9,
+        "visual_contrast": 8,
+        "simplicity": 9,
+        "title_thumbnail_synergy": 8,
+        "premium_feel": 8
+      }
+    }
+  ]
+}

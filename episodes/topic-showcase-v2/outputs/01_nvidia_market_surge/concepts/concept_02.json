@@ -1,0 +1,86 @@
+{
+  "briefId": "v2_01_nvidia_market_surge",
+  "conceptId": "concept_02",
+  "templateId": "money_deal_bomb",
+  "videoTitle": "Why Nvidia's AI market momentum keeps surprising Wall Street",
+  "episodeHeadline": "Nvidia stock surges as AI chip demand rewrites market expectations.",
+  "topic": "finance",
+  "emotion": "optimistic",
+  "headlineText": "AI MARKET SHOCK",
+  "subtitleText": "AI demand is moving from hype into market power.",
+  "accentWords": [
+    "AI"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Large proof number and Nvidia against infrastructure context.",
+  "mainSubjects": [
+    {
+      "type": "company",
+      "name": "Nvidia",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "person",
+      "name": "Jensen Huang",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "object",
+      "name": "GPU",
+      "importance": "context",
+      "visual_priority": 4
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Market signal",
+      "value": "AI",
+      "confidence": "reported"
+    }
+  ],
+  "assets": [
+    {
+      "id": "nvidia_market_surge_composite",
+      "path_or_url": "assets/thumbnails/generated/clean_market_surge/nvidia_hero_composite.png",
+      "type": "hero_composite",
+      "subject_name": "Nvidia Jensen Huang GPU stock market surge",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "Nvidia market surge composite"
+    },
+    {
+      "id": "us_china_chip_race_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/us_china_chip_race.png",
+      "type": "hero_composite",
+      "subject_name": "US China AI chip race semiconductor geopolitics",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "US China chip race composite"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 84,
+  "outputPath": "episodes/topic-showcase-v2/outputs/01_nvidia_market_surge/renders/concept_02.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs/01_nvidia_market_surge/renders/concept_02.png",
+  "rationale": "A concrete number makes the business stakes readable on mobile.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 9,
+    "curiosity_gap": 9,
+    "emotional_tension": 7,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

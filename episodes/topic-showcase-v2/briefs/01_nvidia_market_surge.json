@@ -1,0 +1,36 @@
+{
+  "brief_id": "v2_01_nvidia_market_surge",
+  "video_title": "Why Nvidia's AI market momentum keeps surprising Wall Street",
+  "episode_headline": "Nvidia stock surges as AI chip demand rewrites market expectations.",
+  "topic": "finance",
+  "main_subjects": [
+    {"type": "company", "name": "Nvidia", "importance": "primary", "visual_priority": 5},
+    {"type": "person", "name": "Jensen Huang", "importance": "secondary", "visual_priority": 4},
+    {"type": "object", "name": "GPU", "importance": "context", "visual_priority": 4}
+  ],
+  "story_angle": "A market momentum story about AI chip demand, investor expectations, and semiconductor leadership.",
+  "emotion": "optimistic",
+  "stakes": "AI demand is moving from hype into market power.",
+  "curiosity_gap": "How much of the rally is real growth versus future expectation?",
+  "key_numbers": [
+    {"label": "Market signal", "value": "AI", "confidence": "reported"}
+  ],
+  "approved_thumbnail_text": ["nvidia stock surges", "AI market shock", "chip demand explodes"],
+  "forbidden_thumbnail_text": [],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": []
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": ["clean_market_surge", "money_deal_bomb", "authority_warning"],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  }
+}

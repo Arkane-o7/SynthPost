@@ -1,0 +1,37 @@
+{
+  "job_id": "full_screen_anchor_landscape_real_voice",
+  "script": "Good evening. This is SynthPost. The full screen anchor format is now using the landscape intro camera with a real generated voice.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "fps": 8,
+  "resolution": [1920, 1080],
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.08,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {
+      "start": 0.0,
+      "camera": "landscape_intro"
+    }
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 3.0,
+      "end": 7.0,
+      "gesture": "explain_small",
+      "expression": "focused"
+    }
+  ],
+  "render_quality": "draft",
+  "use_per_camera_resolution": false,
+  "output_path": "/Users/abhilaksh/Projects/SynthPost/episodes/template-previews/stories/full_screen_anchor/anchor_landscape_real_voice.mp4"
+}

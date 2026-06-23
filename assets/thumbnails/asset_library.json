@@ -1,0 +1,49 @@
+{
+  "assets": [
+    {
+      "id": "nvidia_market_surge_composite",
+      "path_or_url": "assets/thumbnails/generated/clean_market_surge/nvidia_hero_composite.png",
+      "type": "hero_composite",
+      "subject_name": "Nvidia Jensen Huang GPU stock market surge",
+      "label": "Nvidia market surge composite",
+      "usage_status": "approved",
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "ai_energy_grid_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+      "type": "hero_composite",
+      "subject_name": "AI data center power grid energy demand",
+      "label": "AI energy grid composite",
+      "usage_status": "approved",
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "us_china_chip_race_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/us_china_chip_race.png",
+      "type": "hero_composite",
+      "subject_name": "US China AI chip race semiconductor geopolitics",
+      "label": "US China chip race composite",
+      "usage_status": "approved",
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "robot_labor_shift_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/robot_labor_shift.png",
+      "type": "hero_composite",
+      "subject_name": "robot automation labor jobs technology",
+      "label": "Robot labor shift composite",
+      "usage_status": "approved",
+      "license": "AI-generated project asset"
+    },
+    {
+      "id": "ai_regulation_composite_review",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_regulation.png",
+      "type": "hero_composite",
+      "subject_name": "AI regulation policy document chip rules",
+      "label": "AI regulation composite, review before publishing",
+      "usage_status": "needs_review",
+      "license": "AI-generated project asset"
+    }
+  ]
+}

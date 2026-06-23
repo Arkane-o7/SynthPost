@@ -1,0 +1,68 @@
+{
+  "briefId": "v2_02_ai_regulation_countdown",
+  "conceptId": "concept_01",
+  "templateId": "authority_warning",
+  "videoTitle": "The AI regulation countdown every founder is watching",
+  "episodeHeadline": "New AI rules could force model makers to prove safety before launch.",
+  "topic": "policy",
+  "emotion": "warning",
+  "headlineText": "AI RULES ARRIVE",
+  "subtitleText": "The next model launch may be decided by paperwork, not benchmarks.",
+  "accentWords": [
+    "AI"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Authority-led warning frame centered on AI regulator.",
+  "mainSubjects": [
+    {
+      "type": "organization",
+      "name": "AI regulator",
+      "importance": "primary",
+      "visual_priority": 4
+    },
+    {
+      "type": "object",
+      "name": "compliance document",
+      "importance": "secondary",
+      "visual_priority": 5
+    },
+    {
+      "type": "company",
+      "name": "AI labs",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Risk level",
+      "value": "HIGH",
+      "confidence": "reported"
+    }
+  ],
+  "assets": [
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 84,
+  "outputPath": "episodes/topic-showcase-v2/outputs/02_ai_regulation_countdown/renders/concept_01.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs/02_ai_regulation_countdown/renders/concept_01.png",
+  "rationale": "A recognizable authority plus a concise warning creates urgency and credibility.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 9,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

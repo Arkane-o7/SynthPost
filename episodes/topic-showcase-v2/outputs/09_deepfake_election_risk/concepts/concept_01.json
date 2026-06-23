@@ -1,0 +1,68 @@
+{
+  "briefId": "v2_09_deepfake_election_risk",
+  "conceptId": "concept_01",
+  "templateId": "authority_warning",
+  "videoTitle": "Deepfake election risk is becoming a platform crisis",
+  "episodeHeadline": "AI-generated political media forces platforms to choose speed or accuracy.",
+  "topic": "culture",
+  "emotion": "urgent",
+  "headlineText": "DEEPFAKE ELECTION RISK",
+  "subtitleText": "The trust layer of news and politics is being stress-tested.",
+  "accentWords": [
+    "RISK"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Authority-led warning frame centered on deepfake video.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "deepfake video",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "organization",
+      "name": "social platform",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "event",
+      "name": "election cycle",
+      "importance": "context",
+      "visual_priority": 4
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Trust risk",
+      "value": "FAKE?",
+      "confidence": "reported"
+    }
+  ],
+  "assets": [
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 82,
+  "outputPath": "episodes/topic-showcase-v2/outputs/09_deepfake_election_risk/renders/concept_01.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs/09_deepfake_election_risk/renders/concept_01.png",
+  "rationale": "A recognizable authority plus a concise warning creates urgency and credibility.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 9,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 6,
+    "premium_feel": 8
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "job_id": "sample_landscape_intro",
+  "script": "This is the landscape intro sample. It opens wide, then returns to the conclusion camera.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "fps": 30,
+  "resolution": [1920, 1080],
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {"start": 0.0, "camera": "landscape_intro"},
+    {"start": 3.0, "camera": "landscape_conclusion"}
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 3.0,
+      "end": 7.0,
+      "gesture": "nod_yes",
+      "expression": "serious"
+    }
+  ],
+  "output_path": "assets/output/sample_landscape_intro.mp4"
+}

@@ -1,0 +1,31 @@
+{
+  "canvas": {
+    "width": 1920,
+    "height": 1080
+  },
+  "durationSeconds": 20,
+  "fps": 24,
+  "zones": {
+    "primary_video": {
+      "x": 1080,
+      "y": 168,
+      "width": 650,
+      "height": 366,
+      "youtubeElement": "video"
+    },
+    "secondary_video": {
+      "x": 1080,
+      "y": 590,
+      "width": 650,
+      "height": 366,
+      "youtubeElement": "video"
+    },
+    "subscribe": {
+      "x": 132,
+      "y": 684,
+      "width": 260,
+      "height": 260,
+      "youtubeElement": "subscribe"
+    }
+  }
+}

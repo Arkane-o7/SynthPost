@@ -1,0 +1,86 @@
+{
+  "briefId": "v2_07_fusion_money_race",
+  "conceptId": "concept_03",
+  "templateId": "authority_warning",
+  "videoTitle": "Fusion startups are pulling in serious capital before the grid is ready",
+  "episodeHeadline": "Fusion funding accelerates as investors bet on clean baseload power.",
+  "topic": "business",
+  "emotion": "optimistic",
+  "headlineText": "ENERGY BET EXPLODES",
+  "subtitleText": "The energy transition is attracting deeper tech capital.",
+  "accentWords": [
+    "EXPLODES"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Authority-led warning frame centered on fusion startup.",
+  "mainSubjects": [
+    {
+      "type": "company",
+      "name": "fusion startup",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "fusion reactor",
+      "importance": "secondary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "clean power grid",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Funding watch",
+      "value": "$1B+",
+      "confidence": "estimated"
+    }
+  ],
+  "assets": [
+    {
+      "id": "v2_fusion_reactor_capital_race",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/fusion_reactor_capital_race.png",
+      "type": "hero_composite",
+      "subject_name": "fusion reactor capital race funding clean power",
+      "license": "Generated local test asset",
+      "usage_status": "approved",
+      "label": "Fusion reactor capital race"
+    },
+    {
+      "id": "generated_topic_showcase_v2_fusion_reactor_capital_race",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/fusion_reactor_capital_race.png",
+      "type": "hero_composite",
+      "subject_name": "fusion reactor capital race",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "Auto-discovered generated composite"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 82,
+  "outputPath": "episodes/topic-showcase-v2/outputs_clean/07_fusion_money_race/renders/concept_03.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs_clean/07_fusion_money_race/renders/concept_03.png",
+  "rationale": "A recognizable authority plus a concise warning creates urgency and credibility.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 7,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

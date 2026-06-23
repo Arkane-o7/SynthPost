@@ -1,0 +1,78 @@
+{
+  "brief_id": "template_preview_ai_warning",
+  "video_title": "Nadella Says AI Agents Will Hollow Out Entire Industries",
+  "episode_headline": "Microsoft's CEO warns that AI agents could reshape white-collar work and enterprise software.",
+  "topic": "AI",
+  "main_subjects": [
+    {
+      "type": "person",
+      "name": "Satya Nadella",
+      "role": "Microsoft CEO",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "company",
+      "name": "Microsoft",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "object",
+      "name": "AI agents",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "story_angle": "Authority warning about enterprise automation, jobs, and software budgets.",
+  "emotion": "warning",
+  "stakes": "AI moves from tool adoption to industry restructuring.",
+  "curiosity_gap": "Which industries get hit first, and why now?",
+  "key_numbers": [
+    {
+      "label": "Signal",
+      "value": "2026",
+      "confidence": "reported"
+    }
+  ],
+  "approved_thumbnail_text": [
+    "SATYA'S AI WARNING",
+    "AI JOB SHOCK",
+    "MICROSOFT'S AGENT BET"
+  ],
+  "forbidden_thumbnail_text": [
+    "AI WILL END ALL JOBS"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [
+      {
+        "id": "data_center_context",
+        "path_or_url": "compositor/remotion_renderer/public/news/datacenter-server-racks.jpg",
+        "type": "background_image",
+        "subject_name": "AI infrastructure",
+        "usage_status": "approved",
+        "license": "project asset"
+      }
+    ],
+    "maps": [],
+    "screenshots": []
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "authority_warning",
+      "money_deal_bomb",
+      "logo_collision"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Template preview uses placeholder subject cards when no person/logo assets are available."
+  }
+}

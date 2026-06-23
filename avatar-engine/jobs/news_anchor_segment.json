@@ -1,0 +1,47 @@
+{
+  "job_id": "news_anchor_segment",
+  "script": "Good evening. Here are the top stories. Markets opened higher after a cautious start, technology shares led the move, and analysts are watching tomorrow's inflation data for the next signal.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "render_profile": "production",
+  "segment_output_dir": "assets/output/news_anchor_segment",
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {"start": 0.0, "camera": "landscape_intro"},
+    {"start": 3.0, "camera": "portrait_main"},
+    {"start": 7.0, "camera": "landscape_conclusion"},
+    {"start": 10.0, "camera": "portrait_main"}
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 3.0,
+      "end": 7.0,
+      "gesture": "explain_small",
+      "expression": "focused"
+    },
+    {
+      "start": 7.0,
+      "end": 10.0,
+      "gesture": "nod_yes",
+      "expression": "serious"
+    },
+    {
+      "start": 10.0,
+      "end": 13.0,
+      "gesture": "point_camera",
+      "expression": "smile"
+    }
+  ],
+  "output_path": "assets/output/news_anchor_segment.mp4"
+}

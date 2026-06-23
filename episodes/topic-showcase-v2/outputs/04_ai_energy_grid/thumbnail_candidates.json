@@ -1,0 +1,271 @@
+{
+  "recommended_concept_id": "concept_01",
+  "recommended_png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_01.png",
+  "contact_sheet": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/thumbnail_contact_sheet.jpg",
+  "quality_gate": {
+    "min_score": 72,
+    "passed": true,
+    "accepted_concept_ids": [
+      "concept_01",
+      "concept_02",
+      "concept_03"
+    ],
+    "rejected": []
+  },
+  "ab_test_variants": [
+    {
+      "concept_id": "concept_01",
+      "template_id": "authority_warning",
+      "headline_text": "AI NEEDS POWER",
+      "score": 84,
+      "png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_01.png"
+    },
+    {
+      "concept_id": "concept_03",
+      "template_id": "logo_collision",
+      "headline_text": "COMPUTE HITS LIMIT",
+      "score": 84,
+      "png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_03.png"
+    },
+    {
+      "concept_id": "concept_02",
+      "template_id": "money_deal_bomb",
+      "headline_text": "GRID UNDER PRESSURE",
+      "score": 83,
+      "png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_02.png"
+    }
+  ],
+  "concepts": [
+    {
+      "briefId": "v2_04_ai_energy_grid",
+      "conceptId": "concept_01",
+      "templateId": "authority_warning",
+      "videoTitle": "AI data centers are turning electricity into the next bottleneck",
+      "episodeHeadline": "AI power demand strains the grid as data centers race to secure energy.",
+      "topic": "energy",
+      "emotion": "urgent",
+      "headlineText": "AI NEEDS POWER",
+      "subtitleText": "Compute growth now depends on electricity access.",
+      "accentWords": [
+        "AI"
+      ],
+      "sourceTag": "SYNTHPOST BRIEFING",
+      "visualHook": "Authority-led warning frame centered on power grid.",
+      "mainSubjects": [
+        {
+          "type": "object",
+          "name": "power grid",
+          "importance": "primary",
+          "visual_priority": 5
+        },
+        {
+          "type": "object",
+          "name": "data center",
+          "importance": "secondary",
+          "visual_priority": 4
+        },
+        {
+          "type": "company",
+          "name": "AI cloud",
+          "importance": "context",
+          "visual_priority": 3
+        }
+      ],
+      "keyNumbers": [
+        {
+          "label": "Grid pressure",
+          "value": "24/7",
+          "confidence": "reported"
+        }
+      ],
+      "assets": [
+        {
+          "id": "ai_energy_grid_composite",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+          "type": "hero_composite",
+          "subject_name": "AI data center power grid energy demand",
+          "license": "AI-generated project asset",
+          "usage_status": "approved",
+          "label": "AI energy grid composite"
+        },
+        {
+          "id": "synthpost_gradient_context",
+          "path_or_url": "brand/synthpost-gradient-landscape.png",
+          "type": "background_image",
+          "usage_status": "approved",
+          "label": "SynthPost brand gradient"
+        }
+      ],
+      "score": 84,
+      "outputPath": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_01.png",
+      "rendered_png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_01.png",
+      "rationale": "A recognizable authority plus a concise warning creates urgency and credibility.",
+      "score_breakdown": {
+        "mobile_readability": 9,
+        "subject_clarity": 8,
+        "curiosity_gap": 8,
+        "emotional_tension": 9,
+        "topic_relevance": 8,
+        "brand_consistency": 9,
+        "visual_contrast": 8,
+        "simplicity": 9,
+        "title_thumbnail_synergy": 8,
+        "premium_feel": 8
+      }
+    },
+    {
+      "briefId": "v2_04_ai_energy_grid",
+      "conceptId": "concept_02",
+      "templateId": "money_deal_bomb",
+      "videoTitle": "AI data centers are turning electricity into the next bottleneck",
+      "episodeHeadline": "AI power demand strains the grid as data centers race to secure energy.",
+      "topic": "energy",
+      "emotion": "urgent",
+      "headlineText": "GRID UNDER PRESSURE",
+      "subtitleText": "Compute growth now depends on electricity access.",
+      "accentWords": [
+        "PRESSURE"
+      ],
+      "sourceTag": "SYNTHPOST BRIEFING",
+      "visualHook": "Large proof number and power grid against infrastructure context.",
+      "mainSubjects": [
+        {
+          "type": "object",
+          "name": "power grid",
+          "importance": "primary",
+          "visual_priority": 5
+        },
+        {
+          "type": "object",
+          "name": "data center",
+          "importance": "secondary",
+          "visual_priority": 4
+        },
+        {
+          "type": "company",
+          "name": "AI cloud",
+          "importance": "context",
+          "visual_priority": 3
+        }
+      ],
+      "keyNumbers": [
+        {
+          "label": "Grid pressure",
+          "value": "24/7",
+          "confidence": "reported"
+        }
+      ],
+      "assets": [
+        {
+          "id": "ai_energy_grid_composite",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+          "type": "hero_composite",
+          "subject_name": "AI data center power grid energy demand",
+          "license": "AI-generated project asset",
+          "usage_status": "approved",
+          "label": "AI energy grid composite"
+        },
+        {
+          "id": "synthpost_gradient_context",
+          "path_or_url": "brand/synthpost-gradient-landscape.png",
+          "type": "background_image",
+          "usage_status": "approved",
+          "label": "SynthPost brand gradient"
+        }
+      ],
+      "score": 83,
+      "outputPath": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_02.png",
+      "rendered_png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_02.png",
+      "rationale": "A concrete number makes the business stakes readable on mobile.",
+      "score_breakdown": {
+        "mobile_readability": 9,
+        "subject_clarity": 8,
+        "curiosity_gap": 8,
+        "emotional_tension": 9,
+        "topic_relevance": 7,
+        "brand_consistency": 9,
+        "visual_contrast": 8,
+        "simplicity": 9,
+        "title_thumbnail_synergy": 8,
+        "premium_feel": 8
+      }
+    },
+    {
+      "briefId": "v2_04_ai_energy_grid",
+      "conceptId": "concept_03",
+      "templateId": "logo_collision",
+      "videoTitle": "AI data centers are turning electricity into the next bottleneck",
+      "episodeHeadline": "AI power demand strains the grid as data centers race to secure energy.",
+      "topic": "energy",
+      "emotion": "urgent",
+      "headlineText": "COMPUTE HITS LIMIT",
+      "subtitleText": "Compute growth now depends on electricity access.",
+      "accentWords": [
+        "LIMIT"
+      ],
+      "sourceTag": "SYNTHPOST BRIEFING",
+      "visualHook": "Two-sided technology conflict with clear brand or subject cards.",
+      "mainSubjects": [
+        {
+          "type": "object",
+          "name": "power grid",
+          "importance": "primary",
+          "visual_priority": 5
+        },
+        {
+          "type": "object",
+          "name": "data center",
+          "importance": "secondary",
+          "visual_priority": 4
+        },
+        {
+          "type": "company",
+          "name": "AI cloud",
+          "importance": "context",
+          "visual_priority": 3
+        }
+      ],
+      "keyNumbers": [
+        {
+          "label": "Grid pressure",
+          "value": "24/7",
+          "confidence": "reported"
+        }
+      ],
+      "assets": [
+        {
+          "id": "ai_energy_grid_composite",
+          "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+          "type": "hero_composite",
+          "subject_name": "AI data center power grid energy demand",
+          "license": "AI-generated project asset",
+          "usage_status": "approved",
+          "label": "AI energy grid composite"
+        },
+        {
+          "id": "synthpost_gradient_context",
+          "path_or_url": "brand/synthpost-gradient-landscape.png",
+          "type": "background_image",
+          "usage_status": "approved",
+          "label": "SynthPost brand gradient"
+        }
+      ],
+      "score": 84,
+      "outputPath": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_03.png",
+      "rendered_png": "episodes/topic-showcase-v2/outputs/04_ai_energy_grid/renders/concept_03.png",
+      "rationale": "A direct comparison or conflict creates an immediate curiosity gap.",
+      "score_breakdown": {
+        "mobile_readability": 9,
+        "subject_clarity": 8,
+        "curiosity_gap": 8,
+        "emotional_tension": 9,
+        "topic_relevance": 8,
+        "brand_consistency": 9,
+        "visual_contrast": 8,
+        "simplicity": 9,
+        "title_thumbnail_synergy": 8,
+        "premium_feel": 8
+      }
+    }
+  ]
+}

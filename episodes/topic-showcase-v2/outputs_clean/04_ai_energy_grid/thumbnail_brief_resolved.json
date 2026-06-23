@@ -1,0 +1,86 @@
+{
+  "brief_id": "v2_04_ai_energy_grid",
+  "video_title": "AI data centers are turning electricity into the next bottleneck",
+  "episode_headline": "AI power demand strains the grid as data centers race to secure energy.",
+  "topic": "energy",
+  "main_subjects": [
+    {
+      "type": "object",
+      "name": "power grid",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "data center",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "company",
+      "name": "AI cloud",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "story_angle": "An infrastructure bottleneck story about power demand, grid stress, and AI compute expansion.",
+  "emotion": "urgent",
+  "stakes": "Compute growth now depends on electricity access.",
+  "curiosity_gap": "What happens when the grid becomes the AI ceiling?",
+  "key_numbers": [
+    {
+      "label": "Grid pressure",
+      "value": "24/7",
+      "confidence": "reported"
+    }
+  ],
+  "approved_thumbnail_text": [
+    "AI needs power",
+    "grid under pressure",
+    "compute hits limit"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "v2_ai_energy_grid_stress",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/ai_energy_grid_stress.png",
+        "type": "hero_composite",
+        "subject_name": "AI data centers power grid stress 24/7",
+        "license": "Generated local test asset",
+        "usage_status": "approved",
+        "label": "AI energy grid stress"
+      },
+      {
+        "id": "ai_energy_grid_composite",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+        "type": "hero_composite",
+        "subject_name": "AI data center power grid energy demand",
+        "license": "AI-generated project asset",
+        "usage_status": "approved",
+        "label": "AI energy grid composite"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "clean_market_surge",
+      "authority_warning",
+      "money_deal_bomb"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Auto-resolved by SynthPost thumbnail asset selector."
+  }
+}

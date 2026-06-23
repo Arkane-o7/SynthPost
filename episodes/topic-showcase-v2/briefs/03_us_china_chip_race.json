@@ -1,0 +1,46 @@
+{
+  "brief_id": "v2_03_us_china_chip_race",
+  "video_title": "The US-China chip race is entering a harder phase",
+  "episode_headline": "The chip war escalates as export controls and domestic fabs collide.",
+  "topic": "geopolitics",
+  "main_subjects": [
+    {"type": "country", "name": "United States", "importance": "primary", "visual_priority": 5},
+    {"type": "country", "name": "China", "importance": "secondary", "visual_priority": 5},
+    {"type": "object", "name": "AI chip", "importance": "context", "visual_priority": 4}
+  ],
+  "story_angle": "A geopolitical technology conflict about semiconductor control, national strategy, and AI supply chains.",
+  "emotion": "conflict",
+  "stakes": "The AI race is becoming a supply-chain race.",
+  "curiosity_gap": "Who gets cut off from the next generation of compute?",
+  "key_numbers": [
+    {"label": "Strategic pressure", "value": "2 SIDES", "confidence": "reported"}
+  ],
+  "approved_thumbnail_text": ["chip war escalates", "AI chip standoff", "compute race"],
+  "forbidden_thumbnail_text": [],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "v2_us_china_chip_standoff",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase_v2/us_china_chip_standoff.png",
+        "type": "hero_composite",
+        "subject_name": "US China chip standoff export controls local fabs",
+        "label": "US China chip standoff",
+        "usage_status": "approved",
+        "license": "Generated local test asset"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": ["clean_market_surge", "logo_collision", "authority_warning"],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  }
+}

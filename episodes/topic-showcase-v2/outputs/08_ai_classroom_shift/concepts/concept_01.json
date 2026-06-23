@@ -1,0 +1,68 @@
+{
+  "briefId": "v2_08_ai_classroom_shift",
+  "conceptId": "concept_01",
+  "templateId": "authority_warning",
+  "videoTitle": "AI tutors are changing the classroom faster than policy can respond",
+  "episodeHeadline": "AI tutors enter schools as educators debate testing, cheating, and access.",
+  "topic": "education",
+  "emotion": "analytical",
+  "headlineText": "AI ENTERS CLASS",
+  "subtitleText": "Learning tools are changing before the rules are settled.",
+  "accentWords": [
+    "AI"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Authority-led warning frame centered on AI tutor.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "AI tutor",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "place",
+      "name": "classroom",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "organization",
+      "name": "school district",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Classroom signal",
+      "value": "1:1",
+      "confidence": "estimated"
+    }
+  ],
+  "assets": [
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 82,
+  "outputPath": "episodes/topic-showcase-v2/outputs/08_ai_classroom_shift/renders/concept_01.png",
+  "rendered_png": "episodes/topic-showcase-v2/outputs/08_ai_classroom_shift/renders/concept_01.png",
+  "rationale": "A recognizable authority plus a concise warning creates urgency and credibility.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 7,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

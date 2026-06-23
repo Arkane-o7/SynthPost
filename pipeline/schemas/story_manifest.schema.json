@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synthpost.local/schemas/story_manifest.schema.json",
+  "title": "SynthPost Story Manifest",
+  "type": "object",
+  "required": ["story_id", "episode_id", "raw", "script", "direction", "visuals", "points", "composition"],
+  "properties": {
+    "story_id": { "type": "string", "minLength": 1 },
+    "episode_id": { "type": "string", "minLength": 1 },
+    "raw": {
+      "type": "object",
+      "required": ["headline_source", "summary", "source_url", "source_name", "category", "published_at", "facts"],
+      "properties": {
+        "headline_source": { "type": "string" },
+        "summary": { "type": "string" },
+        "source_url": { "type": "string" },
+        "source_name": { "type": "string" },
+        "category": { "type": "string" },
+        "published_at": { "type": "string" },
+        "facts": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "script": {
+      "type": "object",
+      "required": ["text", "headline", "category"],
+      "properties": {
+        "text": { "type": "string" },
+        "headline": { "type": "string" },
+        "category": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "direction": {
+      "type": "object",
+      "required": ["job_id", "voice", "camera_cuts", "performance_beats", "anchor_output_path"],
+      "properties": {
+        "job_id": { "type": "string" },
+        "voice": { "type": "object" },
+        "camera_cuts": { "type": "array" },
+        "performance_beats": { "type": "array" },
+        "anchor_output_path": { "type": "string" },
+        "avatar_job_path": { "type": "string" },
+        "estimated_duration_seconds": { "type": "number" },
+        "duration_source": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "visuals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "start", "end"],
+        "properties": {
+          "path": { "type": "string" },
+          "start": { "type": "number" },
+          "end": { "type": "number" },
+          "fit": { "type": "string" },
+          "sourceLabel": { "type": "string" },
+          "audio": { "type": "boolean" },
+          "play_audio": { "type": "boolean" },
+          "volume": { "type": "number" },
+          "asset_id": { "type": "string" },
+          "asset_type": {
+            "type": "string",
+            "enum": ["video", "image", "screenshot", "chart", "map", "document", "satellite", "generated", "placeholder"]
+          },
+          "source_url": { "type": "string" },
+          "source_name": { "type": "string" },
+          "license": { "type": "string" },
+          "usage_note": { "type": "string" },
+          "attribution": { "type": "string" },
+          "downloaded_path": { "type": "string" },
+          "story_id": { "type": "string" },
+          "segment_id": { "type": "string" },
+          "relevance_score": { "type": "number" },
+          "safe_to_use": { "type": "boolean" },
+          "fallback_reason": { "type": "string" },
+          "provider": { "type": "string" },
+          "title": { "type": "string" },
+          "visual_role": { "type": "string" },
+          "rights_tier": { "type": "string", "enum": ["green", "yellow", "red"] },
+          "rights_confidence": { "type": "string", "enum": ["verified", "inferred", "unknown"] },
+          "usage_basis": {
+            "type": "string",
+            "enum": ["public_domain", "cc0", "cc_by", "cc_by_sa", "official_press", "user_provided", "editorial_review", "stock_fallback"]
+          },
+          "attribution_required": { "type": "boolean" },
+          "attribution_text": { "type": "string" },
+          "source_authority": {
+            "type": "string",
+            "enum": ["official", "wire", "open_archive", "creator", "platform", "stock", "unknown"]
+          },
+          "content_role": { "type": "string", "enum": ["evidence", "context", "explanation", "atmosphere"] },
+          "media_type": {
+            "type": "string",
+            "enum": ["video", "photo", "screenshot", "document", "map", "chart", "satellite", "stock"]
+          },
+          "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+          "manual_review_status": { "type": "string", "enum": ["not_required", "required", "approved", "rejected"] },
+          "motion": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      }
+    },
+    "visual_assets": {
+      "type": "array",
+      "description": "Normalized selected visual asset metadata for rights/provenance audit.",
+      "items": {
+        "type": "object",
+        "required": ["asset_id", "asset_type", "provider", "safe_to_use"],
+        "properties": {
+          "asset_id": { "type": "string" },
+          "asset_type": { "type": "string" },
+          "title": { "type": "string" },
+          "provider": { "type": "string" },
+          "path": { "type": "string" },
+          "remote_url": { "type": "string" },
+          "source_url": { "type": "string" },
+          "source_name": { "type": "string" },
+          "license": { "type": "string" },
+          "usage_note": { "type": "string" },
+          "attribution": { "type": "string" },
+          "downloaded_path": { "type": "string" },
+          "story_id": { "type": "string" },
+          "segment_id": { "type": "string" },
+          "keywords": { "type": "array", "items": { "type": "string" } },
+          "relevance_score": { "type": "number" },
+          "safe_to_use": { "type": "boolean" },
+          "fallback_reason": { "type": "string" },
+          "visual_role": { "type": "string" },
+          "rights_tier": { "type": "string", "enum": ["green", "yellow", "red"] },
+          "rights_confidence": { "type": "string", "enum": ["verified", "inferred", "unknown"] },
+          "usage_basis": {
+            "type": "string",
+            "enum": ["public_domain", "cc0", "cc_by", "cc_by_sa", "official_press", "user_provided", "editorial_review", "stock_fallback"]
+          },
+          "attribution_required": { "type": "boolean" },
+          "attribution_text": { "type": "string" },
+          "source_authority": {
+            "type": "string",
+            "enum": ["official", "wire", "open_archive", "creator", "platform", "stock", "unknown"]
+          },
+          "content_role": { "type": "string", "enum": ["evidence", "context", "explanation", "atmosphere"] },
+          "media_type": {
+            "type": "string",
+            "enum": ["video", "photo", "screenshot", "document", "map", "chart", "satellite", "stock"]
+          },
+          "risk_level": { "type": "string", "enum": ["low", "medium", "high"] },
+          "manual_review_status": { "type": "string", "enum": ["not_required", "required", "approved", "rejected"] },
+          "motion": { "type": "object", "additionalProperties": true }
+        },
+        "additionalProperties": true
+      }
+    },
+    "visual_plan": {
+      "type": "object",
+      "description": "Planner audit summary: segments, providers, warnings, and counts.",
+      "additionalProperties": true
+    },
+    "points": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text", "start"],
+        "properties": {
+          "text": { "type": "string" },
+          "start": { "type": "number" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "composition": {
+      "type": "object",
+      "required": ["template", "output_path"],
+      "properties": {
+        "template": { "type": "string" },
+        "output_path": { "type": "string" },
+        "preview_path": { "type": "string" },
+        "headlines": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              {
+                "type": "object",
+                "properties": {
+                  "text": { "type": "string" },
+                  "headline": { "type": "string" },
+                  "title": { "type": "string" },
+                  "start": { "type": "number" },
+                  "end": { "type": "number" }
+                },
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        "duration_seconds": { "type": "number" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

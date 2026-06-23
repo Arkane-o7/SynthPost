@@ -1,0 +1,71 @@
+{
+  "brief_id": "topic_showcase_ai_energy_grid",
+  "video_title": "AI Data Centers Are Straining the Power Grid",
+  "episode_headline": "The AI boom is turning electricity into a core bottleneck.",
+  "topic": "energy",
+  "main_subjects": [
+    {
+      "type": "object",
+      "name": "data center",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "power grid",
+      "importance": "secondary",
+      "visual_priority": 4
+    }
+  ],
+  "story_angle": "AI growth is becoming an energy infrastructure story.",
+  "emotion": "urgent",
+  "stakes": "Data center demand could reshape power markets and energy policy.",
+  "curiosity_gap": "Can the grid keep up with AI demand?",
+  "approved_thumbnail_text": [
+    "ai needs power",
+    "grid under pressure",
+    "data centers surge"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "ai_energy_grid_composite",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+        "type": "hero_composite",
+        "subject_name": "data center, grid towers, power core, and rising demand arrow",
+        "license": "AI-generated project asset",
+        "usage_status": "approved",
+        "label": "AI-generated combined foreground"
+      },
+      {
+        "id": "generated_topic_showcase_ai_energy_grid",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+        "type": "hero_composite",
+        "subject_name": "ai energy grid",
+        "license": "AI-generated project asset",
+        "usage_status": "approved",
+        "label": "Auto-discovered generated composite"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "clean_market_surge"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Auto-resolved by SynthPost thumbnail asset selector."
+  }
+}

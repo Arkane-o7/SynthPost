@@ -1,0 +1,28 @@
+{
+  "name": "synthpost-remotion-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "render:story": "tsx src/renderStory.ts",
+    "render:endscreen": "tsx src/endscreen/renderEndscreen.ts",
+    "render:thumbnail": "tsx src/renderThumbnail.ts",
+    "preview": "remotion preview src/Root.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.330",
+    "@remotion/cli": "^4.0.330",
+    "@remotion/media-utils": "^4.0.330",
+    "@remotion/renderer": "^4.0.330",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.330"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.5"
+  }
+}

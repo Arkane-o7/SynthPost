@@ -1,0 +1,77 @@
+{
+  "brief_id": "v2_07_fusion_money_race",
+  "video_title": "Fusion startups are pulling in serious capital before the grid is ready",
+  "episode_headline": "Fusion funding accelerates as investors bet on clean baseload power.",
+  "topic": "business",
+  "main_subjects": [
+    {
+      "type": "company",
+      "name": "fusion startup",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "fusion reactor",
+      "importance": "secondary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "clean power grid",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "story_angle": "A capital and technology story about investor appetite, energy transition, and commercialization risk.",
+  "emotion": "optimistic",
+  "stakes": "The energy transition is attracting deeper tech capital.",
+  "curiosity_gap": "Is fusion finally leaving the lab, or just entering a richer hype cycle?",
+  "key_numbers": [
+    {
+      "label": "Funding watch",
+      "value": "$1B+",
+      "confidence": "estimated"
+    }
+  ],
+  "approved_thumbnail_text": [
+    "fusion money race",
+    "$1B clean bet",
+    "energy bet explodes"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "ai_energy_grid_composite",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+        "type": "hero_composite",
+        "subject_name": "AI data center power grid energy demand",
+        "license": "AI-generated project asset",
+        "usage_status": "approved",
+        "label": "AI energy grid composite"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "money_deal_bomb",
+      "authority_warning",
+      "logo_collision"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Auto-resolved by SynthPost thumbnail asset selector."
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "briefId": "topic_showcase_ai_energy_grid",
+  "conceptId": "concept_01",
+  "templateId": "clean_market_surge",
+  "videoTitle": "AI Data Centers Are Straining the Power Grid",
+  "episodeHeadline": "The AI boom is turning electricity into a core bottleneck.",
+  "topic": "energy",
+  "emotion": "urgent",
+  "headlineText": "AI NEEDS POWER",
+  "subtitleText": "Data center demand could reshape power markets and energy policy.",
+  "accentWords": [
+    "AI"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Clean editorial market-surge layout with data center, a symbolic prop, and upward motion.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "data center",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "power grid",
+      "importance": "secondary",
+      "visual_priority": 4
+    }
+  ],
+  "assets": [
+    {
+      "id": "ai_energy_grid_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+      "type": "hero_composite",
+      "subject_name": "data center, grid towers, power core, and rising demand arrow",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "AI-generated combined foreground"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 86,
+  "outputPath": "episodes/topic-showcase/ai_energy_grid_brief_thumbnails/renders/concept_01.png",
+  "rendered_png": "episodes/topic-showcase/ai_energy_grid_brief_thumbnails/renders/concept_01.png",
+  "rationale": "A clean white editorial canvas, celebrity subject, symbolic object, and upward chart motion make the momentum story obvious.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 9,
+    "topic_relevance": 9,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 9
+  }
+}

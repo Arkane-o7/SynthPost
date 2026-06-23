@@ -1,0 +1,73 @@
+{
+  "briefId": "topic_showcase_ai_energy_grid",
+  "conceptId": "concept_04",
+  "templateId": "logo_collision",
+  "videoTitle": "AI Data Centers Are Straining the Power Grid",
+  "episodeHeadline": "The AI boom is turning electricity into a core bottleneck.",
+  "topic": "energy",
+  "emotion": "urgent",
+  "headlineText": "AI NEEDS POWER",
+  "subtitleText": "Data center demand could reshape power markets and energy policy.",
+  "accentWords": [
+    "AI"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Two-sided technology conflict with clear brand or subject cards.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "data center",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "power grid",
+      "importance": "secondary",
+      "visual_priority": 4
+    }
+  ],
+  "assets": [
+    {
+      "id": "ai_energy_grid_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+      "type": "hero_composite",
+      "subject_name": "data center, grid towers, power core, and rising demand arrow",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "AI-generated combined foreground"
+    },
+    {
+      "id": "generated_topic_showcase_ai_energy_grid",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+      "type": "hero_composite",
+      "subject_name": "ai energy grid",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "Auto-discovered generated composite"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 84,
+  "outputPath": "episodes/topic-showcase/auto_assets_smoke/renders/concept_04.png",
+  "rendered_png": "episodes/topic-showcase/auto_assets_smoke/renders/concept_04.png",
+  "rationale": "A direct comparison or conflict creates an immediate curiosity gap.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 9,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

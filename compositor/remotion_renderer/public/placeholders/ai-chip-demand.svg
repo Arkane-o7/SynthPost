@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-label="AI chip demand news visual">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#061323"/>
+      <stop offset="0.55" stop-color="#123D68"/>
+      <stop offset="1" stop-color="#050A14"/>
+    </linearGradient>
+    <linearGradient id="chip" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#5C7FA6"/>
+      <stop offset="0.52" stop-color="#F5F7FA"/>
+      <stop offset="1" stop-color="#1F7BFF"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.46"/>
+    </filter>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g opacity="0.18" stroke="#F5F7FA" stroke-width="2">
+    <path d="M210 760C460 620 610 724 790 560S1110 320 1410 390 1700 470 1880 330"/>
+    <path d="M170 330C410 460 600 400 780 470S1090 670 1360 610 1600 520 1800 670"/>
+  </g>
+  <g transform="translate(700 275)" filter="url(#shadow)">
+    <rect x="0" y="0" width="520" height="520" rx="42" fill="#071B33" stroke="url(#chip)" stroke-width="10"/>
+    <rect x="105" y="105" width="310" height="310" rx="26" fill="#050A14" stroke="#1F7BFF" stroke-width="5"/>
+    <path d="M180 268h160M260 180v176M210 220h100l46 78" fill="none" stroke="#FFD84A" stroke-width="18" stroke-linecap="round"/>
+    <g stroke="#5C7FA6" stroke-width="10">
+      <path d="M-80 90H0M-80 170H0M-80 250H0M-80 330H0M-80 410H0"/>
+      <path d="M520 90H600M520 170H600M520 250H600M520 330H600M520 410H600"/>
+      <path d="M90 -80V0M170 -80V0M250 -80V0M330 -80V0M410 -80V0"/>
+      <path d="M90 520V600M170 520V600M250 520V600M330 520V600M410 520V600"/>
+    </g>
+  </g>
+  <text x="112" y="832" font-family="Georgia, serif" font-size="76" fill="#F5F7FA">AI CHIP DEMAND</text>
+  <text x="116" y="896" font-family="Avenir Next, Helvetica, sans-serif" font-size="36" fill="#AAB4C2">DATA CENTERS AND FRONTIER MODELS DRIVE THE SUPPLY RACE</text>
+</svg>

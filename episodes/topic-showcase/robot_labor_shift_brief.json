@@ -1,0 +1,64 @@
+{
+  "brief_id": "topic_showcase_robot_labor_shift",
+  "video_title": "Robots Are Moving From Factories Into Office Work",
+  "episode_headline": "Automation is expanding from physical labor into white-collar workflows.",
+  "topic": "technology",
+  "main_subjects": [
+    {
+      "type": "object",
+      "name": "humanoid robot",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "factory automation",
+      "importance": "secondary",
+      "visual_priority": 4
+    }
+  ],
+  "story_angle": "The labor-market shock is no longer limited to factory floors.",
+  "emotion": "serious",
+  "stakes": "Automation could reshape hiring, productivity, and labor politics.",
+  "curiosity_gap": "Which jobs get automated first?",
+  "key_numbers": [],
+  "approved_thumbnail_text": [
+    "robots take jobs",
+    "automation moves up",
+    "labor shock begins"
+  ],
+  "forbidden_thumbnail_text": [],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": [
+      {
+        "id": "robot_labor_shift_composite",
+        "path_or_url": "assets/thumbnails/generated/topic_showcase/robot_labor_shift.png",
+        "type": "hero_composite",
+        "subject_name": "robot hand, human hand, automation arms, chart, and motion streaks",
+        "label": "AI-generated combined foreground",
+        "usage_status": "approved",
+        "license": "AI-generated project asset"
+      }
+    ]
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "clean_market_surge"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Topic showcase generated composite for layout evaluation."
+  }
+}

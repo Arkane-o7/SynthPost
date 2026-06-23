@@ -1,0 +1,75 @@
+{
+  "briefId": "ep_2026-06-21-ferc-grid_story_001",
+  "conceptId": "concept_03",
+  "templateId": "logo_collision",
+  "videoTitle": "FERC FAST-TRACKS GRID RULES FOR AI DATA CENTERS",
+  "episodeHeadline": "The Federal Energy Regulatory Commission launched a fast-track proceeding on June 18 to standardize how large power users, including data centers, connect to the U.S. transmission grid.",
+  "topic": "energy",
+  "emotion": "urgent",
+  "headlineText": "FERC FAST TRACKS GRID",
+  "subtitleText": "FERC ordered regional grid operators to submit tariff revisions for large load interconnections within 30 days or explain within 60 days why existing rules are sufficient.",
+  "accentWords": [
+    "GRID"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Two-sided technology conflict with clear brand or subject cards.",
+  "mainSubjects": [
+    {
+      "type": "object",
+      "name": "data center",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "object",
+      "name": "power grid",
+      "importance": "secondary",
+      "visual_priority": 4
+    }
+  ],
+  "assets": [
+    {
+      "id": "story_visual_01",
+      "path_or_url": "news/ferc-grid-story/transmission-lines.jpg",
+      "type": "background_image",
+      "subject_name": "Transmission Lines",
+      "license": "local-user-provided",
+      "usage_status": "approved",
+      "label": "TRANSMISSION LINES"
+    },
+    {
+      "id": "story_visual_02",
+      "path_or_url": "news/datacenter-server-racks.jpg",
+      "type": "background_image",
+      "subject_name": "Datacenter Server Racks",
+      "license": "local-user-provided",
+      "usage_status": "approved",
+      "label": "DATACENTER SERVER RACKS"
+    },
+    {
+      "id": "ai_energy_grid_composite",
+      "path_or_url": "assets/thumbnails/generated/topic_showcase/ai_energy_grid.png",
+      "type": "hero_composite",
+      "subject_name": "AI data center power grid energy demand",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "AI energy grid composite"
+    }
+  ],
+  "score": 84,
+  "outputPath": "episodes/ep_2026-06-21-ferc-grid/thumbnail/renders/concept_03.png",
+  "rendered_png": "episodes/ep_2026-06-21-ferc-grid/thumbnail/renders/concept_03.png",
+  "rationale": "A direct comparison or conflict creates an immediate curiosity gap.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 9,
+    "topic_relevance": 8,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 8,
+    "premium_feel": 8
+  }
+}

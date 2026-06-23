@@ -1,0 +1,67 @@
+{
+  "brief_id": "v2_02_ai_regulation_countdown",
+  "video_title": "The AI regulation countdown every founder is watching",
+  "episode_headline": "New AI rules could force model makers to prove safety before launch.",
+  "topic": "policy",
+  "main_subjects": [
+    {
+      "type": "organization",
+      "name": "AI regulator",
+      "importance": "primary",
+      "visual_priority": 4
+    },
+    {
+      "type": "object",
+      "name": "compliance document",
+      "importance": "secondary",
+      "visual_priority": 5
+    },
+    {
+      "type": "company",
+      "name": "AI labs",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "story_angle": "A policy pressure story about audits, safety rules, and launch risk for AI companies.",
+  "emotion": "warning",
+  "stakes": "The next model launch may be decided by paperwork, not benchmarks.",
+  "curiosity_gap": "Which AI products become harder to ship first?",
+  "key_numbers": [
+    {
+      "label": "Risk level",
+      "value": "HIGH",
+      "confidence": "reported"
+    }
+  ],
+  "approved_thumbnail_text": [
+    "AI rules arrive",
+    "launches under review",
+    "policy pressure"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": []
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "authority_warning",
+      "logo_collision",
+      "money_deal_bomb"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Auto-resolved by SynthPost thumbnail asset selector."
+  }
+}

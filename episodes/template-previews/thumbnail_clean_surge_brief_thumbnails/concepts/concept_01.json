@@ -1,0 +1,87 @@
+{
+  "briefId": "template_preview_clean_market_surge",
+  "conceptId": "concept_01",
+  "templateId": "clean_market_surge",
+  "videoTitle": "Nvidia Stock Surges After Explosive GPU Demand",
+  "episodeHeadline": "Nvidia shares jump as AI GPU demand keeps pushing the market higher.",
+  "topic": "finance",
+  "emotion": "optimistic",
+  "headlineText": "NVIDIA STOCK SURGES",
+  "subtitleText": "AI hardware demand keeps driving market momentum.",
+  "accentWords": [
+    "STOCK"
+  ],
+  "sourceTag": "SYNTHPOST BRIEFING",
+  "visualHook": "Clean editorial market-surge layout with Jensen Huang, a symbolic prop, and upward motion.",
+  "mainSubjects": [
+    {
+      "type": "person",
+      "name": "Jensen Huang",
+      "role": "Nvidia CEO",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "company",
+      "name": "Nvidia",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "object",
+      "name": "GPU",
+      "importance": "context",
+      "visual_priority": 4
+    }
+  ],
+  "keyNumbers": [
+    {
+      "label": "Ticker",
+      "value": "NVDA",
+      "confidence": "reported"
+    }
+  ],
+  "assets": [
+    {
+      "id": "nvidia_hero_composite",
+      "path_or_url": "assets/thumbnails/generated/clean_market_surge/nvidia_hero_composite.png",
+      "type": "hero_composite",
+      "subject_name": "Jensen Huang, GPU, market arrow, and motion streaks",
+      "license": "AI-generated project asset",
+      "usage_status": "approved",
+      "label": "AI-generated combined foreground"
+    },
+    {
+      "id": "gpu_symbolic_prop",
+      "path_or_url": "generated://gpu",
+      "type": "object",
+      "subject_name": "GPU",
+      "license": "generated symbolic prop",
+      "usage_status": "approved",
+      "label": "RTX 4090"
+    },
+    {
+      "id": "synthpost_gradient_context",
+      "path_or_url": "brand/synthpost-gradient-landscape.png",
+      "type": "background_image",
+      "usage_status": "approved",
+      "label": "SynthPost brand gradient"
+    }
+  ],
+  "score": 82,
+  "outputPath": "episodes/template-previews/thumbnail_clean_surge_brief_thumbnails/renders/concept_01.png",
+  "rendered_png": "episodes/template-previews/thumbnail_clean_surge_brief_thumbnails/renders/concept_01.png",
+  "rationale": "A clean white editorial canvas, celebrity subject, symbolic object, and upward chart motion make the momentum story obvious.",
+  "score_breakdown": {
+    "mobile_readability": 9,
+    "subject_clarity": 8,
+    "curiosity_gap": 8,
+    "emotional_tension": 7,
+    "topic_relevance": 9,
+    "brand_consistency": 9,
+    "visual_contrast": 8,
+    "simplicity": 9,
+    "title_thumbnail_synergy": 6,
+    "premium_feel": 9
+  }
+}

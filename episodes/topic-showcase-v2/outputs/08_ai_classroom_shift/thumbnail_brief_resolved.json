@@ -1,0 +1,67 @@
+{
+  "brief_id": "v2_08_ai_classroom_shift",
+  "video_title": "AI tutors are changing the classroom faster than policy can respond",
+  "episode_headline": "AI tutors enter schools as educators debate testing, cheating, and access.",
+  "topic": "education",
+  "main_subjects": [
+    {
+      "type": "object",
+      "name": "AI tutor",
+      "importance": "primary",
+      "visual_priority": 5
+    },
+    {
+      "type": "place",
+      "name": "classroom",
+      "importance": "secondary",
+      "visual_priority": 4
+    },
+    {
+      "type": "organization",
+      "name": "school district",
+      "importance": "context",
+      "visual_priority": 3
+    }
+  ],
+  "story_angle": "An education explainer about AI tutors, student access, teacher workflows, and policy lag.",
+  "emotion": "analytical",
+  "stakes": "Learning tools are changing before the rules are settled.",
+  "curiosity_gap": "Will AI tutors widen gaps or make tutoring universal?",
+  "key_numbers": [
+    {
+      "label": "Classroom signal",
+      "value": "1:1",
+      "confidence": "estimated"
+    }
+  ],
+  "approved_thumbnail_text": [
+    "AI enters class",
+    "school rules lag",
+    "tutors go digital"
+  ],
+  "assets": {
+    "person_images": [],
+    "logos": [],
+    "background_images": [],
+    "maps": [],
+    "screenshots": [],
+    "documents": [],
+    "objects": []
+  },
+  "render_preferences": {
+    "candidate_count": 3,
+    "preferred_templates": [
+      "authority_warning",
+      "logo_collision",
+      "money_deal_bomb"
+    ],
+    "brand_intensity": "standard",
+    "allow_symbolic_generated_background": true,
+    "allow_real_person_generation": false
+  },
+  "compliance": {
+    "must_use_only_approved_assets": false,
+    "requires_human_review": true,
+    "notes": "Auto-resolved by SynthPost thumbnail asset selector."
+  }
+}

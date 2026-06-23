@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-label="SynthPost visual placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#071B33"/>
+      <stop offset="0.54" stop-color="#0B2A4E"/>
+      <stop offset="1" stop-color="#050A14"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" x2="1">
+      <stop offset="0" stop-color="#1F7BFF"/>
+      <stop offset="1" stop-color="#FFD84A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g opacity="0.28" stroke="#F5F7FA" stroke-width="1">
+    <path d="M0 180H1920M0 360H1920M0 540H1920M0 720H1920M0 900H1920"/>
+    <path d="M240 0V1080M480 0V1080M720 0V1080M960 0V1080M1200 0V1080M1440 0V1080M1680 0V1080"/>
+  </g>
+  <rect x="575" y="300" width="770" height="420" fill="none" stroke="url(#line)" stroke-width="8"/>
+  <text x="960" y="500" text-anchor="middle" font-family="Georgia, serif" font-size="86" fill="#F5F7FA">SYNTHPOST</text>
+  <text x="960" y="585" text-anchor="middle" font-family="Avenir Next, Helvetica, sans-serif" font-size="34" fill="#AAB4C2">VISUAL PROVIDER PLACEHOLDER</text>
+</svg>
