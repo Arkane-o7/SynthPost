@@ -106,6 +106,12 @@ entity cards, source cards, B-roll clips, and still images. Specs are
 deterministic and grounded in raw facts, raw claims/evidence, source metadata,
 section claim IDs, and selected visual candidate metadata.
 
+Before Remotion renders a story, SynthPost writes `compositor_visuals[]` and
+`visual_compositor_bridge` into `story.json`. This bridge prefers
+`visual_plan.json` over legacy `visuals[]`, preserves attribution/rights/manual
+review metadata, and carries simple visual-skill placeholders for downstream
+templates without changing the broadcast design.
+
 Provider priority is newsroom-style and rights-aware:
 
 - `manifest_media`: explicit story media from `raw.visual_assets`, `raw.media_assets`, `raw.official_media`, `raw.image_urls`, or `raw.video_urls`

@@ -14,6 +14,25 @@ export type TimedVisual = PublicMedia & {
   volume?: number;
   mediaType?: 'video' | 'photo' | 'screenshot' | 'document' | 'map' | 'chart' | 'satellite' | 'stock';
   contentRole?: 'evidence' | 'context' | 'explanation' | 'atmosphere';
+  candidateId?: string;
+  planId?: string;
+  sectionId?: string;
+  sectionType?: string;
+  visualRole?: string;
+  sourceUrl?: string;
+  sourceDomain?: string;
+  provider?: string;
+  license?: string;
+  attributionText?: string;
+  rightsCategory?: string;
+  manualReviewFlag?: boolean;
+  fallbackStatus?: string;
+  fallbackReason?: string;
+  warnings?: string[];
+  visualSkillType?: string;
+  visualSkill?: Record<string, unknown>;
+  skillPlaceholder?: Record<string, unknown>;
+  renderSafetyStatus?: string;
   motion?: {
     preset?: 'push_in' | 'pan_left' | 'document_scan' | 'map_zoom' | 'chart_reveal' | 'screenshot_focus';
     intensity?: number;

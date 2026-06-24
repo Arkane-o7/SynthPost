@@ -13,6 +13,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from synthpost.visuals import build_visual_plan  # noqa: E402
+from synthpost.visuals.compositor_bridge import apply_compositor_bridge  # noqa: E402
 
 REQUIRED_VISUAL_METADATA = {
     "asset_type",
@@ -56,6 +57,8 @@ def run(
     existing = manifest.get("visuals")
     if existing and not force and _has_visual_metadata(existing):
         print("[visuals] Reusing planned visuals from manifest.")
+        manifest = apply_compositor_bridge(manifest, story_json_path)
+        write_manifest(story_json_path, manifest)
         for index, visual in enumerate(existing, start=1):
             if isinstance(visual, dict) and visual.get("path"):
                 record_story_artifact(
@@ -70,6 +73,13 @@ def run(
                         reused=True,
                         test_mode=test_mode,
                         render_profile=render_profile,
+                        metadata={
+                            "candidate_id": visual.get("asset_id") or visual.get("candidate_id"),
+                            "rights_category": visual.get("rights_category"),
+                            "attribution_text": visual.get("attribution_text"),
+                            "source_url": visual.get("source_url"),
+                            "source_domain": visual.get("source_domain"),
+                        },
                     ),
                 )
         return existing
@@ -78,6 +88,7 @@ def run(
     manifest["visuals"] = plan.manifest_visuals
     manifest["visual_assets"] = plan.selected_records()
     manifest["visual_plan"] = plan.summary()
+    manifest = apply_compositor_bridge(manifest, story_json_path)
     write_manifest(story_json_path, manifest)
 
     provider_counts = ", ".join(
@@ -98,7 +109,14 @@ def run(
                     reused=False,
                     test_mode=test_mode,
                     render_profile=render_profile,
-                    metadata={"asset_type": visual.get("asset_type")},
+                    metadata={
+                        "asset_type": visual.get("asset_type"),
+                        "candidate_id": visual.get("asset_id") or visual.get("candidate_id"),
+                        "rights_category": visual.get("rights_category"),
+                        "attribution_text": visual.get("attribution_text"),
+                        "source_url": visual.get("source_url"),
+                        "source_domain": visual.get("source_domain"),
+                    },
                 ),
             )
     return plan.manifest_visuals
