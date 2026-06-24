@@ -10,9 +10,18 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from synthpost.visuals.models import AssetType, ProviderReport, StorySegment, VisualAsset, VisualProvider, VisualQuery
+from synthpost.visuals.models import (
+    AssetType,
+    ProviderReport,
+    StorySegment,
+    VisualAsset,
+    VisualPlanEntry,
+    VisualProvider,
+    VisualQuery,
+)
 from synthpost.visuals.planner import build_visual_plan
 from synthpost.visuals.providers.screenshot_provider import ScreenshotProvider
+from synthpost.visuals.skills import build_visual_skill_specs
 
 
 class FixtureVisualProvider(VisualProvider):
@@ -53,6 +62,64 @@ def _media(root: Path, name: str) -> str:
 
 
 class VisualSkillTests(unittest.TestCase):
+    def test_global_visual_opportunities_do_not_override_entity_section_skill(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "episode_id": "ep_test",
+            "raw": {
+                "headline_source": "Grid demand affects AI chips",
+                "summary": "The plan references 42 gigawatts of demand and an 18 percent reserve margin.",
+                "source_url": "https://example.gov/story",
+                "source_name": "Example Agency",
+                "category": "technology",
+                "facts": ["The plan references 42 gigawatts of demand and an 18 percent reserve margin."],
+                "handoff": {
+                    "visuals": {
+                        "entities": ["Nvidia"],
+                        "visual_opportunities": ["grid demand chart", "data callout for reserve margin"],
+                    }
+                },
+            },
+            "script": {
+                "sections": [
+                    {
+                        "section_id": "why_it_matters",
+                        "title": "Nvidia chips in the supply chain",
+                        "narration": "Nvidia is one entity in the wider AI chip supply chain.",
+                        "claim_ids": ["claim_entity"],
+                        "source_notes": ["Example Agency"],
+                    }
+                ]
+            },
+        }
+        entry = VisualPlanEntry(
+            story_id="story_001",
+            episode_id="ep_test",
+            section_id="why_it_matters",
+            section_title="Nvidia chips in the supply chain",
+            section_type="why_it_matters",
+            visual_role="entity_visual",
+            selected_visual_candidate_id="nvidia_entity",
+            media_type="image",
+            asset_type="image",
+            start=0,
+            end=10,
+            rights_category="official_public",
+        )
+        asset = VisualAsset(
+            "nvidia_entity",
+            AssetType.IMAGE,
+            "Nvidia AI chip entity visual",
+            "manifest_media",
+            safe_to_use=True,
+            entities=["Nvidia"],
+        )
+
+        specs, audit = build_visual_skill_specs(manifest, entries=[entry], selected_assets=[asset])
+
+        self.assertEqual(specs[0].skill_type, "entity_card")
+        self.assertEqual(audit["skill_types"], {"entity_card": 1})
+
     def test_map_and_entity_specs_are_assigned_from_section_context(self) -> None:
         manifest = {
             "story_id": "story_001",

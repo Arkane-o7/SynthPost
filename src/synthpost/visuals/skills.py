@@ -354,7 +354,7 @@ def _wants_map(entry: VisualPlanEntry, evidence: SectionEvidence) -> bool:
 
 
 def _wants_timeline(entry: VisualPlanEntry, evidence: SectionEvidence) -> bool:
-    text = f"{entry.section_type} {entry.section_title} {' '.join(evidence.visual_opportunities)}".lower()
+    text = f"{entry.visual_role} {entry.section_type} {entry.section_title} {evidence.section_text}".lower()
     return (
         entry.section_type in {"background_context", "main_developments", "stakes_consequences", "opposing_views_uncertainty"}
         or "timeline" in text
@@ -365,7 +365,7 @@ def _wants_timeline(entry: VisualPlanEntry, evidence: SectionEvidence) -> bool:
 
 
 def _wants_numeric(entry: VisualPlanEntry, evidence: SectionEvidence) -> bool:
-    text = f"{entry.visual_role} {entry.section_type} {entry.section_title} {' '.join(evidence.visual_opportunities)}".lower()
+    text = f"{entry.visual_role} {entry.section_type} {entry.section_title} {evidence.section_text}".lower()
     return (
         entry.visual_role == "data_callout"
         or entry.media_type == "chart"
