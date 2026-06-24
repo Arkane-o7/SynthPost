@@ -266,6 +266,67 @@ class ProviderReport:
 
 
 @dataclass(slots=True)
+class VisualPlanEntry:
+    story_id: str
+    episode_id: str
+    section_id: str
+    section_title: str
+    section_type: str
+    visual_role: str
+    selected_visual_candidate_id: str
+    media_type: str
+    asset_type: str
+    start: float
+    end: float
+    asset_url: str | None = None
+    path: str | None = None
+    source_url: str | None = None
+    source_domain: str | None = None
+    rights_category: str | None = None
+    attribution: str | None = None
+    attribution_text: str | None = None
+    relevance_score: float = 0.0
+    relevance_reason: str | None = None
+    fallback_status: str = "none"
+    fallback_reason: str | None = None
+    needs_manual_review: bool = False
+    rejection_reasons: list[str] = field(default_factory=list)
+    selection_status: str = SelectionStatus.SELECTED.value
+
+    def to_record(self) -> dict[str, Any]:
+        record: dict[str, Any] = {
+            "story_id": self.story_id,
+            "episode_id": self.episode_id,
+            "script_section_id": self.section_id,
+            "section_title": self.section_title,
+            "section_type": self.section_type,
+            "visual_role": self.visual_role,
+            "selected_visual_candidate_id": self.selected_visual_candidate_id,
+            "media_type": self.media_type,
+            "asset_type": self.asset_type,
+            "asset_url": self.asset_url,
+            "path": self.path,
+            "source_url": self.source_url,
+            "source_domain": self.source_domain,
+            "rights_category": self.rights_category,
+            "attribution": self.attribution,
+            "attribution_text": self.attribution_text,
+            "relevance_score": self.relevance_score,
+            "relevance_reason": self.relevance_reason,
+            "start": self.start,
+            "end": self.end,
+            "display_duration_seconds": round(max(0.0, self.end - self.start), 2),
+            "fallback_status": self.fallback_status,
+            "fallback_reason": self.fallback_reason,
+            "needs_manual_review": self.needs_manual_review,
+            "manual_review_flag": self.needs_manual_review,
+            "rejection_reasons": self.rejection_reasons,
+            "selection_status": self.selection_status,
+        }
+        return {key: value for key, value in record.items() if value not in (None, [], {})}
+
+
+@dataclass(slots=True)
 class VisualPlan:
     story_id: str
     episode_id: str
@@ -276,14 +337,21 @@ class VisualPlan:
     manifest_visuals: list[dict[str, Any]]
     provider_reports: list[ProviderReport]
     warnings: list[str] = field(default_factory=list)
+    plan_entries: list[VisualPlanEntry] = field(default_factory=list)
+    planning_audit: dict[str, Any] = field(default_factory=dict)
+    audit_paths: dict[str, str] = field(default_factory=dict)
 
     def selected_records(self) -> list[dict[str, Any]]:
         return [asset.to_record() for asset in self.selected_assets]
 
+    def plan_records(self) -> list[dict[str, Any]]:
+        return [entry.to_record() for entry in self.plan_entries]
+
     def summary(self) -> dict[str, Any]:
-        return {
+        summary: dict[str, Any] = {
             "duration_seconds": self.duration_seconds,
             "segment_count": len(self.segments),
+            "section_count": len(self.plan_entries),
             "candidate_count": len(self.candidates),
             "selected_count": len(self.selected_assets),
             "segments": [
@@ -299,6 +367,16 @@ class VisualPlan:
             "providers": [report.to_record() for report in self.provider_reports],
             "warnings": self.warnings,
         }
+        if self.audit_paths:
+            summary["audit_paths"] = self.audit_paths
+            if self.audit_paths.get("visual_plan"):
+                summary["visual_plan_path"] = self.audit_paths["visual_plan"]
+        if self.planning_audit:
+            summary["reuse_counts"] = self.planning_audit.get("reuse_counts", {})
+            summary["fallback_count"] = self.planning_audit.get("fallback_count", 0)
+            summary["manual_review_warning_count"] = len(self.planning_audit.get("manual_review_warnings", []))
+            summary["coverage_warnings"] = self.planning_audit.get("missing_visual_coverage_warnings", [])
+        return summary
 
 
 class VisualProvider:

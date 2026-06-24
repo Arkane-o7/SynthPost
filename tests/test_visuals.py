@@ -596,6 +596,262 @@ class VisualPlanningTests(unittest.TestCase):
         self.assertTrue(audit["manual_review_flags"])
         self.assertEqual(audit["chosen_visuals"][0]["id"], "official")
 
+    def test_visual_plan_assigns_rights_safe_visuals_to_script_sections(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "episode_id": "ep_test",
+            "raw": {
+                "headline_source": "Nvidia export controls reshape AI chip supply",
+                "summary": "Nvidia AI chip controls could affect data center supply chains.",
+                "source_url": "https://example.gov/news",
+                "source_name": "Example Agency",
+                "category": "ai",
+                "facts": ["Nvidia AI chip controls could affect data center supply chains."],
+                "handoff": {
+                    "visuals": {
+                        "entities": ["Nvidia", "AI chips", "data centers"],
+                        "visual_opportunities": ["official briefing footage", "data center supply chain document"],
+                        "source_metadata": {"source_domain": "example.gov", "source_name": "Example Agency"},
+                    }
+                },
+            },
+            "script": {
+                "headline": "AI CHIP CONTROLS",
+                "category": "AI",
+                "text": "Nvidia AI chip controls could affect data center supply chains.",
+                "target_duration_seconds": 48,
+                "sections": [
+                    {
+                        "section_id": "cold_open",
+                        "title": "Nvidia chip controls",
+                        "narration": "Nvidia AI chip export controls are reshaping supply.",
+                        "estimated_duration_seconds": 12,
+                        "claim_ids": ["claim_01"],
+                        "source_notes": ["Example Agency"],
+                    },
+                    {
+                        "section_id": "main_developments",
+                        "title": "Data center supply pressure",
+                        "narration": "Data centers are part of the supply-chain pressure.",
+                        "estimated_duration_seconds": 12,
+                        "claim_ids": ["claim_01"],
+                        "source_notes": ["Example Agency"],
+                    },
+                    {
+                        "section_id": "why_it_matters",
+                        "title": "Why Nvidia matters",
+                        "narration": "Nvidia remains a central entity in the AI chip supply chain.",
+                        "estimated_duration_seconds": 12,
+                        "claim_ids": ["claim_01"],
+                        "source_notes": ["Example Agency"],
+                    },
+                    {
+                        "section_id": "conclusion",
+                        "title": "What to watch next",
+                        "narration": "The next signal is whether official agencies clarify supply rules.",
+                        "estimated_duration_seconds": 12,
+                        "claim_ids": ["claim_01"],
+                        "source_notes": ["Example Agency"],
+                    },
+                ],
+            },
+            "composition": {},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            "os.environ",
+            {"SYNTHPOST_ENABLE_CONTEXT_GRAPHICS": "auto"},
+        ):
+            root = Path(temp_dir)
+            (root / "pipeline").mkdir()
+            (root / "compositor").mkdir()
+            media = root / "nvidia_briefing.jpg"
+            document = root / "supply_document.png"
+            entity = root / "nvidia_entity.png"
+            media.write_bytes(b"fake")
+            document.write_bytes(b"fake")
+            entity.write_bytes(b"fake")
+            story_path = root / "episodes" / "ep_test" / "stories" / "story_001" / "story.json"
+            story_path.parent.mkdir(parents=True)
+            story_path.write_text("{}", encoding="utf-8")
+            provider = FixtureVisualProvider(
+                "manifest_media",
+                [
+                    VisualAsset(
+                        "nvidia_briefing",
+                        AssetType.IMAGE,
+                        "Nvidia AI chip export controls briefing",
+                        "manifest_media",
+                        path=str(media),
+                        source_url="https://example.gov/media/nvidia",
+                        source_name="Example Agency",
+                        license="user provided",
+                        usage_note="user provided official media",
+                        safe_to_use=True,
+                        entities=["Nvidia", "AI chips"],
+                    ),
+                    VisualAsset(
+                        "supply_document",
+                        AssetType.DOCUMENT,
+                        "Data center supply chain official document",
+                        "official_source_media",
+                        path=str(document),
+                        source_url="https://example.gov/docs/supply",
+                        source_name="Example Agency",
+                        license="public domain",
+                        usage_note="public domain government work",
+                        safe_to_use=True,
+                        entities=["data centers", "supply chain"],
+                    ),
+                    VisualAsset(
+                        "nvidia_entity",
+                        AssetType.IMAGE,
+                        "Nvidia AI chip supply chain entity visual",
+                        "manifest_media",
+                        path=str(entity),
+                        source_url="https://example.gov/media/nvidia-entity",
+                        source_name="Example Agency",
+                        license="user provided",
+                        usage_note="user provided official media",
+                        safe_to_use=True,
+                        entities=["Nvidia", "AI chips"],
+                    ),
+                ],
+            )
+
+            plan = build_visual_plan(manifest, story_path, providers=[provider, ScreenshotProvider(root)])
+            visual_plan_path = story_path.parent / "visuals" / "visual_plan.json"
+            visual_plan = json.loads(visual_plan_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            [section["script_section_id"] for section in visual_plan["sections"]],
+            ["cold_open", "main_developments", "why_it_matters", "conclusion"],
+        )
+        self.assertEqual(len(plan.manifest_visuals), 4)
+        self.assertTrue(all(section["rights_category"] for section in visual_plan["sections"]))
+        self.assertEqual(visual_plan["sections"][0]["visual_role"], "hero_visual")
+        self.assertEqual(visual_plan["sections"][1]["visual_role"], "document_visual")
+        self.assertEqual(visual_plan["sections"][2]["visual_role"], "entity_visual")
+        self.assertTrue(any(section["fallback_status"] == "generated_context_card" for section in visual_plan["sections"]))
+        self.assertIn("visual_candidates_path", visual_plan)
+        self.assertEqual(max(visual_plan["audit"]["reuse_counts"].values()), 1)
+        self.assertTrue(all(not Path(section["path"]).is_absolute() for section in visual_plan["sections"] if section.get("path")))
+
+    def test_visual_plan_does_not_select_unapproved_or_unknown_rights_assets(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "episode_id": "ep_test",
+            "raw": {
+                "headline_source": "Flood response enters new phase",
+                "summary": "Officials said flood response operations are continuing.",
+                "source_url": "https://example.gov/flood",
+                "source_name": "Example Agency",
+                "category": "world",
+            },
+            "script": {
+                "headline": "FLOOD RESPONSE",
+                "category": "WORLD",
+                "text": "Officials said flood response operations are continuing.",
+                "target_duration_seconds": 12,
+                "sections": [
+                    {
+                        "section_id": "main_developments",
+                        "title": "Flood response operations",
+                        "narration": "Officials said flood response operations are continuing.",
+                        "estimated_duration_seconds": 12,
+                        "claim_ids": ["claim_01"],
+                        "source_notes": ["Example Agency"],
+                    }
+                ],
+            },
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            "os.environ",
+            {"SYNTHPOST_ENABLE_CONTEXT_GRAPHICS": "auto", "SYNTHPOST_ALLOW_RISKY_SOCIAL": "0"},
+        ):
+            root = Path(temp_dir)
+            (root / "pipeline").mkdir()
+            (root / "compositor").mkdir()
+            unknown = root / "unknown.jpg"
+            social = root / "social.mp4"
+            unknown.write_bytes(b"fake")
+            social.write_bytes(b"fake")
+            story_path = root / "episodes" / "ep_test" / "stories" / "story_001" / "story.json"
+            story_path.parent.mkdir(parents=True)
+            story_path.write_text("{}", encoding="utf-8")
+            provider = FixtureVisualProvider(
+                "visual_fixture",
+                [
+                    VisualAsset(
+                        "unknown_flood",
+                        AssetType.IMAGE,
+                        "Flood response image",
+                        "unknown_web_source",
+                        path=str(unknown),
+                        source_name="Unknown",
+                        safe_to_use=True,
+                    ),
+                    VisualAsset(
+                        "social_flood",
+                        AssetType.VIDEO,
+                        "Flood response social clip",
+                        "social_reference_ingest",
+                        path=str(social),
+                        source_url="https://social.example/flood",
+                        source_name="Social",
+                        safe_to_use=True,
+                        manual_review_status="approved",
+                    ),
+                ],
+            )
+
+            plan = build_visual_plan(manifest, story_path, providers=[provider, ScreenshotProvider(root)])
+            visual_plan = json.loads((story_path.parent / "visuals" / "visual_plan.json").read_text(encoding="utf-8"))
+
+        selected_ids = [section["selected_visual_candidate_id"] for section in visual_plan["sections"]]
+        self.assertNotIn("unknown_flood", selected_ids)
+        self.assertNotIn("social_flood", selected_ids)
+        self.assertTrue(all(section["rights_category"] == "first_party_generated" for section in visual_plan["sections"]))
+        self.assertTrue(visual_plan["audit"]["section_rejections"])
+        self.assertTrue(any(asset.provider == "screenshot_provider" for asset in plan.selected_assets))
+
+    def test_visual_plan_degrades_for_legacy_stories_without_sections(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "episode_id": "ep_test",
+            "raw": {
+                "headline_source": "Grid operators face new power rules",
+                "summary": "A regulator is changing the process for large electricity users.",
+                "source_url": "https://example.gov/news",
+                "source_name": "Example Agency",
+                "category": "energy",
+                "facts": ["Operators must file revised tariffs within thirty days."],
+            },
+            "script": {
+                "headline": "GRID RULES",
+                "category": "ENERGY",
+                "text": "Grid operators face new filing requirements. Data centers are increasing power demand.",
+            },
+            "direction": {"estimated_duration_seconds": 12},
+            "composition": {},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            "os.environ",
+            {"SYNTHPOST_ENABLE_CONTEXT_GRAPHICS": "auto", "SYNTHPOST_VISUAL_MIN_SEGMENTS": "2"},
+        ):
+            root = Path(temp_dir)
+            (root / "pipeline").mkdir()
+            (root / "compositor").mkdir()
+            story_path = root / "episodes" / "ep_test" / "stories" / "story_001" / "story.json"
+            story_path.parent.mkdir(parents=True)
+            story_path.write_text("{}", encoding="utf-8")
+
+            plan = build_visual_plan(manifest, story_path, providers=[ScreenshotProvider(root)])
+            visual_plan = json.loads((story_path.parent / "visuals" / "visual_plan.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(len(visual_plan["sections"]), len(plan.manifest_visuals))
+        self.assertTrue(all(section["script_section_id"].startswith("seg_") for section in visual_plan["sections"]))
+        self.assertTrue(all(section["fallback_status"] == "generated_context_card" for section in visual_plan["sections"]))
+
     def test_visual_reuse_requires_pr8_candidate_metadata(self) -> None:
         old_record = {
             "asset_type": "image",
