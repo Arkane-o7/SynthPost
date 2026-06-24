@@ -496,9 +496,11 @@ def _rejection_reasons(
         reasons.append("thin_source_material")
     if _celebrity_without_public_interest(candidate, text):
         reasons.append("celebrity_or_entertainment_without_public_interest")
+    if score_values["importance_score"] < 35:
+        reasons.append("low_importance")
     if score_values["synthpost_fit_score"] < 35:
         reasons.append("weak_synthpost_fit")
-    if score_values["explainability_score"] < 35:
+    if score_values["explainability_score"] < 40:
         reasons.append("weak_explainability")
     if score_values["visual_potential_score"] < 30:
         reasons.append("weak_visual_potential")

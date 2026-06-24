@@ -5,11 +5,10 @@ import shutil
 import sys
 import unittest
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import patch
 
 from pipeline.news_collection.candidates import SCORE_FIELDS, build_candidate_story
-from pipeline.news_collection.ranking import rank_candidates, score_candidate, selected_candidates
+from pipeline.news_collection.ranking import DEFAULT_SCORE_WEIGHTS, rank_candidates, score_candidate, selected_candidates
 from pipeline.run_episode import main as run_episode_main
 from pipeline.storage import PROJECT_ROOT, read_manifest
 
@@ -79,8 +78,33 @@ class StoryRankingTests(unittest.TestCase):
 
         self.assertEqual(candidate.selection_status, "rejected")
         self.assertIn("celebrity_or_entertainment_without_public_interest", candidate.rejection_reasons)
+        self.assertIn("weak_synthpost_fit", candidate.rejection_reasons)
         self.assertIn("source_logo_only_visuals", candidate.rejection_reasons)
         self.assertTrue(candidate.rejection_reason)
+
+    def test_scoring_weights_add_to_one(self) -> None:
+        self.assertAlmostEqual(sum(DEFAULT_SCORE_WEIGHTS.values()), 1.0)
+
+    def test_low_importance_and_low_explainability_are_rejected(self) -> None:
+        candidate = score_candidate(
+            build_candidate_story(
+                headline="Update",
+                source_name="local",
+                source_url="https://local.example/update",
+                published_at="Wed, 24 Jun 2026 11:45:00 GMT",
+                category="general",
+                summary="",
+                facts=[],
+                key_entities=[],
+                source_reliability_tier="medium",
+                visual_opportunities=["Source logo only"],
+            ),
+            now=NOW,
+        )
+
+        self.assertEqual(candidate.selection_status, "rejected")
+        self.assertIn("low_importance", candidate.rejection_reasons)
+        self.assertIn("weak_explainability", candidate.rejection_reasons)
 
     def test_freshness_alone_does_not_beat_importance(self) -> None:
         older_important = build_candidate_story(
