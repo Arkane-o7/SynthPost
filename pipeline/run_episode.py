@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import evidence
+from .news_collection.candidates import CandidateStory, write_story_candidates
 from .news_collection import rss
 from .render_profiles import apply_manifest_runtime, resolve_profile
 from .run_story import run_story
@@ -15,7 +16,7 @@ from .storage import PROJECT_ROOT, story_manifest_path, write_manifest
 def create_story_manifest(
     episode_id: str,
     story_id: str,
-    candidate: rss.CandidateStory,
+    candidate: CandidateStory,
     *,
     render_profile: str = "production",
     test_mode: bool = False,
@@ -26,13 +27,7 @@ def create_story_manifest(
         "story_id": story_id,
         "episode_id": episode_id,
         "raw": {
-            "headline_source": candidate.headline_source,
-            "summary": candidate.summary,
-            "source_url": candidate.source_url,
-            "source_name": candidate.source_name,
-            "category": candidate.category,
-            "published_at": candidate.published_at,
-            "facts": candidate.facts,
+            **candidate.to_raw(),
         },
         "script": {},
         "direction": {
@@ -58,6 +53,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Collect and render a SynthPost episode.")
     parser.add_argument("--episode-id", default=f"ep_{datetime.utcnow().date().isoformat()}")
     parser.add_argument("--stories", type=int, default=1)
+    parser.add_argument("--candidate-limit", type=int, default=12, help="Number of normalized story candidates to collect and audit.")
     parser.add_argument("--test-mode", action="store_true")
     parser.add_argument(
         "--render-profile",
@@ -74,9 +70,11 @@ def main() -> None:
     if args.test_mode:
         print("[TEST_MODE] WARNING: This run will be labeled TEST_MODE and must not be treated as production output.")
 
-    candidates = rss.collect(limit=args.stories)
+    candidate_limit = max(args.stories, args.candidate_limit)
+    candidates = rss.collect(limit=candidate_limit)
     if not candidates:
         raise SystemExit("No RSS stories were collected. Check SYNTHPOST_RSS_FEEDS.")
+    candidates_path = write_story_candidates(args.episode_id, candidates)
 
     story_paths = [
         create_story_manifest(
@@ -86,7 +84,7 @@ def main() -> None:
             render_profile=profile.name,
             test_mode=args.test_mode,
         )
-        for index, candidate in enumerate(candidates, start=1)
+        for index, candidate in enumerate(candidates[: args.stories], start=1)
     ]
     for path in story_paths:
         run_story(
@@ -105,7 +103,16 @@ def main() -> None:
     if args.test_mode:
         command.append("--test-mode")
     subprocess.run(command, cwd=PROJECT_ROOT, check=True)
-    print(json.dumps({"episode_id": args.episode_id, "stories": [str(path) for path in story_paths]}, indent=2))
+    print(
+        json.dumps(
+            {
+                "episode_id": args.episode_id,
+                "story_candidates": str(candidates_path),
+                "stories": [str(path) for path in story_paths],
+            },
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
