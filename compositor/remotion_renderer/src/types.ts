@@ -12,7 +12,18 @@ export type TimedVisual = PublicMedia & {
   sourceLabel?: string;
   audio?: boolean;
   volume?: number;
-  mediaType?: 'video' | 'photo' | 'screenshot' | 'document' | 'map' | 'chart' | 'satellite' | 'stock';
+  mediaType?:
+    | 'video'
+    | 'image'
+    | 'photo'
+    | 'screenshot'
+    | 'document'
+    | 'map'
+    | 'chart'
+    | 'satellite'
+    | 'stock'
+    | 'generated_card'
+    | string;
   contentRole?: 'evidence' | 'context' | 'explanation' | 'atmosphere';
   candidateId?: string;
   planId?: string;

@@ -3,7 +3,8 @@ import {AbsoluteFill, useCurrentFrame, useVideoConfig} from 'remotion';
 import {brand, layout} from '../styles/brand';
 import type {TimedVisual} from '../types';
 import {SourceLabel} from './SourceLabel';
-import {activeVisual, clampUnit, VisualMediaLayer} from './VisualMediaLayer';
+import {activeVisual, clampUnit} from './VisualMediaLayer';
+import {VisualSkillRenderer} from './visualSkills/VisualSkillRenderer';
 
 export const NewsVisualPanel: React.FC<{
   visuals: TimedVisual[];
@@ -36,7 +37,7 @@ export const NewsVisualPanel: React.FC<{
         backgroundColor: brand.deepBlue,
       }}
     >
-      <VisualMediaLayer visual={visual} progress={visualProgress} muted mediaStyle={mediaStyle} />
+      <VisualSkillRenderer visual={visual} progress={visualProgress} muted mediaStyle={mediaStyle} />
       <AbsoluteFill
         style={{
           background:

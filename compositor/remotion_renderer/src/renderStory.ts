@@ -86,6 +86,30 @@ const resolveInput = async (value: string): Promise<string | null> => {
   return null;
 };
 
+const resolveProjectPath = (value: string): string => {
+  return path.isAbsolute(value) ? value : path.resolve(projectRoot, value);
+};
+
+const readCompositorVisualRecords = async (manifest: StoryManifest): Promise<any[]> => {
+  const bridge = manifest.visual_compositor_bridge ?? {};
+  const configuredPath = String(bridge.compositor_visuals_path ?? manifest.compositor_visuals_path ?? '');
+  if (!configuredPath) {
+    return [];
+  }
+  const resolved = resolveProjectPath(configuredPath);
+  if (!(await exists(resolved))) {
+    return [];
+  }
+  const payload = await readJson<Record<string, any>>(resolved);
+  if (Array.isArray(payload.visuals)) {
+    return payload.visuals;
+  }
+  if (Array.isArray(payload.compositor_visuals)) {
+    return payload.compositor_visuals;
+  }
+  return [];
+};
+
 const createPlaceholderAnchor = async (destination: string): Promise<void> => {
   if ((await exists(destination)) && !force) {
     return;
@@ -302,7 +326,12 @@ const main = async () => {
   const anchor = anchorPath || !visualOnlyTemplate ? await stageMedia(anchorPath, generatedDir, undefined, true) : undefined;
 
   const visuals: TimedVisual[] = [];
-  const visualRecords = Array.isArray(manifest.compositor_visuals) && manifest.compositor_visuals.length ? manifest.compositor_visuals : manifest.visuals ?? [];
+  const compositorVisualRecords = await readCompositorVisualRecords(manifest);
+  const visualRecords = compositorVisualRecords.length
+    ? compositorVisualRecords
+    : Array.isArray(manifest.compositor_visuals) && manifest.compositor_visuals.length
+      ? manifest.compositor_visuals
+      : manifest.visuals ?? [];
   for (const visual of visualRecords) {
     const visualPath = String(visual.path ?? visual.downloaded_path ?? visual.asset_url ?? visual.remote_url ?? '');
     const staged = await stageMedia(visualPath, generatedDir, 'placeholders/news-visual-placeholder.svg', false);
