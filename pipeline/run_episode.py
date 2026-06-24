@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from . import evidence
 from .news_collection.candidates import CandidateStory, write_story_candidates
+from .news_collection.ranking import rank_candidates, selected_candidates
 from .news_collection import rss
 from .render_profiles import apply_manifest_runtime, resolve_profile
 from .run_story import run_story
@@ -51,7 +52,7 @@ def create_story_manifest(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Collect and render a SynthPost episode.")
-    parser.add_argument("--episode-id", default=f"ep_{datetime.utcnow().date().isoformat()}")
+    parser.add_argument("--episode-id", default=f"ep_{datetime.now(timezone.utc).date().isoformat()}")
     parser.add_argument("--stories", type=int, default=1)
     parser.add_argument("--candidate-limit", type=int, default=12, help="Number of normalized story candidates to collect and audit.")
     parser.add_argument("--test-mode", action="store_true")
@@ -71,10 +72,18 @@ def main() -> None:
         print("[TEST_MODE] WARNING: This run will be labeled TEST_MODE and must not be treated as production output.")
 
     candidate_limit = max(args.stories, args.candidate_limit)
-    candidates = rss.collect(limit=candidate_limit)
-    if not candidates:
+    collected_candidates = rss.collect(limit=candidate_limit)
+    if not collected_candidates:
         raise SystemExit("No RSS stories were collected. Check SYNTHPOST_RSS_FEEDS.")
-    candidates_path = write_story_candidates(args.episode_id, candidates)
+    ranked_candidates = rank_candidates(collected_candidates, select_count=args.stories)
+    chosen_candidates = selected_candidates(ranked_candidates)
+    if len(chosen_candidates) < args.stories:
+        rejected_count = sum(1 for candidate in ranked_candidates if candidate.selection_status == "rejected")
+        raise SystemExit(
+            f"Only {len(chosen_candidates)} acceptable stories were found after editorial ranking "
+            f"({rejected_count} rejected). Increase --candidate-limit or adjust sources."
+        )
+    candidates_path = write_story_candidates(args.episode_id, ranked_candidates)
 
     story_paths = [
         create_story_manifest(
@@ -84,7 +93,7 @@ def main() -> None:
             render_profile=profile.name,
             test_mode=args.test_mode,
         )
-        for index, candidate in enumerate(candidates[: args.stories], start=1)
+        for index, candidate in enumerate(chosen_candidates[: args.stories], start=1)
     ]
     for path in story_paths:
         run_story(
