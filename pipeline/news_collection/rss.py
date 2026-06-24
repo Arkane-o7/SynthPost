@@ -4,18 +4,8 @@ import os
 import re
 import urllib.request
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
-class CandidateStory:
-    headline_source: str
-    summary: str
-    source_url: str
-    source_name: str
-    category: str
-    published_at: str
-    facts: list[str]
+from .candidates import CandidateStory, build_candidate_story, compact_text, normalize_category
 
 
 def strip_html(value: str) -> str:
@@ -30,9 +20,16 @@ def feed_urls() -> list[str]:
     return [item.strip() for item in raw.split(",") if item.strip()]
 
 
-def fetch_feed(url: str) -> list[CandidateStory]:
-    with urllib.request.urlopen(url, timeout=20) as response:
-        root = ET.fromstring(response.read())
+def _first_text(item: ET.Element, names: list[str]) -> str:
+    for name in names:
+        value = item.findtext(name)
+        if value:
+            return value
+    return ""
+
+
+def parse_feed(data: bytes | str, *, url: str) -> list[CandidateStory]:
+    root = ET.fromstring(data)
     channel = root.find("channel")
     source_name = channel.findtext("title", default=url) if channel is not None else url
     items = root.findall(".//item")
@@ -40,22 +37,28 @@ def fetch_feed(url: str) -> list[CandidateStory]:
     for item in items:
         title = strip_html(item.findtext("title", default=""))
         summary = strip_html(item.findtext("description", default=""))
-        link = item.findtext("link", default=url)
-        published = item.findtext("pubDate", default="")
+        link = compact_text(item.findtext("link", default=url))
+        published = _first_text(item, ["pubDate", "published", "updated"])
+        item_category = strip_html(item.findtext("category", default=""))
         if not title:
             continue
+        category = normalize_category(item_category, source_url=link or url, source_name=source_name)
         candidates.append(
-            CandidateStory(
-                headline_source=title,
+            build_candidate_story(
+                headline=title,
                 summary=summary,
-                source_url=link,
+                source_url=link or url,
                 source_name=source_name,
-                category="general",
+                category=category,
                 published_at=published,
-                facts=[summary] if summary else [title],
             )
         )
     return candidates
+
+
+def fetch_feed(url: str) -> list[CandidateStory]:
+    with urllib.request.urlopen(url, timeout=20) as response:
+        return parse_feed(response.read(), url=url)
 
 
 def collect(limit: int = 3) -> list[CandidateStory]:
@@ -63,7 +66,7 @@ def collect(limit: int = 3) -> list[CandidateStory]:
     seen: set[str] = set()
     for url in feed_urls():
         for story in fetch_feed(url):
-            key = story.headline_source.lower()
+            key = story.normalized_headline
             if key in seen:
                 continue
             seen.add(key)
