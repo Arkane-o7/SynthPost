@@ -109,6 +109,20 @@ class SelectionStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class VisualSkillType(str, Enum):
+    MAP = "map"
+    CHART = "chart"
+    TIMELINE = "timeline"
+    DOCUMENT_CALLOUT = "document_callout"
+    QUOTE_CARD = "quote_card"
+    DATA_CALLOUT = "data_callout"
+    CONTEXT_CARD = "context_card"
+    ENTITY_CARD = "entity_card"
+    SOURCE_CARD = "source_card"
+    BROLL_CLIP = "broll_clip"
+    STILL_IMAGE = "still_image"
+
+
 @dataclass(slots=True)
 class StorySegment:
     segment_id: str
@@ -327,6 +341,57 @@ class VisualPlanEntry:
 
 
 @dataclass(slots=True)
+class VisualSkillSpec:
+    skill_id: str
+    story_id: str
+    episode_id: str
+    section_id: str
+    selected_visual_candidate_id: str
+    skill_type: str
+    skill_reason: str
+    spec: dict[str, Any]
+    evidence_claim_ids: list[str] = field(default_factory=list)
+    source_notes: list[str] = field(default_factory=list)
+    source_url: str | None = None
+    source_domain: str | None = None
+    rights_category: str | None = None
+    attribution_text: str | None = None
+    needs_manual_review: bool = False
+    fallback_reason: str | None = None
+    warnings: list[str] = field(default_factory=list)
+
+    def to_record(self) -> dict[str, Any]:
+        spec_key = f"{self.skill_type}_spec"
+        record: dict[str, Any] = {
+            "skill_id": self.skill_id,
+            "story_id": self.story_id,
+            "episode_id": self.episode_id,
+            "script_section_id": self.section_id,
+            "selected_visual_candidate_id": self.selected_visual_candidate_id,
+            "skill_type": self.skill_type,
+            "skill_reason": self.skill_reason,
+            "spec": self.spec,
+            spec_key: self.spec,
+            "evidence_claim_ids": self.evidence_claim_ids,
+            "source_notes": self.source_notes,
+            "source_url": self.source_url,
+            "source_domain": self.source_domain,
+            "rights_category": self.rights_category,
+            "attribution_text": self.attribution_text,
+            "needs_manual_review": self.needs_manual_review,
+            "manual_review_flag": self.needs_manual_review,
+            "fallback_reason": self.fallback_reason,
+            "warnings": self.warnings,
+            "render_ready": True,
+            "groundedness": {
+                "status": "grounded_with_available_evidence" if not self.warnings else "grounded_with_warnings",
+                "evidence_claim_ids": self.evidence_claim_ids,
+            },
+        }
+        return {key: value for key, value in record.items() if value not in (None, [], {})}
+
+
+@dataclass(slots=True)
 class VisualPlan:
     story_id: str
     episode_id: str
@@ -339,6 +404,8 @@ class VisualPlan:
     warnings: list[str] = field(default_factory=list)
     plan_entries: list[VisualPlanEntry] = field(default_factory=list)
     planning_audit: dict[str, Any] = field(default_factory=dict)
+    skill_specs: list[VisualSkillSpec] = field(default_factory=list)
+    skill_audit: dict[str, Any] = field(default_factory=dict)
     audit_paths: dict[str, str] = field(default_factory=dict)
 
     def selected_records(self) -> list[dict[str, Any]]:
@@ -347,6 +414,9 @@ class VisualPlan:
     def plan_records(self) -> list[dict[str, Any]]:
         return [entry.to_record() for entry in self.plan_entries]
 
+    def skill_records(self) -> list[dict[str, Any]]:
+        return [spec.to_record() for spec in self.skill_specs]
+
     def summary(self) -> dict[str, Any]:
         summary: dict[str, Any] = {
             "duration_seconds": self.duration_seconds,
@@ -354,6 +424,7 @@ class VisualPlan:
             "section_count": len(self.plan_entries),
             "candidate_count": len(self.candidates),
             "selected_count": len(self.selected_assets),
+            "skill_count": len(self.skill_specs),
             "segments": [
                 {
                     "segment_id": segment.segment_id,
@@ -376,6 +447,9 @@ class VisualPlan:
             summary["fallback_count"] = self.planning_audit.get("fallback_count", 0)
             summary["manual_review_warning_count"] = len(self.planning_audit.get("manual_review_warnings", []))
             summary["coverage_warnings"] = self.planning_audit.get("missing_visual_coverage_warnings", [])
+        if self.skill_audit:
+            summary["skill_types"] = self.skill_audit.get("skill_types", {})
+            summary["skill_warning_count"] = len(self.skill_audit.get("warnings", []))
         return summary
 
 

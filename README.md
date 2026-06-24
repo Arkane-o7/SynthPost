@@ -92,12 +92,19 @@ RSS summaries or loose facts.
 episodes/<episode_id>/stories/<story_id>/visuals/visuals_audit.json
 episodes/<episode_id>/stories/<story_id>/visuals/visual_candidates.json
 episodes/<episode_id>/stories/<story_id>/visuals/visual_plan.json
+episodes/<episode_id>/stories/<story_id>/visuals/visual_skills.json
 ```
 
 `visual_plan.json` is the section-level rundown. It maps each long-form script
 section to a selected visual candidate, visual role, timing, rights category,
 attribution, fallback status, and reuse/manual-review audit notes. Older stories
 without `script.sections[]` still fall back to the legacy beat segmentation.
+
+`visual_skills.json` extends that rundown with render-ready specs for maps,
+charts, timelines, document callouts, quote cards, data callouts, context cards,
+entity cards, source cards, B-roll clips, and still images. Specs are
+deterministic and grounded in raw facts, raw claims/evidence, source metadata,
+section claim IDs, and selected visual candidate metadata.
 
 Provider priority is newsroom-style and rights-aware:
 

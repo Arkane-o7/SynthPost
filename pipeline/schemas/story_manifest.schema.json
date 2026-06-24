@@ -358,7 +358,7 @@
     },
     "visual_plan": {
       "type": "object",
-      "description": "Planner audit summary: segments, providers, warnings, and counts.",
+      "description": "Planner audit summary: segments, providers, warnings, counts, and optional visual skill spec paths/counts.",
       "additionalProperties": true
     },
     "editorial_review": {
