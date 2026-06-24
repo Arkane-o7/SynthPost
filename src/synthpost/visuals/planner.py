@@ -46,6 +46,7 @@ from .query_builder import (
     visual_handoff_for_manifest,
 )
 from .ranker import rank_assets_for_segment
+from .skills import build_visual_skill_specs
 from .validator import renderable_and_safe, validate_asset
 
 
@@ -156,6 +157,11 @@ def build_visual_plan(
         queries_by_segment={query.segment_id: query for query in queries},
         project_root=project_root,
     )
+    skill_specs, skill_audit = build_visual_skill_specs(
+        manifest,
+        entries=plan_entries,
+        selected_assets=selected,
+    )
 
     _mark_selected_counts(reports, selected)
     plan = VisualPlan(
@@ -170,6 +176,8 @@ def build_visual_plan(
         warnings=warnings,
         plan_entries=plan_entries,
         planning_audit=planning_audit,
+        skill_specs=skill_specs,
+        skill_audit=skill_audit,
     )
     _write_audit_file(plan, story_path=story_path, queries_by_segment={query.segment_id: query for query in queries})
     return plan
@@ -698,12 +706,14 @@ def _write_audit_file(plan: VisualPlan, *, story_path: Path, queries_by_segment:
     audit_path = story_path.parent / "visuals" / "visuals_audit.json"
     candidate_audit_path = story_path.parent / "visuals" / "visual_candidates.json"
     visual_plan_path = story_path.parent / "visuals" / "visual_plan.json"
+    visual_skills_path = story_path.parent / "visuals" / "visual_skills.json"
     project_root = project_root_from_story(story_path)
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     plan.audit_paths = {
         "visuals_audit": project_relative(audit_path, project_root),
         "visual_candidates": project_relative(candidate_audit_path, project_root),
         "visual_plan": project_relative(visual_plan_path, project_root),
+        "visual_skills": project_relative(visual_skills_path, project_root),
     }
     candidate_records = _candidate_audit_records(
         plan,
@@ -715,11 +725,14 @@ def _write_audit_file(plan: VisualPlan, *, story_path: Path, queries_by_segment:
         "episode_id": plan.episode_id,
         "summary": plan.summary(),
         "selected_assets": plan.selected_records(),
-        "visual_plan": plan.plan_records(),
+        "visual_plan": _plan_records_with_skills(plan),
+        "visual_skills": plan.skill_records(),
         "planning_audit": plan.planning_audit,
+        "skill_audit": plan.skill_audit,
         "candidates": candidate_records,
         "candidate_audit_path": project_relative(candidate_audit_path, project_root),
         "visual_plan_path": project_relative(visual_plan_path, project_root),
+        "visual_skills_path": project_relative(visual_skills_path, project_root),
     }
     candidate_payload = {
         "story_id": plan.story_id,
@@ -730,6 +743,7 @@ def _write_audit_file(plan: VisualPlan, *, story_path: Path, queries_by_segment:
         "provider_reports": [report.to_record() for report in plan.provider_reports],
         "chosen_visuals": plan.selected_records(),
         "visual_plan_path": project_relative(visual_plan_path, project_root),
+        "visual_skills_path": project_relative(visual_skills_path, project_root),
         "candidates": candidate_records,
         "manual_review_flags": [
             record
@@ -742,14 +756,41 @@ def _write_audit_file(plan: VisualPlan, *, story_path: Path, queries_by_segment:
         "episode_id": plan.episode_id,
         "duration_seconds": plan.duration_seconds,
         "section_count": len(plan.plan_entries),
-        "sections": plan.plan_records(),
+        "sections": _plan_records_with_skills(plan),
+        "skills": plan.skill_records(),
         "chosen_visuals": plan.selected_records(),
         "audit": plan.planning_audit,
+        "skill_audit": plan.skill_audit,
         "provider_reports": [report.to_record() for report in plan.provider_reports],
         "warnings": plan.warnings,
         "visual_candidates_path": project_relative(candidate_audit_path, project_root),
         "visuals_audit_path": project_relative(audit_path, project_root),
+        "visual_skills_path": project_relative(visual_skills_path, project_root),
+    }
+    visual_skills_payload = {
+        "story_id": plan.story_id,
+        "episode_id": plan.episode_id,
+        "skill_count": len(plan.skill_specs),
+        "skills": plan.skill_records(),
+        "audit": plan.skill_audit,
+        "visual_plan_path": project_relative(visual_plan_path, project_root),
+        "visual_candidates_path": project_relative(candidate_audit_path, project_root),
     }
     audit_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     candidate_audit_path.write_text(json.dumps(candidate_payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     visual_plan_path.write_text(json.dumps(visual_plan_payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    visual_skills_path.write_text(json.dumps(visual_skills_payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+
+
+def _plan_records_with_skills(plan: VisualPlan) -> list[dict[str, Any]]:
+    skills_by_section = {spec.section_id: spec.to_record() for spec in plan.skill_specs}
+    records: list[dict[str, Any]] = []
+    for record in plan.plan_records():
+        skill = skills_by_section.get(str(record.get("script_section_id") or ""))
+        if skill:
+            record = dict(record)
+            record["skill_type"] = skill["skill_type"]
+            record["skill_spec"] = skill["spec"]
+            record["visual_skill"] = skill
+        records.append(record)
+    return records
