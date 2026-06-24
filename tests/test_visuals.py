@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -10,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from synthpost.visuals.providers.manifest_media import ManifestMediaProvider
-from synthpost.visuals.models import AssetType, StorySegment, VisualAsset, VisualQuery
+from synthpost.visuals.models import AssetType, ProviderReport, StorySegment, VisualAsset, VisualProvider, VisualQuery
 from synthpost.visuals.policy import asset_is_selectable, normalize_asset_metadata
 from synthpost.visuals.providers.source_page import SourcePageProvider
 from synthpost.visuals.providers.free_sources import (
@@ -22,6 +23,24 @@ from synthpost.visuals.providers.screenshot_provider import ScreenshotProvider
 from synthpost.visuals.query_builder import build_story_segments, build_visual_queries
 from synthpost.visuals.planner import build_visual_plan
 from synthpost.visuals.ranker import rank_assets_for_segment
+from synthpost.visuals.validator import validate_asset
+from pipeline.visuals.default import _has_visual_metadata
+
+
+class FixtureVisualProvider(VisualProvider):
+    def __init__(self, name: str, assets: list[VisualAsset]) -> None:
+        self.name = name
+        self.assets = assets
+
+    def search(
+        self,
+        *,
+        manifest: dict,
+        story_json_path: Path,
+        segments: list[StorySegment],
+        queries: list[VisualQuery],
+    ) -> tuple[list[VisualAsset], ProviderReport]:
+        return self.assets, ProviderReport(provider=self.name, query_count=len(queries), candidate_count=len(self.assets))
 
 
 class VisualPlanningTests(unittest.TestCase):
@@ -241,6 +260,195 @@ class VisualPlanningTests(unittest.TestCase):
         self.assertIn("Example Author", commons.attribution_text or "")
         self.assertEqual(commons.motion["preset"], "push_in")
 
+    def test_visual_candidate_record_contains_pr8_contract_fields(self) -> None:
+        asset = normalize_asset_metadata(
+            VisualAsset(
+                "dvids_briefing",
+                AssetType.VIDEO,
+                "Nvidia AI chip briefing footage",
+                "dvids",
+                path="media/briefing.mp4",
+                source_url="https://www.dvidshub.net/video/123/ai-chip-briefing",
+                source_name="DVIDS",
+                license="public domain",
+                usage_note="public domain government work",
+                attribution="U.S. Air Force",
+                safe_to_use=True,
+                entities=["Nvidia", "AI chips"],
+            )
+        )
+        segment = StorySegment("seg_01", "AI chip controls", "Nvidia AI chip export controls", 0, 8, ["Nvidia", "AI chips"])
+        query = VisualQuery("seg_01", "Nvidia AI chips", ["Nvidia", "AI chips"], [AssetType.VIDEO], 0, 8)
+
+        ranked = rank_assets_for_segment([asset], segment, query)[0]
+        record = ranked.to_record()
+
+        self.assertEqual(record["id"], "dvids_briefing")
+        self.assertEqual(record["provider_type"], "official")
+        self.assertEqual(record["source_domain"], "dvidshub.net")
+        self.assertEqual(record["asset_url"], "media/briefing.mp4")
+        self.assertEqual(record["rights_category"], "public_domain")
+        self.assertFalse(record["needs_manual_review"])
+        self.assertIn("nvidia", record["matched_story_entities"])
+        self.assertIn("score=", record["relevance_reason"])
+
+    def test_unknown_rights_are_flagged_and_not_selectable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            media = root / "unknown.jpg"
+            media.write_bytes(b"fake")
+            asset = normalize_asset_metadata(
+                VisualAsset(
+                    "unknown",
+                    AssetType.IMAGE,
+                    "Unverified event image",
+                    "unknown_web_source",
+                    path=str(media),
+                    source_name="Unknown Web Source",
+                    safe_to_use=True,
+                )
+            )
+            warnings = validate_asset(asset, project_root=root)
+
+        self.assertFalse(asset.safe_to_use)
+        self.assertEqual(asset.rights_category, "unknown_or_rejected")
+        self.assertTrue(asset.needs_manual_review)
+        self.assertFalse(asset_is_selectable(asset))
+        self.assertTrue(any("unknown or rejected rights" in warning for warning in warnings))
+
+    def test_global_ranker_rejects_logos_and_generic_space_for_non_space_story(self) -> None:
+        segment = StorySegment("seg_01", "Flood response", "official flood response", 0, 10, ["flood", "response"])
+        query = VisualQuery("seg_01", "flood response", ["flood", "response"], [AssetType.IMAGE], 0, 10)
+        logo = normalize_asset_metadata(
+            VisualAsset(
+                "logo",
+                AssetType.IMAGE,
+                "NASA logo",
+                "nasa_media",
+                path="media/nasa_logo.png",
+                source_name="NASA",
+                license="public domain",
+                usage_note="public domain government work",
+                safe_to_use=True,
+            )
+        )
+        stars = normalize_asset_metadata(
+            VisualAsset(
+                "stars",
+                AssetType.IMAGE,
+                "Generic stars image",
+                "nasa_media",
+                path="media/stars.jpg",
+                source_name="NASA",
+                license="public domain",
+                usage_note="public domain government work",
+                safe_to_use=True,
+            )
+        )
+
+        ranked = {asset.asset_id: asset for asset in rank_assets_for_segment([logo, stars], segment, query)}
+
+        self.assertEqual(ranked["logo"].selection_status, "rejected")
+        self.assertIn("publisher_logo_rejected", ranked["logo"].rejection_reasons)
+        self.assertEqual(ranked["stars"].selection_status, "rejected")
+        self.assertIn("generic_space_media_rejected_for_non_space_story", ranked["stars"].rejection_reasons)
+
+    def test_generic_space_media_is_allowed_for_relevant_space_story(self) -> None:
+        segment = StorySegment(
+            "seg_01",
+            "Space telescope maps galaxy stars",
+            "A space telescope released new galaxy and stars imagery.",
+            0,
+            10,
+            ["space", "telescope", "galaxy", "stars"],
+        )
+        query = VisualQuery(
+            "seg_01",
+            "space telescope galaxy stars",
+            ["space", "telescope", "galaxy", "stars"],
+            [AssetType.IMAGE],
+            0,
+            10,
+        )
+        stars = normalize_asset_metadata(
+            VisualAsset(
+                "stars",
+                AssetType.IMAGE,
+                "Galaxy stars from space telescope",
+                "nasa_media",
+                path="media/stars.jpg",
+                source_name="NASA",
+                license="public domain",
+                usage_note="public domain government work",
+                safe_to_use=True,
+            )
+        )
+
+        ranked = rank_assets_for_segment([stars], segment, query)[0]
+
+        self.assertNotEqual(ranked.selection_status, "rejected")
+        self.assertNotIn("generic_space_media_rejected_for_non_space_story", ranked.rejection_reasons)
+        self.assertGreater(ranked.relevance_score, 0)
+
+    def test_unrelated_official_visual_is_rejected(self) -> None:
+        segment = StorySegment("seg_01", "Flood response", "official flood response", 0, 10, ["flood", "response"])
+        query = VisualQuery("seg_01", "flood response", ["flood", "response"], [AssetType.IMAGE], 0, 10)
+        unrelated = normalize_asset_metadata(
+            VisualAsset(
+                "unrelated",
+                AssetType.IMAGE,
+                "Stock exchange factory update",
+                "dvids",
+                path="media/stock_exchange_factory.jpg",
+                source_name="DVIDS",
+                license="public domain",
+                usage_note="public domain government work",
+                safe_to_use=True,
+            )
+        )
+
+        ranked = rank_assets_for_segment([unrelated], segment, query)[0]
+
+        self.assertEqual(ranked.selection_status, "rejected")
+        self.assertIn("unrelated_to_current_story", ranked.rejection_reasons)
+        self.assertEqual(ranked.relevance_score, 0)
+
+    def test_entity_matching_visual_candidates_outrank_generic_visuals(self) -> None:
+        segment = StorySegment("seg_01", "Nvidia export controls", "Nvidia AI chip controls", 0, 10, ["Nvidia", "AI chips"])
+        query = VisualQuery("seg_01", "Nvidia AI chips", ["Nvidia", "AI chips"], [AssetType.VIDEO, AssetType.IMAGE], 0, 10)
+        matched = normalize_asset_metadata(
+            VisualAsset(
+                "matched",
+                AssetType.IMAGE,
+                "Nvidia AI chip data center",
+                "manifest_media",
+                path="media/nvidia.jpg",
+                source_name="Official media",
+                license="user provided",
+                usage_note="user provided",
+                safe_to_use=True,
+                entities=["Nvidia", "AI chips"],
+            )
+        )
+        generic = normalize_asset_metadata(
+            VisualAsset(
+                "generic",
+                AssetType.IMAGE,
+                "Generic office building",
+                "pexels",
+                remote_url="https://example.com/office.jpg",
+                source_name="Pexels",
+                license="Pexels License",
+                usage_note="stock fallback",
+                safe_to_use=True,
+            )
+        )
+
+        ranked = rank_assets_for_segment([generic, matched], segment, query)
+
+        self.assertEqual(ranked[0].asset_id, "matched")
+        self.assertGreater(ranked[0].relevance_score, ranked[1].relevance_score)
+
     def test_generated_context_graphics_fill_story_specific_visuals_by_default(self) -> None:
         manifest = {
             "story_id": "story_001",
@@ -290,6 +498,134 @@ class VisualPlanningTests(unittest.TestCase):
         self.assertTrue(any(visual["asset_type"] == "document" for visual in plan.manifest_visuals))
         self.assertTrue(all(visual["safe_to_use"] for visual in plan.manifest_visuals))
         self.assertTrue(all(visual["rights_tier"] == "green" for visual in plan.manifest_visuals))
+        self.assertTrue(all(visual["rights_category"] == "first_party_generated" for visual in plan.manifest_visuals))
+
+    def test_visual_candidates_audit_file_is_written_with_statuses_and_manual_review_flags(self) -> None:
+        manifest = {
+            "story_id": "story_001",
+            "episode_id": "ep_test",
+            "raw": {
+                "headline_source": "Nvidia export controls reshape AI chip supply",
+                "summary": "Nvidia AI chip controls could affect data center supply chains.",
+                "source_url": "https://example.gov/news",
+                "source_name": "Example Agency",
+                "category": "ai",
+                "facts": ["Nvidia AI chip controls could affect data center supply chains."],
+                "handoff": {
+                    "visuals": {
+                        "entities": ["Nvidia", "AI chips"],
+                        "visual_opportunities": ["Official Nvidia briefing footage"],
+                        "source_metadata": {"source_domain": "example.gov"},
+                    }
+                },
+            },
+            "script": {
+                "headline": "AI CHIP CONTROLS",
+                "category": "AI",
+                "text": "Nvidia AI chip controls could affect data center supply chains.",
+            },
+            "direction": {"estimated_duration_seconds": 16},
+            "composition": {},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            "os.environ",
+            {"SYNTHPOST_ENABLE_CONTEXT_GRAPHICS": "0", "SYNTHPOST_VISUAL_MIN_SEGMENTS": "1"},
+        ):
+            root = Path(temp_dir)
+            (root / "pipeline").mkdir()
+            (root / "compositor").mkdir()
+            media = root / "nvidia_briefing.jpg"
+            logo = root / "nasa_logo.png"
+            unknown = root / "unknown.jpg"
+            for path in (media, logo, unknown):
+                path.write_bytes(b"fake")
+            story_path = root / "episodes" / "ep_test" / "stories" / "story_001" / "story.json"
+            story_path.parent.mkdir(parents=True)
+            story_path.write_text("{}", encoding="utf-8")
+            provider = FixtureVisualProvider(
+                "dvids",
+                [
+                    VisualAsset(
+                        "official",
+                        AssetType.IMAGE,
+                        "Nvidia AI chip briefing",
+                        "dvids",
+                        path=str(media),
+                        source_url="https://www.dvidshub.net/image/1",
+                        source_name="DVIDS",
+                        license="public domain",
+                        usage_note="public domain government work",
+                        safe_to_use=True,
+                        entities=["Nvidia", "AI chips"],
+                    ),
+                    VisualAsset(
+                        "logo",
+                        AssetType.IMAGE,
+                        "NASA logo",
+                        "dvids",
+                        path=str(logo),
+                        source_url="https://www.dvidshub.net/image/logo",
+                        source_name="DVIDS",
+                        license="public domain",
+                        usage_note="public domain government work",
+                        safe_to_use=True,
+                    ),
+                    VisualAsset(
+                        "unknown",
+                        AssetType.IMAGE,
+                        "Unverified Nvidia image",
+                        "unknown_web_source",
+                        path=str(unknown),
+                        source_name="Unknown",
+                        safe_to_use=True,
+                    ),
+                ],
+            )
+
+            plan = build_visual_plan(manifest, story_path, providers=[provider])
+            audit_path = story_path.parent / "visuals" / "visual_candidates.json"
+            audit = json.loads(audit_path.read_text(encoding="utf-8"))
+
+        statuses = {record["id"]: record["selection_status"] for record in audit["candidates"]}
+        rejected = {record["id"]: record.get("rejection_reasons", []) for record in audit["candidates"]}
+        self.assertEqual(plan.selected_assets[0].asset_id, "official")
+        self.assertEqual(statuses["official"], "selected")
+        self.assertEqual(statuses["logo"], "rejected")
+        self.assertIn("publisher_logo_rejected", rejected["logo"])
+        self.assertEqual(statuses["unknown"], "rejected")
+        self.assertTrue(audit["manual_review_flags"])
+        self.assertEqual(audit["chosen_visuals"][0]["id"], "official")
+
+    def test_visual_reuse_requires_pr8_candidate_metadata(self) -> None:
+        old_record = {
+            "asset_type": "image",
+            "source_name": "Example Agency",
+            "license": "public domain",
+            "usage_note": "Official media",
+            "downloaded_path": "media/example.jpg",
+            "relevance_score": 75,
+            "safe_to_use": True,
+            "rights_tier": "green",
+            "rights_confidence": "verified",
+            "usage_basis": "public_domain",
+            "source_authority": "official",
+            "content_role": "evidence",
+            "media_type": "photo",
+            "risk_level": "low",
+            "manual_review_status": "not_required",
+        }
+        enriched_record = {
+            **old_record,
+            "provider_type": "official",
+            "source_domain": "example.gov",
+            "asset_url": "media/example.jpg",
+            "rights_category": "public_domain",
+            "needs_manual_review": False,
+            "selection_status": "selected",
+        }
+
+        self.assertFalse(_has_visual_metadata([old_record]))
+        self.assertTrue(_has_visual_metadata([enriched_record]))
 
     def test_source_page_provider_rejects_logos_and_generic_space_media(self) -> None:
         manifest = {

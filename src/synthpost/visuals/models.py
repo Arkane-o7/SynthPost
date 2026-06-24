@@ -37,6 +37,7 @@ class UsageBasis(str, Enum):
     CC_BY_SA = "cc_by_sa"
     OFFICIAL_PRESS = "official_press"
     USER_PROVIDED = "user_provided"
+    FIRST_PARTY_GENERATED = "first_party_generated"
     EDITORIAL_REVIEW = "editorial_review"
     STOCK_FALLBACK = "stock_fallback"
 
@@ -79,6 +80,32 @@ class ManualReviewStatus(str, Enum):
     NOT_REQUIRED = "not_required"
     REQUIRED = "required"
     APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ProviderType(str, Enum):
+    OFFICIAL = "official"
+    OPEN_ARCHIVE = "open_archive"
+    LOCAL_LIBRARY = "local_library"
+    GENERATED = "generated"
+    STOCK = "stock"
+    SOCIAL = "social"
+    WEB_LEAD = "web_lead"
+    UNKNOWN = "unknown"
+
+
+class RightsCategory(str, Enum):
+    OFFICIAL_PUBLIC = "official_public"
+    PUBLIC_DOMAIN = "public_domain"
+    PERMISSIVE_LICENSE = "permissive_license"
+    FIRST_PARTY_GENERATED = "first_party_generated"
+    FAIR_USE_REVIEW_REQUIRED = "fair_use_review_required"
+    UNKNOWN_OR_REJECTED = "unknown_or_rejected"
+
+
+class SelectionStatus(str, Enum):
+    CANDIDATE = "candidate"
+    SELECTED = "selected"
     REJECTED = "rejected"
 
 
@@ -136,6 +163,20 @@ class VisualAsset:
     risk_level: str = RiskLevel.HIGH.value
     manual_review_status: str = ManualReviewStatus.REQUIRED.value
     motion: dict[str, Any] = field(default_factory=dict)
+    provider_type: str = ProviderType.UNKNOWN.value
+    source_domain: str | None = None
+    asset_url: str | None = None
+    caption: str | None = None
+    alt_text: str | None = None
+    entities: list[str] = field(default_factory=list)
+    matched_story_entities: list[str] = field(default_factory=list)
+    relevance_reason: str | None = None
+    rights_category: str = RightsCategory.UNKNOWN_OR_REJECTED.value
+    needs_manual_review: bool = True
+    selection_status: str = SelectionStatus.CANDIDATE.value
+    rejection_reasons: list[str] = field(default_factory=list)
+    created_at: str | None = None
+    fetched_at: str | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def identity_key(self) -> str:
@@ -149,13 +190,17 @@ class VisualAsset:
 
     def to_record(self) -> dict[str, Any]:
         record: dict[str, Any] = {
+            "id": self.asset_id,
             "asset_id": self.asset_id,
             "asset_type": self.asset_type.value,
             "title": self.title,
             "provider": self.provider,
+            "provider_type": self.provider_type,
             "path": self.path,
             "remote_url": self.remote_url,
+            "asset_url": self.asset_url,
             "source_url": self.source_url,
+            "source_domain": self.source_domain,
             "source_name": self.source_name,
             "license": self.license,
             "usage_note": self.usage_note,
@@ -181,6 +226,17 @@ class VisualAsset:
             "risk_level": self.risk_level,
             "manual_review_status": self.manual_review_status,
             "motion": self.motion,
+            "caption": self.caption,
+            "alt_text": self.alt_text,
+            "entities": self.entities,
+            "matched_story_entities": self.matched_story_entities,
+            "relevance_reason": self.relevance_reason,
+            "rights_category": self.rights_category,
+            "needs_manual_review": self.needs_manual_review,
+            "selection_status": self.selection_status,
+            "rejection_reasons": self.rejection_reasons,
+            "created_at": self.created_at,
+            "fetched_at": self.fetched_at,
         }
         record.update({key: value for key, value in self.extra.items() if value not in (None, [], {})})
         return {key: value for key, value in record.items() if value not in (None, [], {})}
@@ -189,6 +245,7 @@ class VisualAsset:
 @dataclass(slots=True)
 class ProviderReport:
     provider: str
+    provider_type: str = ProviderType.UNKNOWN.value
     query_count: int = 0
     candidate_count: int = 0
     selected_count: int = 0
@@ -198,6 +255,7 @@ class ProviderReport:
     def to_record(self) -> dict[str, Any]:
         record: dict[str, Any] = {
             "provider": self.provider,
+            "provider_type": self.provider_type,
             "query_count": self.query_count,
             "candidate_count": self.candidate_count,
             "selected_count": self.selected_count,

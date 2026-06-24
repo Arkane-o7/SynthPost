@@ -6,15 +6,16 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from .downloader import download_asset
+from .downloader import download_asset, project_relative
 from .manifest import visual_to_manifest
-from .models import AssetType, ProviderReport, VisualAsset, VisualPlan, VisualProvider
+from .models import AssetType, ProviderReport, SelectionStatus, VisualAsset, VisualPlan, VisualProvider
 from .policy import (
     OFFICIAL_PROVIDERS,
     OPEN_ARCHIVE_PROVIDERS,
     STOCK_PROVIDERS,
     asset_is_selectable,
     normalize_asset_metadata,
+    provider_type_for_provider,
 )
 from .providers import (
     LocalLibraryProvider,
@@ -86,6 +87,9 @@ def build_visual_plan(
         except Exception as exc:  # noqa: BLE001 - visual acquisition should degrade cleanly.
             provider_assets = []
             report = ProviderReport(provider=provider.name, query_count=len(queries), warnings=[str(exc)])
+        report.provider_type = report.provider_type or provider_type_for_provider(provider.name)
+        if report.provider_type == "unknown":
+            report.provider_type = provider_type_for_provider(report.provider)
         for asset in provider_assets:
             asset.story_id = asset.story_id or story_id
             normalize_asset_metadata(asset)
@@ -112,6 +116,7 @@ def build_visual_plan(
             selected = _fill_with_generated(selected, generated, segments)
         else:
             selected = _reuse_real_visuals(selected, segments)
+    _mark_selection_statuses(selected)
 
     manifest_visuals = [
         visual_to_manifest(asset, start=segment.start, end=segment.end, fit="cover")
@@ -130,7 +135,7 @@ def build_visual_plan(
         provider_reports=reports,
         warnings=warnings,
     )
-    _write_audit_file(plan, story_path=story_path)
+    _write_audit_file(plan, story_path=story_path, queries_by_segment={query.segment_id: query for query in queries})
     return plan
 
 
@@ -226,6 +231,8 @@ def _select_assets(
                 continue
             if not asset_is_selectable(asset):
                 continue
+            if asset.rejection_reasons:
+                continue
             if asset.path and not renderable_and_safe(asset, project_root=project_root):
                 continue
             chosen = asset
@@ -307,14 +314,120 @@ def _mark_selected_counts(reports: list[ProviderReport], selected: list[VisualAs
             report.selected_count = counts.get(report.provider, 0)
 
 
-def _write_audit_file(plan: VisualPlan, *, story_path: Path) -> None:
+def _mark_selection_statuses(selected: list[VisualAsset]) -> None:
+    for asset in selected:
+        asset.selection_status = SelectionStatus.SELECTED.value
+        asset.rejection_reasons = []
+
+
+def _candidate_audit_records(
+    plan: VisualPlan,
+    *,
+    queries_by_segment: dict[str, Any],
+    project_root: Path,
+) -> list[dict[str, Any]]:
+    selected_keys = {asset.identity_key() for asset in plan.selected_assets}
+    records: list[dict[str, Any]] = []
+    for asset in plan.candidates:
+        best = _best_ranked_candidate(asset, plan=plan, queries_by_segment=queries_by_segment)
+        reasons = list(best.rejection_reasons)
+        if not asset_is_selectable(best):
+            reasons.extend(_rights_rejection_reasons(best))
+        if best.path and not renderable_and_safe(best, project_root=project_root):
+            reasons.append("not_renderable")
+        if best.identity_key() in selected_keys:
+            best.selection_status = SelectionStatus.SELECTED.value
+            best.rejection_reasons = []
+        elif reasons:
+            best.selection_status = SelectionStatus.REJECTED.value
+            best.rejection_reasons = _dedupe_reasons(reasons)
+        else:
+            best.selection_status = SelectionStatus.CANDIDATE.value
+            best.rejection_reasons = []
+        records.append(best.to_record())
+    return sorted(
+        records,
+        key=lambda item: (
+            0 if item.get("selection_status") == SelectionStatus.SELECTED.value else 1,
+            -float(item.get("relevance_score") or 0),
+            str(item.get("id") or ""),
+        ),
+    )
+
+
+def _best_ranked_candidate(
+    asset: VisualAsset,
+    *,
+    plan: VisualPlan,
+    queries_by_segment: dict[str, Any],
+) -> VisualAsset:
+    ranked_versions: list[VisualAsset] = []
+    for segment in plan.segments:
+        query = queries_by_segment.get(segment.segment_id)
+        if not query:
+            continue
+        ranked_versions.extend(rank_assets_for_segment([asset], segment, query))
+    if not ranked_versions:
+        return asset
+    return max(ranked_versions, key=lambda item: item.relevance_score)
+
+
+def _rights_rejection_reasons(asset: VisualAsset) -> list[str]:
+    reasons: list[str] = []
+    if not asset.safe_to_use:
+        reasons.append("not_marked_safe_to_use")
+    if asset.rights_tier == "red":
+        reasons.append("rights_tier_red")
+    if asset.rights_category == "unknown_or_rejected":
+        reasons.append("unknown_or_rejected_rights")
+    if asset.needs_manual_review:
+        reasons.append("manual_review_required")
+    return _dedupe_reasons(reasons)
+
+
+def _dedupe_reasons(reasons: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for reason in reasons:
+        if not reason or reason in seen:
+            continue
+        seen.add(reason)
+        result.append(reason)
+    return result
+
+
+def _write_audit_file(plan: VisualPlan, *, story_path: Path, queries_by_segment: dict[str, Any]) -> None:
     audit_path = story_path.parent / "visuals" / "visuals_audit.json"
+    candidate_audit_path = story_path.parent / "visuals" / "visual_candidates.json"
+    project_root = project_root_from_story(story_path)
     audit_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_records = _candidate_audit_records(
+        plan,
+        queries_by_segment=queries_by_segment,
+        project_root=project_root,
+    )
     payload = {
         "story_id": plan.story_id,
         "episode_id": plan.episode_id,
         "summary": plan.summary(),
         "selected_assets": plan.selected_records(),
-        "candidates": [asset.to_record() for asset in plan.candidates],
+        "candidates": candidate_records,
+        "candidate_audit_path": project_relative(candidate_audit_path, project_root),
+    }
+    candidate_payload = {
+        "story_id": plan.story_id,
+        "episode_id": plan.episode_id,
+        "candidate_count": len(candidate_records),
+        "selected_count": len(plan.selected_assets),
+        "warnings": plan.warnings,
+        "provider_reports": [report.to_record() for report in plan.provider_reports],
+        "chosen_visuals": plan.selected_records(),
+        "candidates": candidate_records,
+        "manual_review_flags": [
+            record
+            for record in candidate_records
+            if record.get("needs_manual_review") or record.get("manual_review_status") in {"required", "rejected"}
+        ],
     }
     audit_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    candidate_audit_path.write_text(json.dumps(candidate_payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
