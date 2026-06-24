@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import time
 import urllib.request
@@ -11,6 +12,7 @@ from ..storage import PROJECT_ROOT
 
 DEFAULT_CACHE_DIR = PROJECT_ROOT / ".cache" / "synthpost" / "news_collection" / "rss"
 DEFAULT_TTL_SECONDS = 30 * 60
+LOGGER = logging.getLogger(__name__)
 
 
 def cache_enabled() -> bool:
@@ -55,6 +57,7 @@ def fetch_url(
         if enabled:
             stale = _read_cache(path, ttl_seconds=None)
             if stale is not None:
+                LOGGER.warning("Using stale RSS cache for %s after fetch failure: %s", url, path)
                 return stale
         raise
     if enabled:

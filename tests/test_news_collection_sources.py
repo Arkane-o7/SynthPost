@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from pipeline.news_collection import rss
-from pipeline.news_collection.cache import fetch_url
+from pipeline.news_collection.cache import cache_path_for, clear_cache, fetch_url
 from pipeline.news_collection.candidates import build_candidate_story
 from pipeline.news_collection.dedupe import dedupe_candidates
 from pipeline.news_collection.ranking import rank_candidates, selected_candidates
@@ -147,6 +149,33 @@ class NewsCollectionSourceTests(unittest.TestCase):
         self.assertIn(weaker.candidate_id, deduped[0].dedupe_merged_candidate_ids)
         self.assertTrue(deduped[0].dedupe_reasons)
 
+    def test_dedupe_does_not_merge_related_but_different_stories(self) -> None:
+        chip_story = build_candidate_story(
+            headline="Nvidia expands AI chip exports to India after new data center deal",
+            source_name="The Verge",
+            source_url="https://www.theverge.com/ai/nvidia-india-chip-deal",
+            category="ai",
+            summary="Nvidia expanded AI chip exports to India after a data center deal. Companies said supply chains could shift.",
+            facts=["Nvidia expanded AI chip exports to India after a data center deal."],
+            key_entities=["Nvidia", "India"],
+            source_reliability_tier="high",
+        )
+        probe_story = build_candidate_story(
+            headline="Nvidia faces European antitrust probe over AI chip supply",
+            source_name="The Verge",
+            source_url="https://www.theverge.com/policy/nvidia-europe-antitrust-probe",
+            category="technology",
+            summary="European regulators opened an antitrust probe into Nvidia AI chip supply. The case could affect market power rules.",
+            facts=["European regulators opened an antitrust probe into Nvidia AI chip supply."],
+            key_entities=["Nvidia", "Europe"],
+            source_reliability_tier="high",
+        )
+
+        deduped = dedupe_candidates([chip_story, probe_story])
+
+        self.assertEqual(len(deduped), 2)
+        self.assertTrue(all(candidate.dedupe_status == "unique" for candidate in deduped))
+
     def test_cache_hit_and_miss_behavior(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             cache_dir = Path(directory)
@@ -159,6 +188,32 @@ class NewsCollectionSourceTests(unittest.TestCase):
         self.assertEqual(second, b"<rss>first</rss>")
         self.assertEqual(opener.call_count, 1)
         self.assertEqual(opener_again.call_count, 0)
+
+    def test_cache_ttl_stale_fallback_and_clear_are_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cache_dir = Path(directory)
+            url = "https://example.com/rss"
+            with patch("urllib.request.urlopen", return_value=FakeResponse(b"<rss>first</rss>")):
+                first = fetch_url(url, cache_dir=cache_dir, ttl_seconds=3600)
+            path = cache_path_for(url, cache_dir=cache_dir)
+            old_time = time.time() - 7200
+            os.utime(path, (old_time, old_time))
+
+            with patch("urllib.request.urlopen", return_value=FakeResponse(b"<rss>second</rss>")) as opener:
+                refreshed = fetch_url(url, cache_dir=cache_dir, ttl_seconds=1)
+            old_time = time.time() - 7200
+            os.utime(path, (old_time, old_time))
+            with self.assertLogs("pipeline.news_collection.cache", level="WARNING") as logs:
+                with patch("urllib.request.urlopen", side_effect=OSError("offline")):
+                    stale = fetch_url(url, cache_dir=cache_dir, ttl_seconds=1)
+            clear_cache(cache_dir=cache_dir)
+
+        self.assertEqual(first, b"<rss>first</rss>")
+        self.assertEqual(refreshed, b"<rss>second</rss>")
+        self.assertEqual(opener.call_count, 1)
+        self.assertEqual(stale, b"<rss>second</rss>")
+        self.assertTrue(any("Using stale RSS cache" in message for message in logs.output))
+        self.assertFalse(path.exists())
 
     def test_stronger_raw_facts_are_grounded_and_linked_to_claims(self) -> None:
         candidate = build_candidate_story(
