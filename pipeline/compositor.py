@@ -14,7 +14,7 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
-from synthpost.visuals.compositor_bridge import apply_compositor_bridge  # noqa: E402
+from synthpost.visuals.compositor_bridge import apply_compositor_bridge, bridge_validation_errors  # noqa: E402
 
 
 def render_story(
@@ -36,6 +36,9 @@ def render_story(
     }
     if next_bridge != previous_bridge:
         write_manifest(story_json_path, manifest)
+    bridge_errors = bridge_validation_errors(manifest.get("visual_compositor_bridge"))
+    if bridge_errors:
+        raise ValueError("Visual compositor bridge validation failed: " + "; ".join(bridge_errors))
     composition = manifest.get("composition", {})
     output_path = resolve_project_path(composition.get("output_path", ""))
     profile = resolve_profile(render_profile)
@@ -44,6 +47,9 @@ def render_story(
     direction = manifest.get("direction", {})
     if isinstance(direction, dict) and direction.get("anchor_output_path"):
         inputs.append(direction["anchor_output_path"])
+    bridge_summary = manifest.get("visual_compositor_bridge") if isinstance(manifest.get("visual_compositor_bridge"), dict) else {}
+    if bridge_summary.get("compositor_visuals_path"):
+        inputs.append(bridge_summary["compositor_visuals_path"])
     for visual in manifest.get("compositor_visuals") or manifest.get("visuals", []):
         if isinstance(visual, dict) and visual.get("path"):
             inputs.append(visual["path"])

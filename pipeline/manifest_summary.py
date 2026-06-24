@@ -125,6 +125,7 @@ def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
             "selected_count": visual_bridge.get("selected_visual_count"),
             "fallback_count": visual_bridge.get("fallback_count"),
             "manual_review_warning_count": visual_bridge.get("manual_review_warning_count"),
+            "unsafe_visual_warning_count": visual_bridge.get("unsafe_visual_warning_count"),
             "rights_categories_used": visual_bridge.get("rights_categories_used") or [],
             "attribution_complete": (visual_bridge.get("attribution") or {}).get("complete")
             if isinstance(visual_bridge.get("attribution"), dict)
@@ -132,6 +133,7 @@ def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
             "visual_candidates_path": visual_bridge.get("visual_candidates_path"),
             "visual_plan_path": visual_bridge.get("visual_plan_path"),
             "visual_skills_path": visual_bridge.get("visual_skills_path"),
+            "compositor_visuals_path": visual_bridge.get("compositor_visuals_path"),
         },
         "final_video": {
             "path": final.get("path"),

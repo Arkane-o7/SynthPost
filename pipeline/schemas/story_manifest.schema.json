@@ -419,6 +419,31 @@
     "visual_compositor_bridge": {
       "type": "object",
       "description": "Audit summary for the visual-plan-to-compositor bridge.",
+      "properties": {
+        "version": { "type": "number" },
+        "status": { "type": "string" },
+        "validation_status": { "type": "string" },
+        "input_source": { "type": "string" },
+        "review_only": { "type": "boolean" },
+        "visual_candidates_path": { "type": "string" },
+        "visual_plan_path": { "type": "string" },
+        "visual_skills_path": { "type": "string" },
+        "compositor_visuals_path": { "type": "string" },
+        "selected_visual_count": { "type": "number" },
+        "rejected_visual_count": { "type": "number" },
+        "fallback_count": { "type": "number" },
+        "manual_review_warning_count": { "type": "number" },
+        "unsafe_visual_warning_count": { "type": "number" },
+        "unsafe_visual_ids": { "type": "array", "items": { "type": "string" } },
+        "rights_categories_used": { "type": "array", "items": { "type": "string" } },
+        "attribution": { "type": "object", "additionalProperties": true },
+        "supported_skill_types": { "type": "array", "items": { "type": "string" } },
+        "skill_types_used": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "manual_review_warnings": { "type": "array", "items": { "type": "string" } },
+        "missing_visual_coverage_warnings": { "type": "array", "items": { "type": "string" } },
+        "rejected_visuals": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+      },
       "additionalProperties": true
     },
     "editorial_review": {

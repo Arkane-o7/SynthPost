@@ -18,6 +18,7 @@ ATTRIBUTION_RECOMMENDED_RIGHTS = {
     RightsCategory.PUBLIC_DOMAIN.value,
     RightsCategory.PERMISSIVE_LICENSE.value,
 }
+ATTRIBUTION_BLOCKING_RIGHTS = {RightsCategory.PERMISSIVE_LICENSE.value}
 
 
 def build_compositor_bridge(
@@ -51,21 +52,22 @@ def build_compositor_bridge(
             candidate = candidate_by_id.get(candidate_id, {})
             skill = _skill_for_section(section, skill_by_section)
             record = _record_from_plan_section(section, candidate, skill, index=index)
+            _normalize_record_paths(record, project_root)
             record_warnings = _validate_bridge_record(record, strict=True)
             if candidate_id and candidate_id not in candidate_by_id:
                 record_warnings.append(f"{candidate_id}: missing_candidate_audit_record")
             record["warnings"] = _dedupe([*record.get("warnings", []), *record_warnings])
-            if _is_unsafe(record) and not review_enabled:
+            if _blocks_render(record) and not review_enabled:
                 rejected.append(
                     {
                         "candidate_id": record.get("candidate_id"),
                         "section_id": record.get("section_id"),
                         "rights_category": record.get("rights_category"),
-                        "rejection_reasons": _dedupe(["unsafe_rights_category", *record_warnings]),
+                        "rejection_reasons": _dedupe([*_blocking_reasons(record), *record_warnings]),
                     }
                 )
                 continue
-            if _is_unsafe(record) and review_enabled:
+            if _blocks_render(record) and review_enabled:
                 record["render_safety_status"] = "review_only"
             records.append(_clean(record))
     else:
@@ -74,6 +76,7 @@ def build_compositor_bridge(
             if not isinstance(visual, dict):
                 continue
             record = _record_from_legacy_visual(visual, index=index)
+            _normalize_record_paths(record, project_root)
             record_warnings = _validate_bridge_record(record, strict=False)
             record["warnings"] = _dedupe([*record.get("warnings", []), *record_warnings])
             records.append(_clean(record))
@@ -103,9 +106,27 @@ def apply_compositor_bridge(
     review_only: bool | None = None,
 ) -> dict[str, Any]:
     records, summary = build_compositor_bridge(manifest, story_json_path, review_only=review_only)
+    summary = dict(summary)
+    summary["compositor_visuals_path"] = _write_compositor_visual_input(story_json_path, records, summary)
     manifest["compositor_visuals"] = records
     manifest["visual_compositor_bridge"] = summary
     return manifest
+
+
+def bridge_validation_errors(summary: dict[str, Any] | None) -> list[str]:
+    if not isinstance(summary, dict):
+        return ["visual compositor bridge summary is missing"]
+    if summary.get("review_only"):
+        return []
+    errors: list[str] = []
+    if summary.get("validation_status") == "failed":
+        errors.append("visual compositor bridge validation failed")
+    if summary.get("rejected_visual_count"):
+        errors.append(f"{summary.get('rejected_visual_count')} unsafe visual(s) rejected")
+    attribution = summary.get("attribution") if isinstance(summary.get("attribution"), dict) else {}
+    if attribution.get("blocking_missing_count"):
+        errors.append(f"{attribution.get('blocking_missing_count')} visual(s) missing required attribution")
+    return errors
 
 
 def skill_placeholder(skill: dict[str, Any] | None, section: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -298,13 +319,28 @@ def _bridge_summary(
         for record in records
         if record.get("manual_review_flag") or record.get("needs_manual_review")
     ]
+    blocking_missing_attribution = [
+        _first_text(record.get("candidate_id"), record.get("id"))
+        for record in records
+        if _missing_blocking_attribution(record)
+    ]
     fallback_count = sum(1 for record in records if record.get("fallback_status") not in (None, "", "none"))
     planning_audit = visual_plan_payload.get("audit") if isinstance(visual_plan_payload.get("audit"), dict) else {}
     missing_coverage = planning_audit.get("missing_visual_coverage_warnings") if isinstance(planning_audit.get("missing_visual_coverage_warnings"), list) else []
+    unsafe_visual_ids = _dedupe(
+        [
+            *[_first_text(item.get("candidate_id"), item.get("section_id")) for item in rejected],
+            *[_first_text(record.get("candidate_id"), record.get("id")) for record in records if _blocks_render(record)],
+        ]
+    )
+    validation_failed = bool(rejected or blocking_missing_attribution)
     return _clean(
         {
             "version": 1,
-            "status": "ready_with_warnings" if warnings or rejected else "ready",
+            "story_id": manifest.get("story_id"),
+            "episode_id": manifest.get("episode_id"),
+            "status": "failed" if validation_failed else ("ready_with_warnings" if warnings else "ready"),
+            "validation_status": "failed" if validation_failed else ("passed_with_warnings" if warnings else "passed"),
             "input_source": input_source,
             "review_only": review_only,
             "visual_candidates_path": audit_paths.get("visual_candidates"),
@@ -314,11 +350,15 @@ def _bridge_summary(
             "rejected_visual_count": len(rejected),
             "fallback_count": fallback_count,
             "manual_review_warning_count": len(manual_review_records),
+            "unsafe_visual_warning_count": len(unsafe_visual_ids),
+            "unsafe_visual_ids": unsafe_visual_ids,
             "rights_categories_used": rights_categories,
             "attribution": {
                 "complete": not missing_attribution,
                 "missing_count": len(missing_attribution),
                 "missing_visual_ids": missing_attribution,
+                "blocking_missing_count": len(blocking_missing_attribution),
+                "blocking_missing_visual_ids": blocking_missing_attribution,
             },
             "supported_skill_types": SUPPORTED_SKILL_TYPES,
             "skill_types_used": sorted({record.get("visual_skill_type") for record in records if record.get("visual_skill_type")}),
@@ -394,6 +434,27 @@ def _load_json_from_summary(
         if isinstance(data, dict):
             return data
     return {}
+
+
+def _write_compositor_visual_input(
+    story_json_path: str | Path,
+    records: list[dict[str, Any]],
+    summary: dict[str, Any],
+) -> str:
+    story_path = Path(story_json_path)
+    project_root = project_root_from_story(story_path)
+    story_path = story_path if story_path.is_absolute() else project_root / story_path
+    output_path = story_path.parent / "visuals" / "compositor_visuals.json"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "story_id": summary.get("story_id"),
+        "episode_id": summary.get("episode_id"),
+        "visual_count": len(records),
+        "visuals": records,
+        "bridge": {key: value for key, value in summary.items() if key != "compositor_visuals_path"},
+    }
+    output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    return _project_relative(output_path, project_root)
 
 
 def _candidate_index(manifest: dict[str, Any], candidates_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -500,13 +561,51 @@ def _is_unsafe(record: dict[str, Any]) -> bool:
     return not rights_category or rights_category in UNSAFE_RIGHTS_CATEGORIES or bool(record.get("manual_review_flag"))
 
 
+def _missing_blocking_attribution(record: dict[str, Any]) -> bool:
+    return (
+        bool(record.get("attribution_required"))
+        and _text(record.get("rights_category")) in ATTRIBUTION_BLOCKING_RIGHTS
+        and not _text(record.get("attribution_text"))
+    )
+
+
+def _blocks_render(record: dict[str, Any]) -> bool:
+    return _is_unsafe(record) or _missing_blocking_attribution(record)
+
+
+def _blocking_reasons(record: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    if _is_unsafe(record):
+        reasons.append("unsafe_rights_category")
+    if _missing_blocking_attribution(record):
+        reasons.append("missing_required_attribution")
+    return reasons
+
+
 def _review_only_enabled() -> bool:
     return os.environ.get("SYNTHPOST_COMPOSITOR_REVIEW_ONLY", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_record_paths(record: dict[str, Any], project_root: Path) -> None:
+    for key in ("path", "asset_url"):
+        value = _text(record.get(key))
+        if not value or "://" in value or value.startswith("data:"):
+            continue
+        path = Path(value)
+        if path.is_absolute():
+            record[key] = _project_relative(path, project_root)
 
 
 def _relative_if_exists(path: Path, project_root: Path) -> str:
     if not path.exists():
         return ""
+    try:
+        return path.resolve().relative_to(project_root.resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def _project_relative(path: Path, project_root: Path) -> str:
     try:
         return path.resolve().relative_to(project_root.resolve()).as_posix()
     except ValueError:
