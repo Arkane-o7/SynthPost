@@ -14,6 +14,7 @@ from pipeline.news_collection.candidates import (
     normalize_headline,
     write_story_candidates,
 )
+from pipeline.news_collection.sources import FeedSource
 from pipeline.run_episode import create_story_manifest
 from pipeline.storage import PROJECT_ROOT, read_manifest
 
@@ -146,7 +147,11 @@ class StoryDiscoveryCandidateTests(unittest.TestCase):
         self.assertEqual(candidates[0].source_url, "https://fallback.example/rss")
         self.assertTrue(candidates[0].facts)
 
-        with patch("pipeline.news_collection.rss.feed_urls", return_value=["https://bad.example/rss", "https://ok.example/rss"]):
+        sources = [
+            FeedSource("bad", "Bad Feed", "https://bad.example/rss", "general", "unknown"),
+            FeedSource("ok", "Ok Feed", "https://ok.example/rss", "energy", "medium"),
+        ]
+        with patch("pipeline.news_collection.rss.feed_sources", return_value=sources):
             with patch("pipeline.news_collection.rss.fetch_feed", side_effect=[OSError("offline"), candidates]):
                 collected = rss.collect(limit=1)
         self.assertEqual(len(collected), 1)

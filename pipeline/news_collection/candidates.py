@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 from dataclasses import dataclass, field
@@ -85,6 +86,19 @@ def source_domain(url: str) -> str:
         return ""
 
 
+def normalize_source_name(value: object, *, source_url: str = "") -> str:
+    text = compact_text(value)
+    if re.match(r"^https?://", text):
+        return source_domain(text) or text
+    text = re.sub(r"\s*[-|:]\s*(rss|feed|latest news|news)\s*$", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\b(rss|feed)\b", "", text, flags=re.IGNORECASE)
+    text = compact_text(text).strip(" -|:")
+    if text:
+        return text
+    domain = source_domain(compact_text(source_url))
+    return domain or "Unknown source"
+
+
 def candidate_id_for(*values: object) -> str:
     payload = "|".join(compact_text(value).lower() for value in values if compact_text(value))
     digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16]
@@ -100,10 +114,21 @@ def cluster_id_for(headline: object, source_url: object = "") -> str:
 
 
 def split_sentences(value: object) -> list[str]:
-    text = compact_text(value)
+    text = clean_fact_text(value)
     if not text:
         return []
-    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if len(part.split()) >= 4]
+    parts = re.split(r"(?<=[.!?])\s+|[\n\r]+|(?:\s+[•]\s+)", text)
+    return [part.strip(" -:;") for part in parts if len(part.split()) >= 4]
+
+
+def clean_fact_text(value: object) -> str:
+    text = html.unescape(compact_text(value))
+    text = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", text, flags=re.DOTALL)
+    text = re.sub(r"<script\b[^>]*>.*?</script>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<style\b[^>]*>.*?</style>", " ", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def normalize_category(value: object, *, source_url: str = "", source_name: str = "") -> str:
@@ -157,19 +182,33 @@ def normalize_datetime(value: object) -> str:
 
 def extract_facts(summary: object, headline: object = "") -> list[str]:
     facts = split_sentences(summary)
-    if not facts and compact_text(summary):
-        facts = [compact_text(summary)]
-    if not facts and compact_text(headline):
-        facts = [compact_text(headline)]
+    if clean_fact_text(summary) and not facts:
+        facts = [clean_fact_text(summary)]
+    if len(facts) < 2 and clean_fact_text(headline):
+        facts.append(clean_fact_text(headline))
     seen: set[str] = set()
     result: list[str] = []
     for fact in facts:
-        key = fact.lower()
+        cleaned = _trim_fact(fact)
+        if not cleaned:
+            continue
+        key = normalize_headline(cleaned)
         if key in seen:
             continue
         seen.add(key)
-        result.append(fact)
+        result.append(cleaned)
     return result[:8]
+
+
+def _trim_fact(value: str, *, max_chars: int = 180) -> str:
+    text = clean_fact_text(value).strip(" -:;")
+    if not text:
+        return ""
+    if len(text) > max_chars:
+        text = text[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:")
+    if text and text[-1] not in ".!?":
+        text += "."
+    return text
 
 
 def extract_entities(*values: object) -> list[str]:
@@ -232,6 +271,7 @@ class CandidateStory:
     source_url: str
     source_provider: str = "rss"
     source_type: str = "rss"
+    source_category: str = ""
     feed_url: str = ""
     source_domain: str = ""
     published_at: str = ""
@@ -257,6 +297,10 @@ class CandidateStory:
     rejection_reason: str = ""
     rejection_reasons: list[str] = field(default_factory=list)
     score_reasons: dict[str, str] = field(default_factory=dict)
+    dedupe_status: str = "unique"
+    dedupe_reasons: list[str] = field(default_factory=list)
+    dedupe_merged_candidate_ids: list[str] = field(default_factory=list)
+    dedupe_merged_source_urls: list[str] = field(default_factory=list)
     importance_score: float = 0.0
     viral_potential_score: float = 0.0
     visual_potential_score: float = 0.0
@@ -282,6 +326,7 @@ class CandidateStory:
             "source_url": self.source_url,
             "source_provider": self.source_provider,
             "source_type": self.source_type,
+            "source_category": self.source_category,
             "feed_url": self.feed_url,
             "source_domain": self.source_domain,
             "published_at": self.published_at,
@@ -305,6 +350,10 @@ class CandidateStory:
             "rejection_reason": self.rejection_reason or "; ".join(self.rejection_reasons),
             "rejection_reasons": list(self.rejection_reasons),
             "score_reasons": dict(self.score_reasons),
+            "dedupe_status": self.dedupe_status,
+            "dedupe_reasons": list(self.dedupe_reasons),
+            "dedupe_merged_candidate_ids": list(self.dedupe_merged_candidate_ids),
+            "dedupe_merged_source_urls": list(self.dedupe_merged_source_urls),
         }
         for field_name in SCORE_FIELDS:
             record[field_name] = float(getattr(self, field_name))
@@ -319,6 +368,7 @@ class CandidateStory:
             "published_at": self.published_at,
             "source_type": self.source_type,
             "source_provider": self.source_provider,
+            "source_category": self.source_category,
             "feed_url": self.feed_url,
             "domain": self.source_domain,
         }
@@ -351,8 +401,13 @@ class CandidateStory:
                 "cluster_id": self.cluster_id,
                 "source_provider": self.source_provider,
                 "source_type": self.source_type,
+                "source_category": self.source_category,
                 "feed_url": self.feed_url,
                 "source_domain": self.source_domain,
+                "dedupe_status": self.dedupe_status,
+                "dedupe_reasons": list(self.dedupe_reasons),
+                "dedupe_merged_candidate_ids": list(self.dedupe_merged_candidate_ids),
+                "dedupe_merged_source_urls": list(self.dedupe_merged_source_urls),
                 "selection_status": self.selection_status,
                 "selection_reason": self.selection_reason,
                 "rejection_reasons": list(self.rejection_reasons),
@@ -380,15 +435,16 @@ def build_candidate_story(
     key_entities: list[str] | None = None,
     source_provider: object = "rss",
     source_type: object = "rss",
+    source_category: object = "",
     feed_url: object = "",
     source_reliability_tier: object = "unknown",
     visual_opportunities: list[str] | None = None,
 ) -> CandidateStory:
     clean_headline = compact_text(headline)
-    clean_source_name = compact_text(source_name) or source_domain(compact_text(source_url)) or "Unknown source"
     clean_source_url = compact_text(source_url)
+    clean_source_name = normalize_source_name(source_name, source_url=clean_source_url)
     clean_source_domain = source_domain(clean_source_url)
-    clean_summary = compact_text(summary)
+    clean_summary = clean_fact_text(summary)
     clean_published = normalize_datetime(published_at)
     clean_category = normalize_category(category, source_url=clean_source_url, source_name=clean_source_name)
     normalized = normalize_headline(clean_headline)
@@ -414,6 +470,7 @@ def build_candidate_story(
         source_url=clean_source_url,
         source_provider=compact_text(source_provider) or "rss",
         source_type=compact_text(source_type) or "rss",
+        source_category=compact_text(source_category),
         feed_url=compact_text(feed_url),
         source_domain=clean_source_domain,
         source_reliability_tier=compact_text(source_reliability_tier) or "unknown",
