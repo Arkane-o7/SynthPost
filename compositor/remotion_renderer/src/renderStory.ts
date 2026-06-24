@@ -302,8 +302,10 @@ const main = async () => {
   const anchor = anchorPath || !visualOnlyTemplate ? await stageMedia(anchorPath, generatedDir, undefined, true) : undefined;
 
   const visuals: TimedVisual[] = [];
-  for (const visual of manifest.visuals ?? []) {
-    const staged = await stageMedia(String(visual.path ?? ''), generatedDir, 'placeholders/news-visual-placeholder.svg', false);
+  const visualRecords = Array.isArray(manifest.compositor_visuals) && manifest.compositor_visuals.length ? manifest.compositor_visuals : manifest.visuals ?? [];
+  for (const visual of visualRecords) {
+    const visualPath = String(visual.path ?? visual.downloaded_path ?? visual.asset_url ?? visual.remote_url ?? '');
+    const staged = await stageMedia(visualPath, generatedDir, 'placeholders/news-visual-placeholder.svg', false);
     visuals.push({
       ...staged,
       start: Number(visual.start ?? 0),
@@ -317,6 +319,25 @@ const main = async () => {
       volume: Number.isFinite(Number(visual.volume)) ? Number(visual.volume) : undefined,
       mediaType: visual.media_type,
       contentRole: visual.content_role,
+      candidateId: visual.candidate_id ?? visual.asset_id,
+      planId: visual.plan_id,
+      sectionId: visual.section_id ?? visual.segment_id,
+      sectionType: visual.section_type,
+      visualRole: visual.visual_role,
+      sourceUrl: visual.source_url,
+      sourceDomain: visual.source_domain,
+      provider: visual.provider,
+      license: visual.license,
+      attributionText: visual.attribution_text ?? visual.attribution,
+      rightsCategory: visual.rights_category,
+      manualReviewFlag: Boolean(visual.manual_review_flag ?? visual.needs_manual_review),
+      fallbackStatus: visual.fallback_status,
+      fallbackReason: visual.fallback_reason,
+      warnings: Array.isArray(visual.warnings) ? visual.warnings.map(String) : undefined,
+      visualSkillType: visual.visual_skill_type ?? visual.skill_type,
+      visualSkill: visual.visual_skill,
+      skillPlaceholder: visual.skill_placeholder,
+      renderSafetyStatus: visual.render_safety_status,
       motion: visual.motion,
     });
   }

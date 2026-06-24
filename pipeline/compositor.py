@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+import sys
 
 from . import config
 from .provenance import artifact_record, record_story_artifact
 from .render_profiles import resolve_profile
-from .storage import output_is_fresh, read_manifest, resolve_project_path
+from .storage import output_is_fresh, read_manifest, resolve_project_path, write_manifest
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from synthpost.visuals.compositor_bridge import apply_compositor_bridge  # noqa: E402
 
 
 def render_story(
@@ -17,6 +25,17 @@ def render_story(
     render_profile: str = "production",
 ) -> Path:
     manifest = read_manifest(story_json_path)
+    previous_bridge = {
+        "compositor_visuals": manifest.get("compositor_visuals"),
+        "visual_compositor_bridge": manifest.get("visual_compositor_bridge"),
+    }
+    manifest = apply_compositor_bridge(manifest, story_json_path)
+    next_bridge = {
+        "compositor_visuals": manifest.get("compositor_visuals"),
+        "visual_compositor_bridge": manifest.get("visual_compositor_bridge"),
+    }
+    if next_bridge != previous_bridge:
+        write_manifest(story_json_path, manifest)
     composition = manifest.get("composition", {})
     output_path = resolve_project_path(composition.get("output_path", ""))
     profile = resolve_profile(render_profile)
@@ -25,7 +44,7 @@ def render_story(
     direction = manifest.get("direction", {})
     if isinstance(direction, dict) and direction.get("anchor_output_path"):
         inputs.append(direction["anchor_output_path"])
-    for visual in manifest.get("visuals", []):
+    for visual in manifest.get("compositor_visuals") or manifest.get("visuals", []):
         if isinstance(visual, dict) and visual.get("path"):
             inputs.append(visual["path"])
 
@@ -45,6 +64,7 @@ def render_story(
                 test_mode=test_mode,
                 render_profile=profile.name,
                 flags={"force": force},
+                metadata={"visual_bridge": manifest.get("visual_compositor_bridge")},
             ),
         )
         if preview_path.exists():
@@ -61,6 +81,7 @@ def render_story(
                     test_mode=test_mode,
                     render_profile=profile.name,
                     flags={"force": force},
+                    metadata={"visual_bridge": manifest.get("visual_compositor_bridge")},
                 ),
             )
         return output_path
@@ -96,6 +117,7 @@ def render_story(
             render_profile=profile.name,
             command=command,
             flags={"force": force},
+            metadata={"visual_bridge": rendered_manifest.get("visual_compositor_bridge")},
         ),
     )
     if preview_path.exists():
@@ -113,6 +135,7 @@ def render_story(
                 render_profile=profile.name,
                 command=command,
                 flags={"force": force},
+                metadata={"visual_bridge": rendered_manifest.get("visual_compositor_bridge")},
             ),
         )
     return output_path

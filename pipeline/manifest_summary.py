@@ -75,6 +75,7 @@ def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
     script = first.get("script") if isinstance(first.get("script"), dict) else {}
     direction = first.get("direction") if isinstance(first.get("direction"), dict) else {}
     thumbnail = first.get("thumbnail") if isinstance(first.get("thumbnail"), dict) else {}
+    visual_bridge = first.get("visual_compositor_bridge") if isinstance(first.get("visual_compositor_bridge"), dict) else {}
     runtime = first.get("runtime") if isinstance(first.get("runtime"), dict) else {}
     provenance = first.get("provenance") if isinstance(first.get("provenance"), dict) else {}
     artifacts = provenance.get("artifacts") if isinstance(provenance.get("artifacts"), dict) else {}
@@ -119,6 +120,19 @@ def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
             "path": thumbnail.get("best_path"),
             "relevance_score": thumbnail.get("thumbnail_relevance_score"),
         },
+        "visuals": {
+            "input_source": visual_bridge.get("input_source") or "unknown",
+            "selected_count": visual_bridge.get("selected_visual_count"),
+            "fallback_count": visual_bridge.get("fallback_count"),
+            "manual_review_warning_count": visual_bridge.get("manual_review_warning_count"),
+            "rights_categories_used": visual_bridge.get("rights_categories_used") or [],
+            "attribution_complete": (visual_bridge.get("attribution") or {}).get("complete")
+            if isinstance(visual_bridge.get("attribution"), dict)
+            else None,
+            "visual_candidates_path": visual_bridge.get("visual_candidates_path"),
+            "visual_plan_path": visual_bridge.get("visual_plan_path"),
+            "visual_skills_path": visual_bridge.get("visual_skills_path"),
+        },
         "final_video": {
             "path": final.get("path"),
             "duration_seconds": final_media.get("duration_seconds") if isinstance(final_media, dict) else None,
@@ -148,6 +162,12 @@ def print_summary(summary: dict[str, Any]) -> None:
         f"Mode: {summary['mode']}",
         f"Avatar: {summary['avatar']['status']} ({summary['avatar'].get('path') or 'no path'})",
         f"Thumbnail: {summary['thumbnail'].get('path') or 'missing'}; relevance={summary['thumbnail'].get('relevance_score')}",
+        (
+            f"Visuals: source={summary['visuals'].get('input_source')}; "
+            f"selected={summary['visuals'].get('selected_count')}; "
+            f"fallbacks={summary['visuals'].get('fallback_count')}; "
+            f"rights={','.join(summary['visuals'].get('rights_categories_used') or []) or 'unknown'}"
+        ),
         (
             f"Final video: {summary['final_video'].get('path') or 'missing'}; "
             f"duration={summary['final_video'].get('duration_seconds')}; "
