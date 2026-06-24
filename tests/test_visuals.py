@@ -619,7 +619,7 @@ class VisualPlanningTests(unittest.TestCase):
                 "headline": "AI CHIP CONTROLS",
                 "category": "AI",
                 "text": "Nvidia AI chip controls could affect data center supply chains.",
-                "target_duration_seconds": 36,
+                "target_duration_seconds": 48,
                 "sections": [
                     {
                         "section_id": "cold_open",
@@ -633,6 +633,14 @@ class VisualPlanningTests(unittest.TestCase):
                         "section_id": "main_developments",
                         "title": "Data center supply pressure",
                         "narration": "Data centers are part of the supply-chain pressure.",
+                        "estimated_duration_seconds": 12,
+                        "claim_ids": ["claim_01"],
+                        "source_notes": ["Example Agency"],
+                    },
+                    {
+                        "section_id": "why_it_matters",
+                        "title": "Why Nvidia matters",
+                        "narration": "Nvidia remains a central entity in the AI chip supply chain.",
                         "estimated_duration_seconds": 12,
                         "claim_ids": ["claim_01"],
                         "source_notes": ["Example Agency"],
@@ -658,8 +666,10 @@ class VisualPlanningTests(unittest.TestCase):
             (root / "compositor").mkdir()
             media = root / "nvidia_briefing.jpg"
             document = root / "supply_document.png"
+            entity = root / "nvidia_entity.png"
             media.write_bytes(b"fake")
             document.write_bytes(b"fake")
+            entity.write_bytes(b"fake")
             story_path = root / "episodes" / "ep_test" / "stories" / "story_001" / "story.json"
             story_path.parent.mkdir(parents=True)
             story_path.write_text("{}", encoding="utf-8")
@@ -692,6 +702,19 @@ class VisualPlanningTests(unittest.TestCase):
                         safe_to_use=True,
                         entities=["data centers", "supply chain"],
                     ),
+                    VisualAsset(
+                        "nvidia_entity",
+                        AssetType.IMAGE,
+                        "Nvidia AI chip supply chain entity visual",
+                        "manifest_media",
+                        path=str(entity),
+                        source_url="https://example.gov/media/nvidia-entity",
+                        source_name="Example Agency",
+                        license="user provided",
+                        usage_note="user provided official media",
+                        safe_to_use=True,
+                        entities=["Nvidia", "AI chips"],
+                    ),
                 ],
             )
 
@@ -699,14 +722,19 @@ class VisualPlanningTests(unittest.TestCase):
             visual_plan_path = story_path.parent / "visuals" / "visual_plan.json"
             visual_plan = json.loads(visual_plan_path.read_text(encoding="utf-8"))
 
-        self.assertEqual([section["script_section_id"] for section in visual_plan["sections"]], ["cold_open", "main_developments", "conclusion"])
-        self.assertEqual(len(plan.manifest_visuals), 3)
+        self.assertEqual(
+            [section["script_section_id"] for section in visual_plan["sections"]],
+            ["cold_open", "main_developments", "why_it_matters", "conclusion"],
+        )
+        self.assertEqual(len(plan.manifest_visuals), 4)
         self.assertTrue(all(section["rights_category"] for section in visual_plan["sections"]))
         self.assertEqual(visual_plan["sections"][0]["visual_role"], "hero_visual")
         self.assertEqual(visual_plan["sections"][1]["visual_role"], "document_visual")
+        self.assertEqual(visual_plan["sections"][2]["visual_role"], "entity_visual")
         self.assertTrue(any(section["fallback_status"] == "generated_context_card" for section in visual_plan["sections"]))
         self.assertIn("visual_candidates_path", visual_plan)
         self.assertEqual(max(visual_plan["audit"]["reuse_counts"].values()), 1)
+        self.assertTrue(all(not Path(section["path"]).is_absolute() for section in visual_plan["sections"] if section.get("path")))
 
     def test_visual_plan_does_not_select_unapproved_or_unknown_rights_assets(self) -> None:
         manifest = {

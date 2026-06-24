@@ -146,6 +146,7 @@ def build_visual_plan(
         episode_id=episode_id,
         segments=segments,
         selected=selected,
+        project_root=project_root,
     )
     planning_audit = _build_planning_audit(
         segments=segments,
@@ -432,6 +433,7 @@ def _build_plan_entries(
     episode_id: str,
     segments: list[StorySegment],
     selected: list[VisualAsset],
+    project_root: Path,
 ) -> list[VisualPlanEntry]:
     entries: list[VisualPlanEntry] = []
     by_segment = {asset.segment_id: asset for asset in selected if asset.segment_id}
@@ -451,8 +453,8 @@ def _build_plan_entries(
                 selected_visual_candidate_id=asset.asset_id,
                 media_type=asset.media_type or asset.asset_type.value,
                 asset_type=asset.asset_type.value,
-                asset_url=asset.asset_url or asset.remote_url or asset.path,
-                path=asset.downloaded_path or asset.path,
+                asset_url=_portable_asset_reference(asset.asset_url or asset.remote_url or asset.path, project_root),
+                path=_portable_asset_reference(asset.downloaded_path or asset.path, project_root),
                 source_url=asset.source_url,
                 source_domain=asset.source_domain,
                 rights_category=asset.rights_category,
@@ -470,6 +472,17 @@ def _build_plan_entries(
             )
         )
     return entries
+
+
+def _portable_asset_reference(value: str | None, project_root: Path) -> str | None:
+    if not value:
+        return None
+    if "://" in value or value.startswith("data:"):
+        return value
+    path = Path(value)
+    if path.is_absolute():
+        return project_relative(path, project_root)
+    return value
 
 
 def _fallback_status(asset: VisualAsset) -> str:
@@ -498,6 +511,8 @@ def _visual_role(segment: StorySegment, asset: VisualAsset, *, fallback_status: 
         return "quote_card"
     if segment.segment_id in {"cold_open", "intro"}:
         return "hero_visual"
+    if asset.matched_story_entities or asset.entities:
+        return "entity_visual"
     if segment.segment_id in {"background_context", "why_it_matters"}:
         return "context_visual"
     if segment.segment_id == "main_developments":
