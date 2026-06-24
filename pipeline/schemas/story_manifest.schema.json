@@ -225,6 +225,11 @@
           "type": "object",
           "description": "Basic unsupported-claim checks for generated script copy.",
           "additionalProperties": true
+        },
+        "provider_validation": {
+          "type": "object",
+          "description": "Provider validation/retry audit for the script output.",
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
@@ -400,7 +405,13 @@
         "item_count": { "type": "number" },
         "provider": { "type": "string" },
         "model": { "type": "string" },
-        "warnings": { "type": "array", "items": { "type": "string" } }
+        "validation_status": { "type": "string" },
+        "retry_count": { "type": "number" },
+        "groundedness_status": { "type": "string" },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "errors": { "type": "array", "items": { "type": "string" } },
+        "attempts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "partial_output_path": { "type": "string" }
       },
       "additionalProperties": true
     },
@@ -432,6 +443,11 @@
         },
         "duration_seconds": { "type": "number" }
       },
+      "additionalProperties": true
+    },
+    "provider_validation": {
+      "type": "object",
+      "description": "Stage-level provider validation/retry audit records.",
       "additionalProperties": true
     }
   },

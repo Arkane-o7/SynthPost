@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..content_writing import ollama as writing_contract
+from ..llm_validation import ProviderValidationFailure, run_provider_with_retries
 from ..storage import read_manifest, write_manifest
 
 
@@ -393,14 +394,59 @@ def _provider_name() -> str:
     return os.environ.get("SYNTHPOST_NEWS_POINTS_PROVIDER") or os.environ.get("SYNTHPOST_LLM_PROVIDER", "mock")
 
 
-def _provider_contract(manifest: dict[str, Any]) -> dict[str, Any]:
-    provider = _provider_name().lower()
+def _provider_model(provider: str) -> str:
     if provider == "ollama":
-        result = writing_contract.call_ollama(prompt_for(manifest))
-        result["provider"] = "ollama"
-        result["model"] = os.environ.get("SYNTHPOST_OLLAMA_MODEL", "gemma4:26b")
-        return result
-    return _deterministic_contract(manifest)
+        return os.environ.get("SYNTHPOST_OLLAMA_MODEL", "gemma4:26b")
+    return "deterministic_chyrons"
+
+
+def _provider_max_retries() -> int:
+    try:
+        return max(0, int(os.environ.get("SYNTHPOST_LLM_MAX_RETRIES", "2")))
+    except ValueError:
+        return 2
+
+
+def _provider_debug_dir(story_json_path: str | Path, stage: str) -> str:
+    if os.environ.get("SYNTHPOST_SAVE_LLM_DEBUG", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return ""
+    story_path = Path(story_json_path)
+    return str(story_path.parent / "llm_debug" / stage)
+
+
+def _provider_shape_review(contract: dict[str, Any]) -> dict[str, Any]:
+    warnings: list[str] = []
+    sections = _dict_list(contract.get("sections"))
+    if not sections:
+        warnings.append("provider output missing required sections")
+    for section in sections:
+        section_id = compact_text(section.get("section_id"))
+        if not section_id:
+            warnings.append("provider section missing section_id")
+        has_any_items = False
+        for field in SCREEN_FIELDS:
+            value = section.get(field)
+            if value in (None, ""):
+                continue
+            if not isinstance(value, list):
+                warnings.append(f"provider section {section_id or 'unknown'} field {field} must be an array")
+                continue
+            for item in _dict_list(value):
+                has_any_items = True
+                for key in ("text", "type", "section_id", "claim_ids", "source_notes", "start", "end"):
+                    if item.get(key) in (None, "", []):
+                        warnings.append(f"provider {section_id or 'unknown'}/{field} item missing required field: {key}")
+        if not has_any_items:
+            warnings.append(f"provider section {section_id or 'unknown'} has no generated screen text")
+    return {"status": "pass" if not warnings else "needs_review", "warnings": warnings}
+
+
+def _validate_provider_contract_output(contract: dict[str, Any], manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    shape_review = _provider_shape_review(contract)
+    if shape_review["status"] != "pass":
+        return contract, shape_review
+    normalized = normalize_contract(contract, manifest)
+    return normalized, normalized["review"]
 
 
 def _normalize_item(
@@ -607,6 +653,31 @@ def derive_points(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return contract["points"]
 
 
+def _provider_validation_container(manifest: dict[str, Any]) -> dict[str, Any]:
+    value = manifest.get("provider_validation")
+    return value if isinstance(value, dict) else {}
+
+
+def _set_provider_validation(manifest: dict[str, Any], stage: str, audit: dict[str, Any]) -> None:
+    container = _provider_validation_container(manifest)
+    container[stage] = audit
+    manifest["provider_validation"] = container
+
+
+def _audit_from_contract(contract: dict[str, Any], *, provider: str, model: str) -> dict[str, Any]:
+    review = contract.get("review") if isinstance(contract.get("review"), dict) else {}
+    return {
+        "provider": provider,
+        "model": model,
+        "stage": "news_points",
+        "validation_status": review.get("status"),
+        "retry_count": 0,
+        "warnings": review.get("warnings", []),
+        "errors": [],
+        "groundedness_status": "pass" if review.get("status") == "pass" else "needs_review",
+    }
+
+
 def run(story_json_path: str | Path, *, force: bool = False) -> list[dict[str, Any]]:
     manifest = read_manifest(story_json_path)
     script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
@@ -618,10 +689,39 @@ def run(story_json_path: str | Path, *, force: bool = False) -> list[dict[str, A
     if existing_points and has_section_chyrons and not force:
         print("[points] Reusing section-based points/chyrons from manifest.")
         return existing_points
-    raw_contract = _provider_contract(manifest)
-    contract = normalize_contract(raw_contract, manifest)
+    provider = _provider_name().lower()
+    if provider == "ollama":
+        try:
+            contract, provider_audit = run_provider_with_retries(
+                stage="news_points",
+                provider="ollama",
+                model=_provider_model("ollama"),
+                prompt=prompt_for(manifest),
+                call_provider=writing_contract.call_ollama_text,
+                validate_output=lambda output: _validate_provider_contract_output(output, manifest),
+                max_retries=_provider_max_retries(),
+                debug_dir=_provider_debug_dir(story_json_path, "news_points"),
+            )
+        except ProviderValidationFailure as exc:
+            manifest["news_points_review"] = exc.audit
+            _set_provider_validation(manifest, "news_points", exc.audit)
+            write_manifest(story_json_path, manifest)
+            raise
+    else:
+        contract = normalize_contract(_deterministic_contract(manifest), manifest)
+        provider_audit = _audit_from_contract(contract, provider="mock", model="deterministic_chyrons")
     review = contract["review"]
     if review["status"] != "pass":
+        provider_audit = {
+            **provider_audit,
+            "validation_status": "failed",
+            "warnings": review.get("warnings", []),
+            "errors": review.get("warnings", []),
+            "groundedness_status": "needs_review",
+        }
+        manifest["news_points_review"] = provider_audit
+        _set_provider_validation(manifest, "news_points", provider_audit)
+        write_manifest(story_json_path, manifest)
         raise ValueError(f"News points/chyrons failed groundedness review: {', '.join(review['warnings'])}")
     script["sections"] = _merge_sections(manifest, contract)
     manifest["script"] = script
@@ -631,7 +731,11 @@ def run(story_json_path: str | Path, *, force: bool = False) -> list[dict[str, A
         **review,
         "provider": contract.get("provider"),
         "model": contract.get("model"),
+        "validation_status": provider_audit.get("validation_status"),
+        "retry_count": provider_audit.get("retry_count", 0),
+        "errors": provider_audit.get("errors", []),
     }
+    _set_provider_validation(manifest, "news_points", provider_audit)
     write_manifest(story_json_path, manifest)
     print(
         f"[points] Wrote {len(contract['points'])} point(s) and "

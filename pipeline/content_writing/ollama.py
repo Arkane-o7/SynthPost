@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import evidence
+from ..llm_validation import ProviderValidationFailure, extract_json_object, run_provider_with_retries
 from ..provenance import artifact_record, record_story_artifact
 from ..storage import read_manifest, write_manifest
 
@@ -77,6 +78,15 @@ SECTION_WEIGHTS = {
     "conclusion": 0.06,
     "outro_next_story": 0.03,
 }
+
+CLICKBAIT_PATTERNS = (
+    "you won't believe",
+    "shocking",
+    "insane",
+    "secret they don't want",
+    "this changes everything",
+    "mind-blowing",
+)
 
 
 def _dict_list(value: object) -> list[dict[str, Any]]:
@@ -252,7 +262,7 @@ def prompt_for(manifest: dict[str, Any]) -> str:
     )
 
 
-def call_ollama(prompt: str) -> dict[str, Any]:
+def call_ollama_text(prompt: str) -> str:
     model = os.environ.get("SYNTHPOST_OLLAMA_MODEL", "gemma4:26b")
     timeout = float(os.environ.get("SYNTHPOST_OLLAMA_TIMEOUT", "120"))
     use_chat = os.environ.get("SYNTHPOST_OLLAMA_API", "chat").lower() == "chat"
@@ -293,8 +303,11 @@ def call_ollama(prompt: str) -> dict[str, Any]:
             "Ollama content writing failed. Start Ollama or set "
             "SYNTHPOST_OLLAMA_URL/SYNTHPOST_OLLAMA_MODEL/SYNTHPOST_OLLAMA_TIMEOUT."
         ) from exc
-    response_text = _ollama_response_text(data, use_chat=use_chat)
-    return _parse_json_response(response_text)
+    return _ollama_response_text(data, use_chat=use_chat)
+
+
+def call_ollama(prompt: str) -> dict[str, Any]:
+    return _parse_json_response(call_ollama_text(prompt))
 
 
 def _ollama_url(*, use_chat: bool) -> str:
@@ -343,26 +356,95 @@ def _ollama_options() -> dict[str, Any]:
 
 def _parse_json_response(response_text: str) -> dict[str, Any]:
     try:
-        parsed = json.loads(response_text)
-    except json.JSONDecodeError:
-        start = response_text.find("{")
-        end = response_text.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                parsed = json.loads(response_text[start : end + 1])
-            except json.JSONDecodeError as exc:
-                raise _non_json_response_error(response_text) from exc
-        else:
-            raise _non_json_response_error(response_text)
-    if not isinstance(parsed, dict):
-        raise RuntimeError("Ollama returned JSON, but the script stage expected a JSON object.")
-    return parsed
+        return extract_json_object(response_text)
+    except Exception as exc:
+        raise _non_json_response_error(response_text) from exc
 
 
 def _non_json_response_error(response_text: str) -> RuntimeError:
     compact = " ".join(response_text.split())
     excerpt = compact[:500]
     return RuntimeError(f"Ollama returned non-JSON content for the script stage. Response excerpt: {excerpt}")
+
+
+def _provider_max_retries() -> int:
+    try:
+        return max(0, int(os.environ.get("SYNTHPOST_LLM_MAX_RETRIES", "2")))
+    except ValueError:
+        return 2
+
+
+def _provider_debug_dir(story_json_path: str | Path, stage: str) -> str:
+    if os.environ.get("SYNTHPOST_SAVE_LLM_DEBUG", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return ""
+    story_path = Path(story_json_path)
+    return str(story_path.parent / "llm_debug" / stage)
+
+
+def _script_provider_shape_review(script: dict[str, Any]) -> dict[str, Any]:
+    warnings: list[str] = []
+    for key in (
+        "text",
+        "headline",
+        "category",
+        "duration_mode",
+        "target_duration_seconds",
+        "estimated_duration_seconds",
+        "claim_ids",
+        "source_ids",
+        "caveats",
+        "sections",
+    ):
+        if key not in script or script.get(key) in (None, "", []):
+            warnings.append(f"provider output missing required script field: {key}")
+    for section in _sections_from_script(script):
+        section_id = compact_text(section.get("section_id")) or "unknown"
+        for key in ("section_id", "title", "narration", "estimated_duration_seconds", "claim_ids", "source_notes"):
+            if section.get(key) in (None, "", []):
+                warnings.append(f"provider section {section_id} missing required field: {key}")
+    return {"status": "pass" if not warnings else "needs_review", "warnings": warnings}
+
+
+def _validate_provider_script_output(script: dict[str, Any], manifest: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    shape_review = _script_provider_shape_review(script)
+    if shape_review["status"] != "pass":
+        return script, shape_review
+    normalized = normalize_script_contract(script, manifest)
+    contract_review = validate_script_contract(normalized, manifest["raw"], writing_options_for(manifest))
+    evidence_review = evidence.validate_script(normalized, manifest["raw"])
+    warnings = [*contract_review.get("warnings", []), *evidence_review.get("warnings", [])]
+    review = {
+        "status": "pass" if not warnings else "needs_review",
+        "warnings": warnings,
+        "groundedness": contract_review.get("groundedness", {}),
+        "contract_review": contract_review,
+        "evidence_review": evidence_review,
+    }
+    return normalized, review
+
+
+def _provider_validation_container(manifest: dict[str, Any]) -> dict[str, Any]:
+    value = manifest.get("provider_validation")
+    return value if isinstance(value, dict) else {}
+
+
+def _set_provider_validation(manifest: dict[str, Any], stage: str, audit: dict[str, Any]) -> None:
+    container = _provider_validation_container(manifest)
+    container[stage] = audit
+    manifest["provider_validation"] = container
+
+
+def _audit_for_existing_script(provider: str, script: dict[str, Any], review: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider": script.get("llm_provider") or provider,
+        "model": script.get("llm_model") or _provider_metadata(provider).get("llm_model"),
+        "stage": "content_writing",
+        "validation_status": review.get("status"),
+        "retry_count": 0,
+        "warnings": review.get("warnings", []),
+        "errors": [],
+        "groundedness_status": (review.get("groundedness") or {}).get("status", "unknown"),
+    }
 
 
 def deterministic_script(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -620,6 +702,7 @@ def groundedness_review(script: dict[str, Any], raw: dict[str, Any]) -> dict[str
         for marker in _causal_markers(script_text)
         if marker.lower() not in evidence_text
     ]
+    clickbait_markers = [pattern for pattern in CLICKBAIT_PATTERNS if pattern in script_text.lower()]
     warnings = [
         *[f"unknown claim_id: {claim_id}" for claim_id in unknown_claim_ids],
         *[f"unsupported major claim: {claim}" for claim in unsupported_major_claims],
@@ -627,6 +710,7 @@ def groundedness_review(script: dict[str, Any], raw: dict[str, Any]) -> dict[str
         *[f"unsupported factual marker: {marker}" for marker in unsupported_markers],
         *[f"unsupported named entity: {marker}" for marker in unsupported_names],
         *[f"unsupported causal marker: {marker}" for marker in unsupported_causal_markers],
+        *[f"clickbait phrase: {marker}" for marker in clickbait_markers],
     ]
     return {
         "status": "pass" if not warnings else "needs_review",
@@ -635,6 +719,7 @@ def groundedness_review(script: dict[str, Any], raw: dict[str, Any]) -> dict[str
         "unsupported_factual_markers": unsupported_markers,
         "unsupported_named_entities": unsupported_names,
         "unsupported_causal_markers": unsupported_causal_markers,
+        "clickbait_markers": clickbait_markers,
         "warnings": warnings,
     }
 
@@ -828,8 +913,10 @@ def run(story_json_path: str | Path, *, force: bool = False) -> dict[str, Any]:
         script = evidence.attach_script_evidence(script, manifest["raw"])
         script["contract_review"] = contract_review
         script["groundedness_review"] = contract_review["groundedness"]
+        script["provider_validation"] = _audit_for_existing_script(provider, script, contract_review)
         manifest["script"] = script
         manifest["editorial_review"] = evidence.validate_script(script, manifest["raw"])
+        _set_provider_validation(manifest, "content_writing", script["provider_validation"])
         write_manifest(story_json_path, manifest)
         record_story_artifact(
             story_json_path,
@@ -849,10 +936,37 @@ def run(story_json_path: str | Path, *, force: bool = False) -> dict[str, Any]:
         print("[writing] Reusing script from manifest.")
         return script
 
+    provider_audit: dict[str, Any]
     if provider == "ollama":
-        script = call_ollama(prompt_for(manifest))
+        try:
+            script, provider_audit = run_provider_with_retries(
+                stage="content_writing",
+                provider="ollama",
+                model=os.environ.get("SYNTHPOST_OLLAMA_MODEL", "gemma4:26b"),
+                prompt=prompt_for(manifest),
+                call_provider=call_ollama_text,
+                validate_output=lambda output: _validate_provider_script_output(output, manifest),
+                max_retries=_provider_max_retries(),
+                debug_dir=_provider_debug_dir(story_json_path, "content_writing"),
+            )
+        except ProviderValidationFailure as exc:
+            _set_provider_validation(manifest, "content_writing", exc.audit)
+            write_manifest(story_json_path, manifest)
+            raise
     else:
         script = deterministic_script(manifest)
+        script = normalize_script_contract(script, manifest)
+        mock_review = validate_script_contract(script, manifest["raw"], writing_options_for(manifest))
+        provider_audit = {
+            "provider": "mock",
+            "model": "deterministic_script",
+            "stage": "content_writing",
+            "validation_status": mock_review.get("status"),
+            "retry_count": 0,
+            "warnings": mock_review.get("warnings", []),
+            "errors": [],
+            "groundedness_status": (mock_review.get("groundedness") or {}).get("status", "unknown"),
+        }
     script = {**script, **_provider_metadata(provider)}
     script = normalize_script_contract(script, manifest)
 
@@ -869,8 +983,10 @@ def run(story_json_path: str | Path, *, force: bool = False) -> dict[str, Any]:
     script = evidence.attach_script_evidence(script, manifest["raw"])
     script["contract_review"] = contract_review
     script["groundedness_review"] = contract_review["groundedness"]
+    script["provider_validation"] = provider_audit
     manifest["script"] = script
     manifest["editorial_review"] = review
+    _set_provider_validation(manifest, "content_writing", provider_audit)
     write_manifest(story_json_path, manifest)
     record_story_artifact(
         story_json_path,
