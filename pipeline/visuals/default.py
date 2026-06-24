@@ -30,6 +30,12 @@ REQUIRED_VISUAL_METADATA = {
     "media_type",
     "risk_level",
     "manual_review_status",
+    "provider_type",
+    "source_domain",
+    "asset_url",
+    "rights_category",
+    "needs_manual_review",
+    "selection_status",
 }
 
 

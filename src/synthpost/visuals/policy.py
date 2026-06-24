@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import urllib.parse
 from typing import Any
 
 from .models import (
@@ -8,6 +9,8 @@ from .models import (
     ContentRole,
     ManualReviewStatus,
     MediaType,
+    ProviderType,
+    RightsCategory,
     RightsConfidence,
     RightsTier,
     RiskLevel,
@@ -56,6 +59,12 @@ CC_USAGE = {UsageBasis.CC0.value, UsageBasis.CC_BY.value, UsageBasis.CC_BY_SA.va
 
 
 def normalize_asset_metadata(asset: VisualAsset) -> VisualAsset:
+    asset.provider_type = _value(asset.extra.get("provider_type"), asset.provider_type if asset.provider_type != ProviderType.UNKNOWN.value else None, provider_type_for_provider(asset.provider))
+    asset.source_domain = _value(asset.extra.get("source_domain"), asset.source_domain, source_domain_for_asset(asset))
+    asset.asset_url = _value(asset.extra.get("asset_url"), asset.asset_url, asset.remote_url, asset.path)
+    asset.caption = _value(asset.extra.get("caption"), asset.caption, asset.title)
+    asset.alt_text = _value(asset.extra.get("alt_text"), asset.alt_text, asset.caption, asset.title)
+    asset.entities = _string_list(asset.extra.get("entities")) or asset.entities
     asset.media_type = _value(asset.extra.get("media_type"), _media_type(asset), asset.media_type)
     asset.source_authority = _value(
         asset.extra.get("source_authority"),
@@ -96,6 +105,14 @@ def normalize_asset_metadata(asset: VisualAsset) -> VisualAsset:
         asset.extra.get("attribution_required", asset.attribution_required or _attribution_required(asset))
     )
     asset.attribution_text = _value(asset.attribution_text, asset.extra.get("attribution_text"), _attribution_text(asset))
+    asset.rights_category = _value(
+        asset.extra.get("rights_category"),
+        asset.rights_category if asset.rights_category != RightsCategory.UNKNOWN_OR_REJECTED.value else None,
+        rights_category_for_asset(asset),
+    )
+    asset.needs_manual_review = bool(asset.extra.get("needs_manual_review", _needs_manual_review(asset)))
+    asset.selection_status = _value(asset.extra.get("selection_status"), asset.selection_status)
+    asset.rejection_reasons = _string_list(asset.extra.get("rejection_reasons")) or asset.rejection_reasons
     if not asset.motion:
         asset.motion = dict(asset.extra.get("motion") or default_motion(asset))
     asset.safe_to_use = asset_is_selectable(asset)
@@ -103,6 +120,8 @@ def normalize_asset_metadata(asset: VisualAsset) -> VisualAsset:
 
 
 def asset_is_selectable(asset: VisualAsset) -> bool:
+    if asset.rights_category == RightsCategory.UNKNOWN_OR_REJECTED.value:
+        return False
     if asset.rights_tier == RightsTier.RED.value:
         return False
     if asset.manual_review_status == ManualReviewStatus.REJECTED.value:
@@ -114,6 +133,56 @@ def asset_is_selectable(asset: VisualAsset) -> bool:
             return os.environ.get("SYNTHPOST_ALLOW_RISKY_SOCIAL", "0") == "1"
         return os.environ.get("SYNTHPOST_ALLOW_YELLOW_VISUALS", "0") == "1"
     return asset.rights_tier == RightsTier.GREEN.value
+
+
+def provider_type_for_provider(provider: str) -> str:
+    if provider in OFFICIAL_PROVIDERS:
+        return ProviderType.OFFICIAL.value
+    if provider in OPEN_ARCHIVE_PROVIDERS:
+        return ProviderType.OPEN_ARCHIVE.value
+    if provider in STOCK_PROVIDERS:
+        return ProviderType.STOCK.value
+    if provider in SOCIAL_PROVIDERS:
+        return ProviderType.SOCIAL.value
+    if provider in GENERATED_PROVIDERS:
+        return ProviderType.GENERATED.value
+    if provider == "local_library":
+        return ProviderType.LOCAL_LIBRARY.value
+    if provider == "manifest_media":
+        return ProviderType.LOCAL_LIBRARY.value
+    if provider in {"web_search", "youtube_metadata"}:
+        return ProviderType.WEB_LEAD.value
+    return ProviderType.UNKNOWN.value
+
+
+def source_domain_for_asset(asset: VisualAsset) -> str:
+    for value in (asset.source_url, asset.remote_url):
+        if not value:
+            continue
+        try:
+            host = urllib.parse.urlparse(value).hostname or ""
+        except ValueError:
+            continue
+        if host:
+            return host.removeprefix("www.")
+    return ""
+
+
+def rights_category_for_asset(asset: VisualAsset) -> str:
+    usage = asset.usage_basis or ""
+    if asset.rights_tier == RightsTier.RED.value:
+        return RightsCategory.UNKNOWN_OR_REJECTED.value
+    if asset.provider in GENERATED_PROVIDERS or usage == UsageBasis.FIRST_PARTY_GENERATED.value:
+        return RightsCategory.FIRST_PARTY_GENERATED.value
+    if usage == UsageBasis.OFFICIAL_PRESS.value:
+        return RightsCategory.OFFICIAL_PUBLIC.value
+    if usage in {UsageBasis.PUBLIC_DOMAIN.value, UsageBasis.CC0.value}:
+        return RightsCategory.PUBLIC_DOMAIN.value
+    if usage in {UsageBasis.CC_BY.value, UsageBasis.CC_BY_SA.value, UsageBasis.USER_PROVIDED.value, UsageBasis.STOCK_FALLBACK.value}:
+        return RightsCategory.PERMISSIVE_LICENSE.value
+    if usage == UsageBasis.EDITORIAL_REVIEW.value or asset.rights_tier == RightsTier.YELLOW.value:
+        return RightsCategory.FAIR_USE_REVIEW_REQUIRED.value
+    return RightsCategory.UNKNOWN_OR_REJECTED.value
 
 
 def default_motion(asset: VisualAsset) -> dict[str, Any]:
@@ -187,7 +256,7 @@ def _usage_basis(asset: VisualAsset) -> str:
     if asset.provider in OFFICIAL_PROVIDERS:
         return UsageBasis.OFFICIAL_PRESS.value
     if asset.provider in GENERATED_PROVIDERS:
-        return UsageBasis.USER_PROVIDED.value
+        return UsageBasis.FIRST_PARTY_GENERATED.value
     if asset.provider in {"local_library", "manifest_media"}:
         return UsageBasis.USER_PROVIDED.value
     if asset.provider in SOCIAL_PROVIDERS:
@@ -245,6 +314,16 @@ def _manual_review_status(asset: VisualAsset) -> str:
     return ManualReviewStatus.REJECTED.value
 
 
+def _needs_manual_review(asset: VisualAsset) -> bool:
+    if asset.manual_review_status in {ManualReviewStatus.REQUIRED.value, ManualReviewStatus.REJECTED.value}:
+        return True
+    if asset.rights_tier in {RightsTier.YELLOW.value, RightsTier.RED.value}:
+        return True
+    if asset.rights_confidence == RightsConfidence.UNKNOWN.value:
+        return True
+    return asset.rights_category in {RightsCategory.FAIR_USE_REVIEW_REQUIRED.value, RightsCategory.UNKNOWN_OR_REJECTED.value}
+
+
 def _attribution_required(asset: VisualAsset) -> bool:
     if asset.attribution:
         return True
@@ -260,3 +339,9 @@ def _attribution_text(asset: VisualAsset) -> str | None:
     if asset.source_name:
         return f"Source: {asset.source_name}"
     return None
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]

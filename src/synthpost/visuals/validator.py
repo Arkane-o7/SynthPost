@@ -34,6 +34,10 @@ def validate_asset(asset: VisualAsset, *, project_root: Path) -> list[str]:
         warnings.append(f"{asset.asset_id}: attribution is required but attribution_text is missing")
     if asset.rights_tier not in {"green", "yellow", "red"}:
         warnings.append(f"{asset.asset_id}: invalid rights_tier: {asset.rights_tier}")
+    if asset.rights_category == "unknown_or_rejected":
+        warnings.append(f"{asset.asset_id}: unknown or rejected rights category")
+    if asset.needs_manual_review and asset.manual_review_status not in {"approved", "not_required"}:
+        warnings.append(f"{asset.asset_id}: manual review is required before rendering")
     if asset.media_type is None:
         warnings.append(f"{asset.asset_id}: missing media_type")
     if not asset.source_url and asset.provider not in {"screenshot_provider", "local_library"}:

@@ -86,10 +86,11 @@ RSS summaries or loose facts.
 
 ## News Visuals
 
-`pipeline/visuals/default.py` is now a thin adapter over `src/synthpost/visuals`. It builds a timed visual rundown from the story manifest, writes rich provenance metadata into `visuals[]` and `visual_assets[]`, and saves an audit file at:
+`pipeline/visuals/default.py` is now a thin adapter over `src/synthpost/visuals`. It builds a timed visual rundown from the story manifest, writes rich provenance metadata into `visuals[]` and `visual_assets[]`, and saves audit files at:
 
 ```text
 episodes/<episode_id>/stories/<story_id>/visuals/visuals_audit.json
+episodes/<episode_id>/stories/<story_id>/visuals/visual_candidates.json
 ```
 
 Provider priority is newsroom-style and rights-aware:
@@ -103,7 +104,7 @@ Provider priority is newsroom-style and rights-aware:
 - Social: `social_media_leads` collects leads; `social_reference_ingest` only renders approved yellow references when `SYNTHPOST_ALLOW_RISKY_SOCIAL=1`
 - Stock fallback: `pexels_pixabay_optional` remains available, but is marked as `content_role: atmosphere` and ranks last
 
-Every selected visual carries `rights_tier`, `rights_confidence`, `usage_basis`, `source_authority`, `content_role`, `media_type`, `risk_level`, `manual_review_status`, attribution fields, and a still-image `motion` preset. Green assets are auto-selectable. Yellow assets require explicit enablement and approval metadata. Red assets are never auto-selected.
+Every selected visual carries `rights_tier`, `rights_confidence`, `usage_basis`, `source_authority`, `content_role`, `media_type`, `risk_level`, `manual_review_status`, attribution fields, and a still-image `motion` preset. The candidate audit also records `provider_type`, `source_domain`, `asset_url`, caption/alt text, matched entities, relevance reason, `rights_category`, manual-review flags, selection status, and rejection reasons. Green assets are auto-selectable. Yellow assets require explicit enablement and approval metadata. Red or unknown-rights assets are never auto-selected.
 
 PB-SHABD and PIB are separate sources. PB-SHABD is modeled as a safe authenticated/manual export source, not as an access-control bypass. Put exports in a configured folder such as:
 
