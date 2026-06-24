@@ -2,7 +2,8 @@ import React from 'react';
 import {AbsoluteFill, interpolate, Sequence, useCurrentFrame, useVideoConfig} from 'remotion';
 import {LowerThird} from '../components/LowerThird';
 import {SourceLabel} from '../components/SourceLabel';
-import {activeVisual, clampUnit, VisualMediaLayer} from '../components/VisualMediaLayer';
+import {activeVisual, clampUnit} from '../components/VisualMediaLayer';
+import {VisualSkillRenderer} from '../components/visualSkills/VisualSkillRenderer';
 import {brand, layout, typography} from '../styles/brand';
 import type {StoryProps, TimedVisual} from '../types';
 
@@ -59,7 +60,7 @@ export const FullScreenNewsVisuals: React.FC<StoryProps> = (props) => {
         return (
           <Sequence key={`${visual.publicPath}-${visual.start}-${index}`} from={startFrame} durationInFrames={durationFrames}>
             <AbsoluteFill style={{opacity: Math.min(fadeIn, fadeOut)}}>
-              <VisualMediaLayer
+              <VisualSkillRenderer
                 visual={visual}
                 progress={progress}
                 muted={muted}
