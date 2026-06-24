@@ -143,11 +143,31 @@ def _string_list(value: object) -> list[str]:
     return [compact_text(item) for item in value if compact_text(item)]
 
 
+def _source_metadata_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    metadata = raw.get("source_metadata") if isinstance(raw.get("source_metadata"), dict) else {}
+    fallback = {
+        "source": raw.get("source_name"),
+        "source_name": raw.get("source_name"),
+        "source_url": raw.get("source_url"),
+        "source_domain": raw.get("source_domain"),
+        "source_provider": raw.get("source_provider"),
+        "source_type": raw.get("source_type"),
+        "source_category": raw.get("source_category"),
+        "published_at": raw.get("published_at"),
+    }
+    return {
+        key: metadata.get(key) or value
+        for key, value in fallback.items()
+        if metadata.get(key) or value
+    }
+
+
 def visual_handoff_for_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     raw = manifest.get("raw") if isinstance(manifest.get("raw"), dict) else {}
     handoff = raw.get("handoff") if isinstance(raw.get("handoff"), dict) else {}
     visuals = handoff.get("visuals") if isinstance(handoff.get("visuals"), dict) else {}
-    source_metadata = visuals.get("source_metadata") if isinstance(visuals.get("source_metadata"), dict) else raw.get("source_metadata", {})
+    source_metadata = visuals.get("source_metadata") if isinstance(visuals.get("source_metadata"), dict) else {}
+    source_metadata = {**_source_metadata_from_raw(raw), **source_metadata}
     editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
     return {
         "candidate_id": visuals.get("candidate_id") or editorial.get("candidate_id"),

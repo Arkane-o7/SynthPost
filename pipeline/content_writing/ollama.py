@@ -23,12 +23,33 @@ def _string_list(value: object) -> list[str]:
     return [str(item) for item in value if str(item or "").strip()]
 
 
+def _source_metadata_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    metadata = raw.get("source_metadata") if isinstance(raw.get("source_metadata"), dict) else {}
+    fallback = {
+        "source": raw.get("source_name"),
+        "source_name": raw.get("source_name"),
+        "source_url": raw.get("source_url"),
+        "source_domain": raw.get("source_domain"),
+        "source_provider": raw.get("source_provider"),
+        "source_type": raw.get("source_type"),
+        "source_category": raw.get("source_category"),
+        "published_at": raw.get("published_at"),
+    }
+    return {
+        key: metadata.get(key) or value
+        for key, value in fallback.items()
+        if metadata.get(key) or value
+    }
+
+
 def writing_input_for(manifest: dict[str, Any]) -> dict[str, Any]:
     raw = manifest.get("raw", {}) if isinstance(manifest.get("raw"), dict) else {}
     handoff = raw.get("handoff") if isinstance(raw.get("handoff"), dict) else {}
     writing = handoff.get("writing") if isinstance(handoff.get("writing"), dict) else {}
     editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
     selected = raw.get("selected_candidate") if isinstance(raw.get("selected_candidate"), dict) else {}
+    source_metadata = writing.get("source_metadata") if isinstance(writing.get("source_metadata"), dict) else {}
+    source_metadata = {**_source_metadata_from_raw(raw), **source_metadata}
     return {
         "candidate_id": writing.get("candidate_id") or selected.get("candidate_id") or editorial.get("candidate_id"),
         "headline": writing.get("headline") or raw.get("headline_source", ""),
@@ -43,7 +64,7 @@ def writing_input_for(manifest: dict[str, Any]) -> dict[str, Any]:
         ],
         "entities": _string_list(writing.get("entities")) or _string_list(raw.get("entities") or raw.get("key_entities")),
         "sources": _dict_list(writing.get("sources")) or _dict_list(raw.get("sources")),
-        "source_metadata": writing.get("source_metadata") if isinstance(writing.get("source_metadata"), dict) else raw.get("source_metadata", {}),
+        "source_metadata": source_metadata,
         "why_it_matters": writing.get("why_it_matters") or editorial.get("why_it_matters", ""),
         "synthpost_angle": writing.get("synthpost_angle") or editorial.get("synthpost_angle") or editorial.get("possible_synthpost_angle", ""),
         "audience_curiosity_angle": writing.get("audience_curiosity_angle") or editorial.get("audience_curiosity_angle", ""),

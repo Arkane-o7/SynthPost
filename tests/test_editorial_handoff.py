@@ -187,6 +187,40 @@ class EditorialHandoffTests(unittest.TestCase):
         self.assertIsInstance(thumbnail_handoff_for_manifest(manifest)["entities"], list)
         self.assertEqual(summarize_episode(PROJECT_ROOT / "episodes" / self.episode_id)["headline"], "Sparse policy update")
 
+    def test_legacy_raw_without_handoff_still_exposes_source_metadata(self) -> None:
+        manifest = {
+            "episode_id": self.episode_id,
+            "story_id": "story_001",
+            "raw": {
+                "headline_source": "Legacy source story",
+                "summary": "A legacy story manifest has no selected-candidate handoff.",
+                "source_name": "Example Legacy",
+                "source_url": "https://legacy.example/news/story",
+                "source_domain": "legacy.example",
+                "category": "technology",
+                "published_at": "2026-06-24T09:00:00Z",
+                "facts": ["A legacy story manifest has no selected-candidate handoff."],
+                "entities": ["Legacy"],
+                "visual_opportunities": ["Source-page screenshot"],
+                "title_ideas": ["Legacy Source Story"],
+                "thumbnail_hooks": ["LEGACY SOURCE STORY"],
+            },
+            "script": {},
+            "direction": {},
+            "visuals": [],
+            "points": [],
+            "composition": {},
+        }
+
+        writing = writing_input_for(manifest)
+        visuals = visual_handoff_for_manifest(manifest)
+        thumbnail = thumbnail_handoff_for_manifest(manifest)
+
+        self.assertEqual(writing["source_metadata"]["source_url"], "https://legacy.example/news/story")
+        self.assertEqual(visuals["source_metadata"]["source_domain"], "legacy.example")
+        self.assertEqual(thumbnail["source_url"], "https://legacy.example/news/story")
+        self.assertEqual(thumbnail["source_domain"], "legacy.example")
+
     def test_run_episode_records_editorial_selection_in_episode_manifest(self) -> None:
         argv = [
             "run_episode.py",

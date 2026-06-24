@@ -84,13 +84,33 @@ def _string_list(value: object) -> list[str]:
     return [re.sub(r"\s+", " ", str(item or "")).strip() for item in value if str(item or "").strip()]
 
 
+def _source_metadata_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    metadata = raw.get("source_metadata") if isinstance(raw.get("source_metadata"), dict) else {}
+    fallback = {
+        "source": raw.get("source_name"),
+        "source_name": raw.get("source_name"),
+        "source_url": raw.get("source_url"),
+        "source_domain": raw.get("source_domain"),
+        "source_provider": raw.get("source_provider"),
+        "source_type": raw.get("source_type"),
+        "source_category": raw.get("source_category"),
+        "published_at": raw.get("published_at"),
+    }
+    return {
+        key: metadata.get(key) or value
+        for key, value in fallback.items()
+        if metadata.get(key) or value
+    }
+
+
 def thumbnail_handoff_for_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     raw = manifest.get("raw", {}) if isinstance(manifest.get("raw"), dict) else {}
     handoff = raw.get("handoff") if isinstance(raw.get("handoff"), dict) else {}
     thumbnail = handoff.get("thumbnail") if isinstance(handoff.get("thumbnail"), dict) else {}
     editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
     selected = raw.get("selected_candidate") if isinstance(raw.get("selected_candidate"), dict) else {}
-    source_metadata = thumbnail.get("source_metadata") if isinstance(thumbnail.get("source_metadata"), dict) else raw.get("source_metadata", {})
+    source_metadata = thumbnail.get("source_metadata") if isinstance(thumbnail.get("source_metadata"), dict) else {}
+    source_metadata = {**_source_metadata_from_raw(raw), **source_metadata}
     raw_thumbnail_hooks = _string_list(raw.get("thumbnail_hooks"))
     return {
         "candidate_id": thumbnail.get("candidate_id") or selected.get("candidate_id") or editorial.get("candidate_id"),
@@ -99,10 +119,10 @@ def thumbnail_handoff_for_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "title_ideas": _string_list(thumbnail.get("title_ideas")) or _string_list(raw.get("title_ideas")),
         "visual_opportunities": _string_list(thumbnail.get("visual_opportunities")) or _string_list(raw.get("visual_opportunities")),
         "entities": _string_list(thumbnail.get("entities")) or _string_list(raw.get("entities") or raw.get("key_entities")),
-        "source_metadata": source_metadata if isinstance(source_metadata, dict) else {},
-        "source_url": (source_metadata or {}).get("source_url") if isinstance(source_metadata, dict) else raw.get("source_url"),
-        "source_domain": (source_metadata or {}).get("source_domain") if isinstance(source_metadata, dict) else raw.get("source_domain"),
-        "source_name": (source_metadata or {}).get("source_name") if isinstance(source_metadata, dict) else raw.get("source_name"),
+        "source_metadata": source_metadata,
+        "source_url": source_metadata.get("source_url"),
+        "source_domain": source_metadata.get("source_domain"),
+        "source_name": source_metadata.get("source_name") or source_metadata.get("source"),
         "final_editorial_score": thumbnail.get("final_editorial_score") or selected.get("final_editorial_score"),
         "synthpost_angle": thumbnail.get("synthpost_angle") or editorial.get("synthpost_angle") or editorial.get("possible_synthpost_angle", ""),
         "audience_curiosity_angle": thumbnail.get("audience_curiosity_angle") or editorial.get("audience_curiosity_angle", ""),
