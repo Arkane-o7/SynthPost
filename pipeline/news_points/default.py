@@ -216,6 +216,7 @@ def _deterministic_section_items(
     claim_ids = _claim_ids_for_section(section, claims)
     source_notes = _item_source_notes(claim_ids, claims)
     texts = _claim_texts(section, claims, fallback_claim_ids=claim_ids)
+    texts = _prioritized_texts_for_section(section_id, texts)
     primary = texts[0] if texts else compact_text(section.get("narration"))
     secondary = texts[1] if len(texts) > 1 else primary
     midpoint = start + max(2.0, (end - start) * 0.42)
@@ -289,6 +290,28 @@ def _deterministic_section_items(
             )
         )
     return result
+
+
+def _prioritized_texts_for_section(section_id: str, texts: list[str]) -> list[str]:
+    if len(texts) < 2:
+        return texts
+    priority = {
+        "cold_open": [0, 1, 2],
+        "intro": [1, 0, 2],
+        "background_context": [2, 0, 1],
+        "main_developments": [0, 1, 2],
+        "why_it_matters": [1, 2, 0],
+        "stakes_consequences": [2, 1, 0],
+        "opposing_views_uncertainty": [2, 0, 1],
+        "conclusion": [0, 2, 1],
+        "outro_next_story": [1, 0, 2],
+    }.get(section_id, [0, 1, 2])
+    ordered: list[str] = []
+    for index in priority:
+        if index < len(texts):
+            ordered.append(texts[index])
+    ordered.extend(text for index, text in enumerate(texts) if index not in priority)
+    return _dedupe_strings(ordered)
 
 
 def _fallback_sections(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -386,6 +409,8 @@ def _normalize_item(
     field: str,
     section_id: str,
     fallback_type: str,
+    fallback_claim_ids: list[str],
+    fallback_source_notes: list[str],
     start: float,
     end: float,
 ) -> dict[str, Any] | None:
@@ -419,8 +444,8 @@ def _normalize_item(
         ),
         "type": compact_text(raw_item.get("type")) or fallback_type,
         "section_id": compact_text(raw_item.get("section_id")) or section_id,
-        "claim_ids": _string_list(raw_item.get("claim_ids")),
-        "source_notes": _string_list(raw_item.get("source_notes")),
+        "claim_ids": _string_list(raw_item.get("claim_ids")) or list(fallback_claim_ids),
+        "source_notes": _string_list(raw_item.get("source_notes")) or list(fallback_source_notes),
         "start": round(resolved_start, 2),
         "end": round(max(resolved_start + 2.0, resolved_end), 2),
     }
@@ -443,6 +468,7 @@ def normalize_contract(contract: dict[str, Any], manifest: dict[str, Any]) -> di
             provider_items = provider_section.get(field) if isinstance(provider_section, dict) else None
             fallback_items = base_by_id.get(section_id, {}).get(field, [])
             raw_items = provider_items if isinstance(provider_items, list) and provider_items else fallback_items
+            fallback_item = fallback_items[0] if fallback_items and isinstance(fallback_items[0], dict) else {}
             normalized[field] = [
                 item
                 for item in (
@@ -451,6 +477,8 @@ def normalize_contract(contract: dict[str, Any], manifest: dict[str, Any]) -> di
                         field=field,
                         section_id=section_id,
                         fallback_type=section_type,
+                        fallback_claim_ids=_string_list(fallback_item.get("claim_ids")),
+                        fallback_source_notes=_string_list(fallback_item.get("source_notes")),
                         start=float(base_by_id[section_id][field][0]["start"]) if base_by_id[section_id].get(field) else 0.0,
                         end=float(base_by_id[section_id][field][0]["end"]) if base_by_id[section_id].get(field) else 6.0,
                     )
@@ -517,6 +545,10 @@ def validate_contract(contract: dict[str, Any], manifest: dict[str, Any]) -> dic
                     continue
                 if len(_words(text)) > int(limits["max_words"]):
                     warnings.append(f"{section_id}/{field} item too long")
+                if not _string_list(item.get("claim_ids")):
+                    warnings.append(f"{section_id}/{field} item missing claim_ids")
+                if not _string_list(item.get("source_notes")):
+                    warnings.append(f"{section_id}/{field} item missing source_notes")
                 lowered = text.lower()
                 if any(pattern in lowered for pattern in CLICKBAIT_PATTERNS):
                     warnings.append(f"{section_id}/{field} item uses clickbait phrasing")
@@ -538,13 +570,13 @@ def flatten_contract(contract: dict[str, Any]) -> tuple[list[dict[str, Any]], li
     seen_chyrons: set[tuple[str, str]] = set()
     for section in _dict_list(contract.get("sections")):
         for item in [*_dict_list(section.get("key_points")), *_dict_list(section.get("on_screen_bullets"))]:
-            key = (compact_text(item.get("section_id")), compact_text(item.get("text")).lower())
+            key = ("point", compact_text(item.get("text")).lower())
             if key in seen_points:
                 continue
             seen_points.add(key)
             points.append({key: value for key, value in item.items() if value not in (None, "", [], {})})
         for item in [*_dict_list(section.get("lower_thirds")), *_dict_list(section.get("chyrons"))]:
-            key = (compact_text(item.get("section_id")), compact_text(item.get("text")).lower())
+            key = ("chyron", compact_text(item.get("text")).lower())
             if key in seen_chyrons:
                 continue
             seen_chyrons.add(key)

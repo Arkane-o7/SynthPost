@@ -43,8 +43,8 @@ class NewsPointsChyronsTests(unittest.TestCase):
 
         sections = updated["script"]["sections"]
         self.assertEqual(len(sections), len(ollama.DURATION_PROFILES["longform"]["section_ids"]))
-        self.assertGreaterEqual(len(points), len(sections))
-        self.assertGreaterEqual(len(updated["chyrons"]), len(sections))
+        self.assertGreaterEqual(len(points), 3)
+        self.assertGreaterEqual(len(updated["chyrons"]), 3)
         self.assertEqual(updated["news_points_review"]["status"], "pass")
         for section in sections:
             self.assertTrue(section["key_points"])
@@ -52,6 +52,17 @@ class NewsPointsChyronsTests(unittest.TestCase):
             self.assertTrue(section["chyrons"])
             self.assertTrue(section["on_screen_bullets"])
             self.assertTrue(section["key_points"][0]["claim_ids"])
+
+    def test_flattened_points_and_chyrons_are_deduped(self) -> None:
+        manifest = scripted_manifest()
+        contract = news_points.normalize_contract(news_points._deterministic_contract(manifest), manifest)
+
+        point_texts = [item["text"].lower() for item in contract["points"]]
+        chyron_texts = [item["text"].lower() for item in contract["chyrons"]]
+
+        self.assertEqual(len(point_texts), len(set(point_texts)))
+        self.assertEqual(len(chyron_texts), len(set(chyron_texts)))
+        self.assertGreaterEqual(len(chyron_texts), 3)
 
     def test_generated_screen_text_respects_length_limits(self) -> None:
         manifest = scripted_manifest()
@@ -110,6 +121,32 @@ class NewsPointsChyronsTests(unittest.TestCase):
         self.assertTrue(any("unsupported named entity" in warning for warning in review["warnings"]))
         self.assertTrue(any("unsupported factual marker: 2040" in warning for warning in review["warnings"]))
         self.assertTrue(any("unsupported causal marker" in warning for warning in review["warnings"]))
+
+    def test_provider_items_without_claim_ids_get_traceable_fallbacks(self) -> None:
+        manifest = scripted_manifest(mode="short")
+        section_id = manifest["script"]["sections"][0]["section_id"]
+        contract = {
+            "provider": "ollama",
+            "model": "fixture",
+            "sections": [
+                {
+                    "section_id": section_id,
+                    "key_points": [{"text": "Nvidia warned AI chip export controls could affect global data center supply chains"}],
+                    "lower_thirds": [{"text": "Nvidia warned AI chip export controls could affect global data center supply chains"}],
+                    "chyrons": [],
+                    "on_screen_bullets": [],
+                    "quote_cards": [],
+                    "data_callouts": [],
+                }
+            ],
+        }
+
+        normalized = news_points.normalize_contract(contract, manifest)
+        provider_item = normalized["sections"][0]["key_points"][0]
+
+        self.assertEqual(normalized["review"]["status"], "pass")
+        self.assertTrue(provider_item["claim_ids"])
+        self.assertTrue(provider_item["source_notes"])
 
     def test_short_form_scripts_still_generate_points(self) -> None:
         manifest = scripted_manifest(mode="short")
