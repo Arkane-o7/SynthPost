@@ -126,15 +126,74 @@
       "type": "object",
       "required": ["text", "headline", "category"],
       "properties": {
+        "script_version": { "type": "string" },
         "text": { "type": "string" },
+        "title": { "type": "string" },
         "headline": { "type": "string" },
         "category": { "type": "string" },
+        "duration_mode": { "type": "string", "enum": ["short", "standard", "longform"] },
+        "target_duration_seconds": { "type": "number" },
+        "estimated_duration_seconds": { "type": "number" },
+        "word_count": { "type": "number" },
+        "sections": {
+          "type": "array",
+          "description": "Duration-aware analytical script sections for anchor narration.",
+          "items": {
+            "type": "object",
+            "required": ["section_id", "title", "narration", "estimated_duration_seconds", "source_notes"],
+            "properties": {
+              "section_id": {
+                "type": "string",
+                "enum": [
+                  "cold_open",
+                  "intro",
+                  "background_context",
+                  "main_developments",
+                  "why_it_matters",
+                  "stakes_consequences",
+                  "opposing_views_uncertainty",
+                  "conclusion",
+                  "outro_next_story"
+                ]
+              },
+              "title": { "type": "string" },
+              "narration": { "type": "string" },
+              "estimated_duration_seconds": { "type": "number" },
+              "claim_ids": { "type": "array", "items": { "type": "string" } },
+              "source_notes": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": true
+          }
+        },
         "claim_ids": { "type": "array", "items": { "type": "string" } },
         "source_ids": { "type": "array", "items": { "type": "string" } },
+        "major_claims": {
+          "type": "array",
+          "description": "Major factual claims with claim_ids linking them back to raw.claims.",
+          "items": {
+            "type": "object",
+            "required": ["text", "claim_ids"],
+            "properties": {
+              "text": { "type": "string" },
+              "claim_ids": { "type": "array", "items": { "type": "string" } }
+            },
+            "additionalProperties": true
+          }
+        },
         "caveats": { "type": "array", "items": { "type": "string" } },
         "evidence_summary": {
           "type": "object",
           "description": "Evidence citation summary for the generated script.",
+          "additionalProperties": true
+        },
+        "contract_review": {
+          "type": "object",
+          "description": "Validation result for the structured long-form writing contract.",
+          "additionalProperties": true
+        },
+        "groundedness_review": {
+          "type": "object",
+          "description": "Basic unsupported-claim checks for generated script copy.",
           "additionalProperties": true
         }
       },
