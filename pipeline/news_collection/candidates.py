@@ -340,11 +340,13 @@ class CandidateStory:
             "claim_ids": list(self.claim_ids),
             "why_it_matters": self.why_it_matters,
             "why_it_could_perform_well": self.why_it_could_perform_well,
+            "audience_curiosity_angle": self.audience_curiosity_angle(),
             "possible_synthpost_angle": self.possible_synthpost_angle,
             "possible_thumbnail_hook": self.possible_thumbnail_hook,
             "possible_title_ideas": list(self.possible_title_ideas),
             "visual_opportunities": list(self.visual_opportunities),
             "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
+            "explainability_notes": self.explainability_notes(),
             "selection_status": self.selection_status,
             "selection_reason": self.selection_reason,
             "rejection_reason": self.rejection_reason or "; ".join(self.rejection_reasons),
@@ -358,6 +360,68 @@ class CandidateStory:
         for field_name in SCORE_FIELDS:
             record[field_name] = float(getattr(self, field_name))
         return record
+
+    def scores(self) -> dict[str, float]:
+        return {field_name: float(getattr(self, field_name)) for field_name in SCORE_FIELDS}
+
+    def source_metadata(self) -> dict[str, Any]:
+        return {
+            "source": self.source_name,
+            "source_name": self.source_name,
+            "source_url": self.source_url,
+            "source_domain": self.source_domain,
+            "source_provider": self.source_provider,
+            "source_type": self.source_type,
+            "source_category": self.source_category,
+            "feed_url": self.feed_url,
+            "published_at": self.published_at,
+        }
+
+    def audience_curiosity_angle(self) -> str:
+        return self.why_it_could_perform_well or self.score_reasons.get("viral_potential_score", "")
+
+    def explainability_notes(self) -> str:
+        return self.score_reasons.get("explainability_score", "")
+
+    def selected_candidate_metadata(self) -> dict[str, Any]:
+        return {
+            "candidate_id": self.candidate_id,
+            "cluster_id": self.cluster_id,
+            "headline": self.headline,
+            "normalized_headline": self.normalized_headline,
+            "source": self.source_name,
+            "source_name": self.source_name,
+            "source_url": self.source_url,
+            "source_domain": self.source_domain,
+            "source_provider": self.source_provider,
+            "source_type": self.source_type,
+            "source_category": self.source_category,
+            "published_at": self.published_at,
+            "category": self.category,
+            "normalized_category": self.category,
+            "summary": self.summary,
+            "facts": list(self.facts),
+            "claim_ids": list(self.claim_ids),
+            "entities": list(self.key_entities),
+            "key_entities": list(self.key_entities),
+            "source_reliability_tier": self.source_reliability_tier,
+            "scores": self.scores(),
+            "score_reasons": dict(self.score_reasons),
+            "final_editorial_score": float(self.final_editorial_score),
+            "selection_status": self.selection_status,
+            "selection_reason": self.selection_reason,
+            "rejection_reasons": list(self.rejection_reasons),
+            "why_it_matters": self.why_it_matters,
+            "synthpost_angle": self.possible_synthpost_angle,
+            "possible_synthpost_angle": self.possible_synthpost_angle,
+            "possible_title_ideas": list(self.possible_title_ideas),
+            "thumbnail_hook": self.possible_thumbnail_hook,
+            "possible_thumbnail_hook": self.possible_thumbnail_hook,
+            "visual_opportunities": list(self.visual_opportunities),
+            "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
+            "audience_curiosity_angle": self.audience_curiosity_angle(),
+            "explainability_notes": self.explainability_notes(),
+        }
 
     def to_raw(self) -> dict[str, Any]:
         source = {
@@ -383,12 +447,95 @@ class CandidateStory:
             }
             for claim_id, fact in zip(self.claim_ids, self.facts, strict=False)
         ]
+        source_metadata = self.source_metadata()
+        selected_candidate = self.selected_candidate_metadata()
+        editorial_metadata = {
+            "candidate_id": self.candidate_id,
+            "cluster_id": self.cluster_id,
+            "source_provider": self.source_provider,
+            "source_type": self.source_type,
+            "source_category": self.source_category,
+            "feed_url": self.feed_url,
+            "source_domain": self.source_domain,
+            "dedupe_status": self.dedupe_status,
+            "dedupe_reasons": list(self.dedupe_reasons),
+            "dedupe_merged_candidate_ids": list(self.dedupe_merged_candidate_ids),
+            "dedupe_merged_source_urls": list(self.dedupe_merged_source_urls),
+            "selection_status": self.selection_status,
+            "selection_reason": self.selection_reason,
+            "rejection_reasons": list(self.rejection_reasons),
+            "score_reasons": dict(self.score_reasons),
+            "why_it_matters": self.why_it_matters,
+            "why_it_could_perform_well": self.why_it_could_perform_well,
+            "audience_curiosity_angle": self.audience_curiosity_angle(),
+            "possible_synthpost_angle": self.possible_synthpost_angle,
+            "synthpost_angle": self.possible_synthpost_angle,
+            "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
+            "explainability_notes": self.explainability_notes(),
+            "scores": self.scores(),
+        }
+        handoff = {
+            "writing": {
+                "candidate_id": self.candidate_id,
+                "headline": self.headline,
+                "summary": self.summary,
+                "category": self.category,
+                "facts": list(self.facts),
+                "claims": claims,
+                "claim_ids": list(self.claim_ids),
+                "entities": list(self.key_entities),
+                "sources": [source],
+                "source_metadata": source_metadata,
+                "why_it_matters": self.why_it_matters,
+                "synthpost_angle": self.possible_synthpost_angle,
+                "audience_curiosity_angle": self.audience_curiosity_angle(),
+                "explainability_notes": self.explainability_notes(),
+                "score_reasons": dict(self.score_reasons),
+                "scores": self.scores(),
+                "selection_reason": self.selection_reason,
+            },
+            "visuals": {
+                "candidate_id": self.candidate_id,
+                "headline": self.headline,
+                "category": self.category,
+                "visual_opportunities": list(self.visual_opportunities),
+                "entities": list(self.key_entities),
+                "source_metadata": source_metadata,
+                "candidate_relevance": {
+                    "final_editorial_score": float(self.final_editorial_score),
+                    "visual_potential_score": float(self.visual_potential_score),
+                    "importance_score": float(self.importance_score),
+                    "synthpost_fit_score": float(self.synthpost_fit_score),
+                    "score_reasons": dict(self.score_reasons),
+                },
+                "why_it_matters": self.why_it_matters,
+                "synthpost_angle": self.possible_synthpost_angle,
+                "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
+            },
+            "thumbnail": {
+                "candidate_id": self.candidate_id,
+                "headline": self.headline,
+                "thumbnail_hook": self.possible_thumbnail_hook,
+                "title_ideas": list(self.possible_title_ideas),
+                "visual_opportunities": list(self.visual_opportunities),
+                "entities": list(self.key_entities),
+                "source_metadata": source_metadata,
+                "final_editorial_score": float(self.final_editorial_score),
+                "synthpost_angle": self.possible_synthpost_angle,
+                "audience_curiosity_angle": self.audience_curiosity_angle(),
+            },
+        }
         return {
             "headline_source": self.headline,
             "summary": self.summary,
             "source_url": self.source_url,
             "source_name": self.source_name,
+            "source_domain": self.source_domain,
+            "source_provider": self.source_provider,
+            "source_type": self.source_type,
+            "source_category": self.source_category,
             "category": self.category,
+            "normalized_category": self.category,
             "published_at": self.published_at,
             "facts": list(self.facts),
             "entities": list(self.key_entities),
@@ -396,28 +543,10 @@ class CandidateStory:
             "visual_opportunities": list(self.visual_opportunities),
             "title_ideas": list(self.possible_title_ideas),
             "thumbnail_hooks": [self.possible_thumbnail_hook] if self.possible_thumbnail_hook else [],
-            "editorial": {
-                "candidate_id": self.candidate_id,
-                "cluster_id": self.cluster_id,
-                "source_provider": self.source_provider,
-                "source_type": self.source_type,
-                "source_category": self.source_category,
-                "feed_url": self.feed_url,
-                "source_domain": self.source_domain,
-                "dedupe_status": self.dedupe_status,
-                "dedupe_reasons": list(self.dedupe_reasons),
-                "dedupe_merged_candidate_ids": list(self.dedupe_merged_candidate_ids),
-                "dedupe_merged_source_urls": list(self.dedupe_merged_source_urls),
-                "selection_status": self.selection_status,
-                "selection_reason": self.selection_reason,
-                "rejection_reasons": list(self.rejection_reasons),
-                "score_reasons": dict(self.score_reasons),
-                "why_it_matters": self.why_it_matters,
-                "why_it_could_perform_well": self.why_it_could_perform_well,
-                "possible_synthpost_angle": self.possible_synthpost_angle,
-                "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
-                "scores": {field_name: float(getattr(self, field_name)) for field_name in SCORE_FIELDS},
-            },
+            "source_metadata": source_metadata,
+            "selected_candidate": selected_candidate,
+            "editorial": editorial_metadata,
+            "handoff": handoff,
             "sources": [source],
             "claims": claims,
         }

@@ -137,6 +137,32 @@ def unique(values: list[str], *, limit: int | None = None) -> list[str]:
     return result
 
 
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [compact_text(item) for item in value if compact_text(item)]
+
+
+def visual_handoff_for_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    raw = manifest.get("raw") if isinstance(manifest.get("raw"), dict) else {}
+    handoff = raw.get("handoff") if isinstance(raw.get("handoff"), dict) else {}
+    visuals = handoff.get("visuals") if isinstance(handoff.get("visuals"), dict) else {}
+    source_metadata = visuals.get("source_metadata") if isinstance(visuals.get("source_metadata"), dict) else raw.get("source_metadata", {})
+    editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
+    return {
+        "candidate_id": visuals.get("candidate_id") or editorial.get("candidate_id"),
+        "headline": visuals.get("headline") or raw.get("headline_source", ""),
+        "category": visuals.get("category") or raw.get("category", ""),
+        "visual_opportunities": _string_list(visuals.get("visual_opportunities")) or _string_list(raw.get("visual_opportunities")),
+        "entities": _string_list(visuals.get("entities")) or _string_list(raw.get("entities") or raw.get("key_entities")),
+        "source_metadata": source_metadata if isinstance(source_metadata, dict) else {},
+        "candidate_relevance": visuals.get("candidate_relevance") if isinstance(visuals.get("candidate_relevance"), dict) else {},
+        "why_it_matters": visuals.get("why_it_matters") or editorial.get("why_it_matters", ""),
+        "synthpost_angle": visuals.get("synthpost_angle") or editorial.get("synthpost_angle") or editorial.get("possible_synthpost_angle", ""),
+        "risks_or_reasons_to_avoid": _string_list(visuals.get("risks_or_reasons_to_avoid")) or _string_list(editorial.get("risks_or_reasons_to_avoid")),
+    }
+
+
 def keyword_phrases(text: str, category: str = "") -> list[str]:
     words = tokenize(text)
     phrases: list[str] = []
@@ -219,6 +245,7 @@ def _duration(manifest: dict[str, Any]) -> float:
 def build_story_segments(manifest: dict[str, Any], *, target_count: int = 5) -> list[StorySegment]:
     raw = manifest.get("raw") if isinstance(manifest.get("raw"), dict) else {}
     script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
+    visual_handoff = visual_handoff_for_manifest(manifest)
     duration = _duration(manifest)
     category = compact_text((script or {}).get("category") or (raw or {}).get("category"))
     claim_texts = [
@@ -234,6 +261,14 @@ def build_story_segments(manifest: dict[str, Any], *, target_count: int = 5) -> 
     )
     summary = compact_text((raw or {}).get("summary"))
     script_text = compact_text((script or {}).get("text"))
+    planning_context = " ".join(
+        [
+            *visual_handoff.get("entities", []),
+            *visual_handoff.get("visual_opportunities", []),
+            compact_text(visual_handoff.get("why_it_matters")),
+            compact_text(visual_handoff.get("synthpost_angle")),
+        ]
+    )
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
     for headline_item in _headline_items(manifest):
@@ -261,7 +296,7 @@ def build_story_segments(manifest: dict[str, Any], *, target_count: int = 5) -> 
             end = (index + 1) * duration / count
         end = min(duration, max(start + 2.0, end))
         fact = facts[index % len(facts)] if facts else ""
-        text = " ".join(part for part in [item["text"], fact, summary, script_text[:600]] if part)
+        text = " ".join(part for part in [item["text"], fact, summary, planning_context, script_text[:600]] if part)
         keywords = keyword_phrases(text, category)
         segments.append(
             StorySegment(
@@ -305,13 +340,28 @@ def desired_types_for_segment(segment: StorySegment, category: str) -> list[Asse
 def build_visual_queries(manifest: dict[str, Any], segments: list[StorySegment]) -> list[VisualQuery]:
     raw = manifest.get("raw") if isinstance(manifest.get("raw"), dict) else {}
     script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
+    visual_handoff = visual_handoff_for_manifest(manifest)
+    source_metadata = visual_handoff.get("source_metadata") if isinstance(visual_handoff.get("source_metadata"), dict) else {}
     category = compact_text((script or {}).get("category") or (raw or {}).get("category"))
-    source_name = compact_text((raw or {}).get("source_name"))
-    source_host = _source_host(manifest)
+    source_name = compact_text((raw or {}).get("source_name") or source_metadata.get("source_name") or source_metadata.get("source"))
+    source_host = _source_host(manifest) or compact_text(source_metadata.get("source_domain"))
+    entities = visual_handoff.get("entities", [])
+    visual_opportunities = visual_handoff.get("visual_opportunities", [])
     queries: list[VisualQuery] = []
     for segment in segments:
         keywords = unique(segment.keywords, limit=10)
-        query_terms = unique([segment.title, source_name, source_host, category, *keywords[:5]], limit=9)
+        query_terms = unique(
+            [
+                segment.title,
+                source_name,
+                source_host,
+                category,
+                *entities[:3],
+                *visual_opportunities[:2],
+                *keywords[:5],
+            ],
+            limit=9,
+        )
         queries.append(
             VisualQuery(
                 segment_id=segment.segment_id,

@@ -37,6 +37,32 @@ def _final_artifact(episode_id: str, episode: Path, episode_manifest: dict[str, 
     return {}
 
 
+def _selected_candidate_summary(raw: dict[str, Any], episode_manifest: dict[str, Any]) -> dict[str, Any]:
+    selected = raw.get("selected_candidate") if isinstance(raw.get("selected_candidate"), dict) else {}
+    editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
+    scores = editorial.get("scores") if isinstance(editorial.get("scores"), dict) else {}
+    episode_selection = (
+        episode_manifest.get("editorial_selection")
+        if isinstance(episode_manifest.get("editorial_selection"), dict)
+        else {}
+    )
+    episode_selected = episode_selection.get("selected_candidates") if isinstance(episode_selection.get("selected_candidates"), list) else []
+    first_episode_selected = episode_selected[0] if episode_selected and isinstance(episode_selected[0], dict) else {}
+    return {
+        "candidate_id": selected.get("candidate_id") or editorial.get("candidate_id") or first_episode_selected.get("candidate_id"),
+        "headline": selected.get("headline") or raw.get("headline_source") or first_episode_selected.get("headline"),
+        "source": selected.get("source") or selected.get("source_name") or raw.get("source_name") or first_episode_selected.get("source"),
+        "source_url": selected.get("source_url") or raw.get("source_url") or first_episode_selected.get("source_url"),
+        "source_domain": selected.get("source_domain") or raw.get("source_domain") or first_episode_selected.get("source_domain"),
+        "category": selected.get("normalized_category") or selected.get("category") or raw.get("category") or first_episode_selected.get("category"),
+        "final_editorial_score": selected.get("final_editorial_score")
+        or scores.get("final_editorial_score")
+        or first_episode_selected.get("final_editorial_score"),
+        "selection_reason": selected.get("selection_reason") or editorial.get("selection_reason") or first_episode_selected.get("selection_reason"),
+        "story_candidates_path": raw.get("story_candidates_path") or episode_selection.get("story_candidates_path"),
+    }
+
+
 def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
     value = Path(path_or_episode_id)
     episode = value if value.is_absolute() or value.exists() else episode_dir(str(path_or_episode_id))
@@ -55,6 +81,7 @@ def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
     episode_manifest = read_episode_manifest(episode_id)
     final = _final_artifact(episode_id, episode, episode_manifest)
     final_media = final.get("media") if isinstance(final.get("media"), dict) else ffprobe_summary(final.get("path", ""))
+    selected_candidate = _selected_candidate_summary(raw, episode_manifest)
 
     warnings: list[str] = []
     if not stories:
@@ -73,6 +100,7 @@ def summarize_episode(path_or_episode_id: str | Path) -> dict[str, Any]:
         "story_count": len(stories),
         "headline": script.get("headline") or raw.get("headline_source") or "unknown",
         "topic": script.get("category") or raw.get("category") or "unknown",
+        "selected_candidate": selected_candidate,
         "llm": {
             "provider": script.get("llm_provider") or "unknown",
             "model": script.get("llm_model") or "unknown",
@@ -110,6 +138,10 @@ def print_summary(summary: dict[str, Any]) -> None:
         f"Story count: {summary['story_count']}",
         f"Headline: {summary['headline']}",
         f"Topic/category: {summary['topic']}",
+        f"Selected source: {summary['selected_candidate'].get('source') or 'unknown'}",
+        f"Selected category: {summary['selected_candidate'].get('category') or 'unknown'}",
+        f"Final editorial score: {summary['selected_candidate'].get('final_editorial_score') or 'unknown'}",
+        f"Selection reason: {summary['selected_candidate'].get('selection_reason') or 'unknown'}",
         f"LLM: {summary['llm']['provider']} / {summary['llm']['model']}",
         f"TTS: {summary['tts']['provider']} / {summary['tts']['voice']}",
         f"Render profile: {summary['render_profile']}",

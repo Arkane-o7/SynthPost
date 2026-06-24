@@ -78,6 +78,37 @@ LOGO_TERMS = {"logo", "wordmark", "favicon", "brandmark", "brand_mark"}
 GENERIC_SPACE_TERMS = {"star", "stars", "skywatching", "solar-system", "solar_system", "galaxy", "nebula"}
 
 
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [re.sub(r"\s+", " ", str(item or "")).strip() for item in value if str(item or "").strip()]
+
+
+def thumbnail_handoff_for_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    raw = manifest.get("raw", {}) if isinstance(manifest.get("raw"), dict) else {}
+    handoff = raw.get("handoff") if isinstance(raw.get("handoff"), dict) else {}
+    thumbnail = handoff.get("thumbnail") if isinstance(handoff.get("thumbnail"), dict) else {}
+    editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
+    selected = raw.get("selected_candidate") if isinstance(raw.get("selected_candidate"), dict) else {}
+    source_metadata = thumbnail.get("source_metadata") if isinstance(thumbnail.get("source_metadata"), dict) else raw.get("source_metadata", {})
+    raw_thumbnail_hooks = _string_list(raw.get("thumbnail_hooks"))
+    return {
+        "candidate_id": thumbnail.get("candidate_id") or selected.get("candidate_id") or editorial.get("candidate_id"),
+        "headline": thumbnail.get("headline") or raw.get("headline_source", ""),
+        "thumbnail_hook": thumbnail.get("thumbnail_hook") or (raw_thumbnail_hooks[0] if raw_thumbnail_hooks else ""),
+        "title_ideas": _string_list(thumbnail.get("title_ideas")) or _string_list(raw.get("title_ideas")),
+        "visual_opportunities": _string_list(thumbnail.get("visual_opportunities")) or _string_list(raw.get("visual_opportunities")),
+        "entities": _string_list(thumbnail.get("entities")) or _string_list(raw.get("entities") or raw.get("key_entities")),
+        "source_metadata": source_metadata if isinstance(source_metadata, dict) else {},
+        "source_url": (source_metadata or {}).get("source_url") if isinstance(source_metadata, dict) else raw.get("source_url"),
+        "source_domain": (source_metadata or {}).get("source_domain") if isinstance(source_metadata, dict) else raw.get("source_domain"),
+        "source_name": (source_metadata or {}).get("source_name") if isinstance(source_metadata, dict) else raw.get("source_name"),
+        "final_editorial_score": thumbnail.get("final_editorial_score") or selected.get("final_editorial_score"),
+        "synthpost_angle": thumbnail.get("synthpost_angle") or editorial.get("synthpost_angle") or editorial.get("possible_synthpost_angle", ""),
+        "audience_curiosity_angle": thumbnail.get("audience_curiosity_angle") or editorial.get("audience_curiosity_angle", ""),
+    }
+
+
 def run(
     story_json_path: str | Path,
     *,
@@ -225,8 +256,11 @@ def run(
 def build_brief(manifest: dict[str, Any]) -> ThumbnailBrief:
     raw = manifest.get("raw", {}) if isinstance(manifest.get("raw"), dict) else {}
     script = manifest.get("script", {}) if isinstance(manifest.get("script"), dict) else {}
-    video_title = str(script.get("headline") or raw.get("headline_source") or "SynthPost Briefing")
-    episode_headline = str(raw.get("summary") or video_title)
+    thumbnail_handoff = thumbnail_handoff_for_manifest(manifest)
+    title_ideas = thumbnail_handoff.get("title_ideas") if isinstance(thumbnail_handoff.get("title_ideas"), list) else []
+    thumbnail_hook = str(thumbnail_handoff.get("thumbnail_hook") or "")
+    video_title = str(script.get("headline") or (title_ideas[0] if title_ideas else "") or raw.get("headline_source") or "SynthPost Briefing")
+    episode_headline = str(thumbnail_hook or raw.get("summary") or video_title)
     story_text = _story_text(raw, script)
     topic = _topic_from_manifest(raw, script)
     emotion = _emotion_for_topic(topic, " ".join([video_title, episode_headline]))
@@ -240,16 +274,23 @@ def build_brief(manifest: dict[str, Any]) -> ThumbnailBrief:
         video_title=video_title,
         episode_headline=episode_headline,
     )
+    story_angle = str(
+        thumbnail_handoff.get("synthpost_angle")
+        or thumbnail_handoff.get("audience_curiosity_angle")
+        or raw.get("summary")
+        or episode_headline
+    )
+    curiosity_gap = str(thumbnail_handoff.get("audience_curiosity_angle") or thumbnail_hook or _curiosity_gap(topic))
     return ThumbnailBrief(
         brief_id=f"{manifest.get('episode_id', 'episode')}_{manifest.get('story_id', 'story')}",
         video_title=video_title,
         episode_headline=episode_headline,
         topic=topic,
         main_subjects=subjects,
-        story_angle=str(raw.get("summary") or episode_headline),
+        story_angle=story_angle,
         emotion=emotion,
         stakes=stakes,
-        curiosity_gap=_curiosity_gap(topic),
+        curiosity_gap=curiosity_gap,
         approved_thumbnail_text=approved_text,
         assets=assets,
         render_preferences={
@@ -265,6 +306,7 @@ def build_brief(manifest: dict[str, Any]) -> ThumbnailBrief:
 
 def brief_record_for_story(manifest: dict[str, Any]) -> dict[str, Any]:
     brief = build_brief(manifest)
+    handoff = thumbnail_handoff_for_manifest(manifest)
     return {
         "brief_id": brief.brief_id,
         "video_title": brief.video_title,
@@ -279,6 +321,7 @@ def brief_record_for_story(manifest: dict[str, Any]) -> dict[str, Any]:
         "forbidden_thumbnail_text": brief.forbidden_thumbnail_text,
         "assets": brief_asset_groups(brief.assets),
         "render_preferences": brief.render_preferences,
+        "handoff": handoff,
     }
 
 
@@ -352,6 +395,7 @@ def thumbnail_visual_candidate_report(
             "entities": [subject.name for subject in subjects],
             "source_name": raw.get("source_name"),
             "source_url": raw.get("source_url"),
+            "source_domain": raw.get("source_domain"),
         },
         "selection_policy": [
             "current story official/source image",
@@ -691,12 +735,21 @@ def _story_terms(raw: dict[str, Any], script: dict[str, Any], subjects: list[Thu
 def _story_text(raw: dict[str, Any], script: dict[str, Any]) -> str:
     facts = raw.get("facts", [])
     fact_text = " ".join(str(item) for item in facts if item) if isinstance(facts, list) else str(facts or "")
+    entities = raw.get("entities") or raw.get("key_entities") or []
+    entity_text = " ".join(str(item) for item in entities if item) if isinstance(entities, list) else str(entities or "")
+    opportunities = raw.get("visual_opportunities", [])
+    opportunity_text = " ".join(str(item) for item in opportunities if item) if isinstance(opportunities, list) else str(opportunities or "")
+    editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
     return ". ".join(
         str(value)
         for value in [
             raw.get("headline_source"),
             raw.get("summary"),
             fact_text,
+            entity_text,
+            opportunity_text,
+            editorial.get("possible_synthpost_angle") if isinstance(editorial, dict) else "",
+            editorial.get("audience_curiosity_angle") if isinstance(editorial, dict) else "",
             script.get("headline") if isinstance(script, dict) else "",
             script.get("text") if isinstance(script, dict) else "",
             raw.get("category"),
