@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import shutil
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 from pipeline.news_collection import rss
@@ -127,6 +126,9 @@ class StoryDiscoveryCandidateTests(unittest.TestCase):
     def test_category_normalization_prefers_synthpost_domains(self) -> None:
         self.assertEqual(normalize_category("markets", source_url="https://example.com/tariff-inflation"), "economy")
         self.assertEqual(normalize_category("", source_name="NASA Image and Video Library"), "general")
+        self.assertEqual(normalize_category("entertainment", source_name="Daily Entertainment"), "entertainment")
+        self.assertEqual(normalize_category("celebrity", source_name="Entertainment Wire"), "celebrity")
+        self.assertEqual(normalize_category("ai", source_name="Entertainment Wire"), "ai")
 
     def test_rss_failures_and_missing_fields_degrade_gracefully(self) -> None:
         self.assertEqual(rss.parse_feed("<rss><channel><item>", url="https://bad.example/rss"), [])

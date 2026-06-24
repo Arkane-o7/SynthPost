@@ -32,8 +32,11 @@ EDITORIAL_FIELDS = (
     "possible_title_ideas",
     "visual_opportunities",
     "risks_or_reasons_to_avoid",
+    "selection_status",
     "selection_reason",
     "rejection_reason",
+    "rejection_reasons",
+    "score_reasons",
 )
 
 
@@ -119,9 +122,15 @@ def normalize_category(value: object, *, source_url: str = "", source_name: str 
         "global": ("world", "global", "international"),
     }
     for category, markers in categories.items():
-        if any(marker in haystack for marker in markers):
+        if any(_category_marker_matches(haystack, marker) for marker in markers):
             return category
     return text or "general"
+
+
+def _category_marker_matches(haystack: str, marker: str) -> bool:
+    if len(marker) <= 3 or " " in marker:
+        return bool(re.search(rf"\b{re.escape(marker)}\b", haystack))
+    return marker in haystack
 
 
 def normalize_datetime(value: object) -> str:
@@ -243,8 +252,11 @@ class CandidateStory:
     possible_title_ideas: list[str] = field(default_factory=list)
     visual_opportunities: list[str] = field(default_factory=list)
     risks_or_reasons_to_avoid: list[str] = field(default_factory=list)
+    selection_status: str = "candidate"
     selection_reason: str = ""
     rejection_reason: str = ""
+    rejection_reasons: list[str] = field(default_factory=list)
+    score_reasons: dict[str, str] = field(default_factory=dict)
     importance_score: float = 0.0
     viral_potential_score: float = 0.0
     visual_potential_score: float = 0.0
@@ -288,8 +300,11 @@ class CandidateStory:
             "possible_title_ideas": list(self.possible_title_ideas),
             "visual_opportunities": list(self.visual_opportunities),
             "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
+            "selection_status": self.selection_status,
             "selection_reason": self.selection_reason,
-            "rejection_reason": self.rejection_reason,
+            "rejection_reason": self.rejection_reason or "; ".join(self.rejection_reasons),
+            "rejection_reasons": list(self.rejection_reasons),
+            "score_reasons": dict(self.score_reasons),
         }
         for field_name in SCORE_FIELDS:
             record[field_name] = float(getattr(self, field_name))
@@ -338,10 +353,15 @@ class CandidateStory:
                 "source_type": self.source_type,
                 "feed_url": self.feed_url,
                 "source_domain": self.source_domain,
+                "selection_status": self.selection_status,
+                "selection_reason": self.selection_reason,
+                "rejection_reasons": list(self.rejection_reasons),
+                "score_reasons": dict(self.score_reasons),
                 "why_it_matters": self.why_it_matters,
                 "why_it_could_perform_well": self.why_it_could_perform_well,
                 "possible_synthpost_angle": self.possible_synthpost_angle,
                 "risks_or_reasons_to_avoid": list(self.risks_or_reasons_to_avoid),
+                "scores": {field_name: float(getattr(self, field_name)) for field_name in SCORE_FIELDS},
             },
             "sources": [source],
             "claims": claims,
@@ -361,6 +381,8 @@ def build_candidate_story(
     source_provider: object = "rss",
     source_type: object = "rss",
     feed_url: object = "",
+    source_reliability_tier: object = "unknown",
+    visual_opportunities: list[str] | None = None,
 ) -> CandidateStory:
     clean_headline = compact_text(headline)
     clean_source_name = compact_text(source_name) or source_domain(compact_text(source_url)) or "Unknown source"
@@ -378,7 +400,11 @@ def build_candidate_story(
     claim_ids = [f"claim_{index:02d}" for index, _ in enumerate(resolved_facts, start=1)]
     title_ideas = default_title_ideas(clean_headline)
     thumbnail_hook = clean_headline
-    visual_opportunities = default_visual_opportunities(clean_headline, entities, clean_category)
+    resolved_visual_opportunities = visual_opportunities or default_visual_opportunities(
+        clean_headline,
+        entities,
+        clean_category,
+    )
     return CandidateStory(
         candidate_id=candidate_id_for(clean_source_url, clean_headline, clean_source_name),
         cluster_id=cluster_id_for(clean_headline, clean_source_url),
@@ -390,6 +416,7 @@ def build_candidate_story(
         source_type=compact_text(source_type) or "rss",
         feed_url=compact_text(feed_url),
         source_domain=clean_source_domain,
+        source_reliability_tier=compact_text(source_reliability_tier) or "unknown",
         published_at=clean_published,
         category=clean_category,
         summary=clean_summary,
@@ -398,7 +425,7 @@ def build_candidate_story(
         claim_ids=claim_ids,
         possible_title_ideas=title_ideas,
         possible_thumbnail_hook=thumbnail_hook,
-        visual_opportunities=visual_opportunities,
+        visual_opportunities=resolved_visual_opportunities,
     )
 
 
