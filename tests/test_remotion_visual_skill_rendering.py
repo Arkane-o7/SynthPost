@@ -79,7 +79,19 @@ class RemotionVisualSkillRenderingTests(unittest.TestCase):
         self.assertIn("SynthPost generated visual", renderer)
         self.assertIn("renderSafetyStatus !== 'review_only'", renderer)
         self.assertIn("Review Only", renderer)
+        self.assertIn("floating?: boolean", renderer)
+        self.assertIn("renderSafetyStatus", renderer)
         self.assertIn("context_card", renderer)
+
+    def test_renderer_has_layout_safety_for_long_text(self) -> None:
+        renderer = (REMOTION_SRC / "components" / "visualSkills" / "VisualSkillRenderer.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("safeLine", renderer)
+        self.assertIn("clampStyle", renderer)
+        self.assertIn("WebkitLineClamp", renderer)
+        self.assertIn("overflowWrap: 'anywhere'", renderer)
+        self.assertIn("Verified location context", renderer)
 
 
 if __name__ == "__main__":

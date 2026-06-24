@@ -45,6 +45,13 @@ const objectValue = (value: unknown): SkillSpec => (value && typeof value === 'o
 
 const firstText = (...values: unknown[]): string => {
   for (const value of values) {
+    if (Array.isArray(value)) {
+      const candidate = value.map(text).filter(Boolean).join(' ');
+      if (candidate) {
+        return candidate;
+      }
+      continue;
+    }
     const candidate = text(value);
     if (candidate) {
       return candidate;
@@ -52,6 +59,22 @@ const firstText = (...values: unknown[]): string => {
   }
   return '';
 };
+
+const safeLine = (value: unknown, maxLength = 120): string => {
+  const candidate = text(value);
+  if (candidate.length <= maxLength) {
+    return candidate;
+  }
+  return `${candidate.slice(0, maxLength - 1).replace(/\s+\S*$/, '')}...`;
+};
+
+const clampStyle = (lines: number): React.CSSProperties => ({
+  overflow: 'hidden',
+  display: '-webkit-box',
+  WebkitLineClamp: lines,
+  WebkitBoxOrient: 'vertical',
+  overflowWrap: 'anywhere',
+});
 
 export const visualSkillPayload = (visual: TimedVisual): SkillPayload => {
   const skill = objectValue(visual.visualSkill);
@@ -136,7 +159,7 @@ const CardShell: React.FC<{
         }}
       >
         <div style={{display: 'flex', justifyContent: 'space-between', gap: 24}}>
-          <div>
+          <div style={{minWidth: 0, flex: 1}}>
             <div
               style={{
                 color: brand.yellow,
@@ -157,6 +180,7 @@ const CardShell: React.FC<{
                 fontSize: 56,
                 lineHeight: 1.02,
                 fontWeight: 800,
+                ...clampStyle(3),
               }}
             >
               {skillTitle(visual, payload)}
@@ -173,6 +197,7 @@ const CardShell: React.FC<{
               fontSize: 24,
               lineHeight: 1.34,
               fontWeight: 600,
+              ...clampStyle(2),
             }}
           >
             {subtitle(visual, payload)}
@@ -185,13 +210,21 @@ const CardShell: React.FC<{
   );
 };
 
-const SafetyBadge: React.FC<{visual: TimedVisual}> = ({visual}) => {
+const SafetyBadge: React.FC<{visual: TimedVisual; floating?: boolean}> = ({visual, floating = false}) => {
   if (visual.renderSafetyStatus !== 'review_only') {
     return null;
   }
   return (
     <div
       style={{
+        ...(floating
+          ? {
+              position: 'absolute',
+              top: 24,
+              right: 24,
+              zIndex: 6,
+            }
+          : {}),
         alignSelf: 'flex-start',
         border: `2px solid ${brand.yellow}`,
         color: brand.yellow,
@@ -232,7 +265,7 @@ const AttributionStrip: React.FC<{visual: TimedVisual}> = ({visual}) => {
 };
 
 const Lines: React.FC<{items: string[]}> = ({items}) => (
-  <div style={{display: 'flex', flexDirection: 'column', gap: 13}}>
+  <div style={{display: 'flex', flexDirection: 'column', gap: 13, maxHeight: '100%', overflow: 'hidden'}}>
     {items.map((item) => (
       <div
         key={item}
@@ -244,9 +277,10 @@ const Lines: React.FC<{items: string[]}> = ({items}) => (
           fontSize: 27,
           lineHeight: 1.22,
           fontWeight: 700,
+          ...clampStyle(2),
         }}
       >
-        {item}
+        {safeLine(item, 150)}
       </div>
     ))}
   </div>
@@ -255,7 +289,7 @@ const Lines: React.FC<{items: string[]}> = ({items}) => (
 const MapSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progress: number}> = ({visual, payload, progress}) => {
   const locations = list(payload.spec.location_names, 5);
   const labels = list(payload.spec.labels, 5);
-  const items = locations.length ? locations : labels;
+  const items = locations.length ? locations : labels.length ? labels : ['Verified location context'];
   return (
     <CardShell visual={visual} payload={payload} progress={progress} eyebrow="Location Context">
       <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 34, height: '100%'}}>
@@ -287,10 +321,12 @@ const MapSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progress: 
                 fontSize: 18,
                 fontWeight: 900,
                 textTransform: 'uppercase',
+                maxWidth: '44%',
+                ...clampStyle(2),
               }}
             >
               <span style={{display: 'inline-block', width: 14, height: 14, borderRadius: 14, background: brand.yellow, marginRight: 10}} />
-              {item}
+              {safeLine(item, 56)}
             </div>
           ))}
         </div>
@@ -316,7 +352,9 @@ const ChartSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progress
             return (
               <div key={`${label}-${index}`} style={{flex: 1, minWidth: 0}}>
                 <div style={{height: `${reveal}%`, background: `linear-gradient(180deg, ${brand.signalBlue}, ${brand.yellow})`}} />
-                <div style={{marginTop: 14, color: brand.white, fontFamily: typography.sans, fontSize: 18, fontWeight: 800}}>{label}</div>
+                <div style={{marginTop: 14, color: brand.white, fontFamily: typography.sans, fontSize: 18, fontWeight: 800, ...clampStyle(2)}}>
+                  {safeLine(label, 54)}
+                </div>
               </div>
             );
           })}
@@ -332,7 +370,7 @@ const TimelineSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progr
   const events = Array.isArray(payload.spec.events) ? payload.spec.events.slice(0, 5) : [];
   const lines = events.map((event) => {
     const item = objectValue(event);
-    return `${firstText(item.date, item.year, 'DATE')}: ${firstText(item.label, item.title, item.event)}`;
+    return `${firstText(item.date, item.year, 'DATE')}: ${safeLine(firstText(item.label, item.title, item.event), 110)}`;
   });
   return (
     <CardShell visual={visual} payload={payload} progress={progress} eyebrow="Timeline">
@@ -355,9 +393,10 @@ const DocumentSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progr
           fontSize: 38,
           lineHeight: 1.22,
           fontWeight: 800,
+          ...clampStyle(5),
         }}
       >
-        {excerpt || 'Source-backed document callout'}
+        {safeLine(excerpt || 'Source-backed document callout', 360)}
       </div>
     </CardShell>
   );
@@ -365,11 +404,11 @@ const DocumentSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progr
 
 const QuoteSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progress: number}> = ({visual, payload, progress}) => (
   <CardShell visual={visual} payload={payload} progress={progress} eyebrow="Quoted Source">
-    <div style={{color: brand.white, fontFamily: typography.serif, fontSize: 46, lineHeight: 1.14, fontWeight: 800}}>
-      "{firstText(payload.spec.quote_text, payload.spec.quote, payload.placeholder.lines, 'Source-backed quote')}"
+    <div style={{color: brand.white, fontFamily: typography.serif, fontSize: 46, lineHeight: 1.14, fontWeight: 800, ...clampStyle(5)}}>
+      "{safeLine(firstText(payload.spec.quote_text, payload.spec.quote, payload.placeholder.lines, 'Source-backed quote'), 260)}"
     </div>
-    <div style={{marginTop: 26, color: brand.yellow, fontFamily: typography.sans, fontSize: 22, fontWeight: 900, textTransform: 'uppercase'}}>
-      {firstText(payload.spec.speaker, payload.spec.source, visual.sourceLabel, 'Source')}
+    <div style={{marginTop: 26, color: brand.yellow, fontFamily: typography.sans, fontSize: 22, fontWeight: 900, textTransform: 'uppercase', ...clampStyle(2)}}>
+      {safeLine(firstText(payload.spec.speaker, payload.spec.source, visual.sourceLabel, 'Source'), 96)}
     </div>
   </CardShell>
 );
@@ -377,15 +416,15 @@ const QuoteSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progress
 const DataCalloutSkill: React.FC<{visual: TimedVisual; payload: SkillPayload; progress: number}> = ({visual, payload, progress}) => (
   <CardShell visual={visual} payload={payload} progress={progress} eyebrow="Key Number">
     <div style={{display: 'flex', alignItems: 'baseline', gap: 18}}>
-      <div style={{color: brand.yellow, fontFamily: typography.serif, fontSize: 132, lineHeight: 0.9, fontWeight: 900}}>
-        {firstText(payload.spec.number, payload.spec.value, payload.placeholder.lines, 'DATA')}
+      <div style={{color: brand.yellow, fontFamily: typography.serif, fontSize: 132, lineHeight: 0.9, fontWeight: 900, maxWidth: '74%', ...clampStyle(1)}}>
+        {safeLine(firstText(payload.spec.number, payload.spec.value, payload.placeholder.lines, 'DATA'), 22)}
       </div>
       <div style={{color: brand.white, fontFamily: typography.sans, fontSize: 42, fontWeight: 900}}>
         {firstText(payload.spec.unit)}
       </div>
     </div>
-    <div style={{marginTop: 24, color: 'rgba(245,247,250,0.82)', fontFamily: typography.sans, fontSize: 30, fontWeight: 800}}>
-      {firstText(payload.spec.label, payload.spec.context, subtitle(visual, payload))}
+    <div style={{marginTop: 24, color: 'rgba(245,247,250,0.82)', fontFamily: typography.sans, fontSize: 30, fontWeight: 800, ...clampStyle(3)}}>
+      {safeLine(firstText(payload.spec.label, payload.spec.context, subtitle(visual, payload)), 160)}
     </div>
   </CardShell>
 );
@@ -444,13 +483,14 @@ const MediaSkill: React.FC<{
           fontWeight: 800,
           textTransform: 'uppercase',
           textShadow: '0 2px 16px rgba(0,0,0,0.55)',
+          ...clampStyle(2),
         }}
       >
-        {firstText(visual.sourceLabel, visual.sectionType, visual.visualRole)}
+        {safeLine(firstText(visual.sourceLabel, visual.sectionType, visual.visualRole), 90)}
       </div>
       <AttributionStrip visual={visual} />
     </div>
-    <SafetyBadge visual={visual} />
+    <SafetyBadge visual={visual} floating />
   </AbsoluteFill>
 );
 
