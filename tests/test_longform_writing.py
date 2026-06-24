@@ -115,6 +115,20 @@ class LongformWritingTests(unittest.TestCase):
         self.assertEqual(options["min_duration_seconds"], 300)
         self.assertEqual(options["max_duration_seconds"], 900)
 
+    def test_invalid_script_duration_mode_is_rejected(self) -> None:
+        with patch.dict("os.environ", {"SYNTHPOST_SCRIPT_DURATION_MODE": "marathon"}):
+            with self.assertRaisesRegex(ValueError, "Invalid script duration mode `marathon`"):
+                ollama.writing_options_for(sample_longform_manifest())
+
+        manifest = evidence.normalize_manifest(sample_longform_manifest())
+        script = ollama.deterministic_script(manifest)
+        script["duration_mode"] = "marathon"
+
+        review = ollama.validate_script_contract(script, manifest["raw"])
+
+        self.assertEqual(review["status"], "needs_review")
+        self.assertTrue(any("unsupported script duration_mode" in warning for warning in review["warnings"]))
+
     def test_longform_deterministic_script_has_required_sections_and_duration(self) -> None:
         manifest = evidence.normalize_manifest(sample_longform_manifest())
         with patch.dict(
@@ -187,6 +201,45 @@ class LongformWritingTests(unittest.TestCase):
 
         self.assertEqual(review["status"], "needs_review")
         self.assertIn("2040", review["groundedness"]["unsupported_factual_markers"])
+
+    def test_groundedness_flags_unsupported_names_and_causal_claims(self) -> None:
+        manifest = evidence.normalize_manifest(sample_longform_manifest())
+        options = ollama.writing_options_for(manifest)
+        section_ids = options["required_section_ids"]
+        script = {
+            "script_version": ollama.SCRIPT_VERSION,
+            "text": "Sam Altman said the policy caused Nvidia's market collapse.",
+            "headline": "Unsupported Claim",
+            "category": "AI",
+            "duration_mode": "short",
+            "target_duration_seconds": 75,
+            "estimated_duration_seconds": 75,
+            "claim_ids": ["claim_01"],
+            "sections": [
+                {
+                    "section_id": section_id,
+                    "title": section_id,
+                    "narration": "Sam Altman said the policy caused Nvidia's market collapse.",
+                    "estimated_duration_seconds": 75 / len(section_ids),
+                    "claim_ids": ["claim_01"],
+                    "source_notes": ["claim_01"],
+                }
+                for section_id in section_ids
+            ],
+            "major_claims": [
+                {
+                    "text": "Sam Altman said the policy caused Nvidia's market collapse.",
+                    "claim_ids": ["claim_01"],
+                }
+            ],
+            "caveats": [],
+        }
+
+        review = ollama.validate_script_contract(script, manifest["raw"], options)
+
+        self.assertEqual(review["status"], "needs_review")
+        self.assertIn("Sam Altman", review["groundedness"]["unsupported_named_entities"])
+        self.assertIn("caused", review["groundedness"]["unsupported_causal_markers"])
 
     def test_short_form_mode_still_writes_legacy_fields(self) -> None:
         manifest = evidence.normalize_manifest(sample_longform_manifest())

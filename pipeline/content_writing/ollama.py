@@ -97,8 +97,15 @@ def compact_text(value: object) -> str:
 
 def _duration_mode_from_env(default: str = "short") -> str:
     mode = os.environ.get("SYNTHPOST_SCRIPT_DURATION_MODE") or os.environ.get("SYNTHPOST_SCRIPT_MODE") or default
-    mode = mode.strip().lower()
-    return mode if mode in DURATION_PROFILES else default
+    return _normalize_duration_mode(mode, source="SYNTHPOST_SCRIPT_DURATION_MODE")
+
+
+def _normalize_duration_mode(value: object, *, source: str, default: str = "short") -> str:
+    mode = compact_text(value).lower() or default
+    if mode not in DURATION_PROFILES:
+        allowed = ", ".join(sorted(DURATION_PROFILES))
+        raise ValueError(f"Invalid script duration mode `{mode}` from {source}. Expected one of: {allowed}.")
+    return mode
 
 
 def _clamp_seconds(value: float, *, minimum: float, maximum: float) -> int:
@@ -107,14 +114,13 @@ def _clamp_seconds(value: float, *, minimum: float, maximum: float) -> int:
 
 def writing_options_for(manifest: dict[str, Any]) -> dict[str, Any]:
     writing_config = manifest.get("content_writing") if isinstance(manifest.get("content_writing"), dict) else {}
-    mode = str(
+    raw_mode = (
         os.environ.get("SYNTHPOST_SCRIPT_DURATION_MODE")
         or os.environ.get("SYNTHPOST_SCRIPT_MODE")
         or writing_config.get("duration_mode")
         or "short"
-    ).strip().lower()
-    if mode not in DURATION_PROFILES:
-        mode = "short"
+    )
+    mode = _normalize_duration_mode(raw_mode, source="SYNTHPOST_SCRIPT_DURATION_MODE/content_writing.duration_mode")
     profile = DURATION_PROFILES[mode]
     raw_target = os.environ.get("SYNTHPOST_SCRIPT_TARGET_SECONDS") or writing_config.get("target_duration_seconds")
     try:
@@ -604,17 +610,31 @@ def groundedness_review(script: dict[str, Any], raw: dict[str, Any]) -> dict[str
         for marker in _factual_markers(script_text)
         if marker.lower() not in evidence_text
     ]
+    unsupported_names = [
+        marker
+        for marker in _named_entity_markers(script_text)
+        if marker.lower() not in evidence_text and marker.lower() not in _allowed_grounding_names()
+    ]
+    unsupported_causal_markers = [
+        marker
+        for marker in _causal_markers(script_text)
+        if marker.lower() not in evidence_text
+    ]
     warnings = [
         *[f"unknown claim_id: {claim_id}" for claim_id in unknown_claim_ids],
         *[f"unsupported major claim: {claim}" for claim in unsupported_major_claims],
         *section_warnings,
         *[f"unsupported factual marker: {marker}" for marker in unsupported_markers],
+        *[f"unsupported named entity: {marker}" for marker in unsupported_names],
+        *[f"unsupported causal marker: {marker}" for marker in unsupported_causal_markers],
     ]
     return {
         "status": "pass" if not warnings else "needs_review",
         "unknown_claim_ids": unknown_claim_ids,
         "unsupported_major_claims": unsupported_major_claims,
         "unsupported_factual_markers": unsupported_markers,
+        "unsupported_named_entities": unsupported_names,
+        "unsupported_causal_markers": unsupported_causal_markers,
         "warnings": warnings,
     }
 
@@ -650,6 +670,15 @@ def validate_script_contract(script: dict[str, Any], raw: dict[str, Any], option
             warnings.append(f"script missing {key}")
     sections = _sections_from_script(script)
     section_ids = [compact_text(section.get("section_id")) for section in sections]
+    script_mode = compact_text(script.get("duration_mode")).lower()
+    selected_mode = compact_text(options.get("duration_mode")).lower()
+    if not script_mode:
+        warnings.append("script missing duration_mode")
+    elif script_mode not in DURATION_PROFILES:
+        allowed = ", ".join(sorted(DURATION_PROFILES))
+        warnings.append(f"unsupported script duration_mode `{script_mode}`; expected one of: {allowed}")
+    elif selected_mode and script_mode != selected_mode:
+        warnings.append("script duration_mode does not match selected duration mode")
     required_ids = list(options.get("required_section_ids") or [])
     for section_id in required_ids:
         if section_id not in section_ids:
@@ -732,6 +761,45 @@ def _script_fact_text(script: dict[str, Any]) -> str:
 def _factual_markers(text: str) -> list[str]:
     markers = re.findall(
         r"\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?\s?(?:%|percent|million|billion|trillion|days?|weeks?|months?|years?)\b",
+        text,
+        flags=re.IGNORECASE,
+    )
+    seen: set[str] = set()
+    output: list[str] = []
+    for marker in markers:
+        key = marker.lower()
+        if key not in seen:
+            seen.add(key)
+            output.append(marker)
+    return output
+
+
+def _allowed_grounding_names() -> set[str]:
+    return {"synthpost"}
+
+
+def _named_entity_markers(text: str) -> list[str]:
+    patterns = [
+        r"\b[A-Z][A-Za-z0-9]+(?:[-\s]+[A-Z][A-Za-z0-9]+)+\b",
+        r"\b[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*\b",
+        r"\b[A-Z]{3,}(?:-[A-Z]{3,})?\b",
+    ]
+    seen: set[str] = set()
+    output: list[str] = []
+    for pattern in patterns:
+        for marker in re.findall(pattern, text):
+            marker = compact_text(marker)
+            key = marker.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append(marker)
+    return output
+
+
+def _causal_markers(text: str) -> list[str]:
+    markers = re.findall(
+        r"\b(?:because|caused|causes|will cause|triggered|triggers|led to|leads to|forced|forces|proves|proved)\b",
         text,
         flags=re.IGNORECASE,
     )
