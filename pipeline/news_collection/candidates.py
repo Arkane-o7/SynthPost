@@ -221,6 +221,10 @@ class CandidateStory:
     headline: str
     source_name: str
     source_url: str
+    source_provider: str = "rss"
+    source_type: str = "rss"
+    feed_url: str = ""
+    source_domain: str = ""
     published_at: str = ""
     category: str = "general"
     summary: str = ""
@@ -264,10 +268,15 @@ class CandidateStory:
             "source": self.source_name,
             "source_name": self.source_name,
             "source_url": self.source_url,
+            "source_provider": self.source_provider,
+            "source_type": self.source_type,
+            "feed_url": self.feed_url,
+            "source_domain": self.source_domain,
             "published_at": self.published_at,
             "category": self.category,
             "summary": self.summary,
             "facts": list(self.facts),
+            "entities": list(self.key_entities),
             "key_entities": list(self.key_entities),
             "source_reliability_tier": self.source_reliability_tier,
             "source_ids": list(self.source_ids),
@@ -293,7 +302,10 @@ class CandidateStory:
             "url": self.source_url,
             "title": self.headline,
             "published_at": self.published_at,
-            "source_type": "rss",
+            "source_type": self.source_type,
+            "source_provider": self.source_provider,
+            "feed_url": self.feed_url,
+            "domain": self.source_domain,
         }
         claims = [
             {
@@ -314,6 +326,7 @@ class CandidateStory:
             "category": self.category,
             "published_at": self.published_at,
             "facts": list(self.facts),
+            "entities": list(self.key_entities),
             "key_entities": list(self.key_entities),
             "visual_opportunities": list(self.visual_opportunities),
             "title_ideas": list(self.possible_title_ideas),
@@ -321,6 +334,10 @@ class CandidateStory:
             "editorial": {
                 "candidate_id": self.candidate_id,
                 "cluster_id": self.cluster_id,
+                "source_provider": self.source_provider,
+                "source_type": self.source_type,
+                "feed_url": self.feed_url,
+                "source_domain": self.source_domain,
                 "why_it_matters": self.why_it_matters,
                 "why_it_could_perform_well": self.why_it_could_perform_well,
                 "possible_synthpost_angle": self.possible_synthpost_angle,
@@ -341,10 +358,14 @@ def build_candidate_story(
     summary: object = "",
     facts: list[str] | None = None,
     key_entities: list[str] | None = None,
+    source_provider: object = "rss",
+    source_type: object = "rss",
+    feed_url: object = "",
 ) -> CandidateStory:
     clean_headline = compact_text(headline)
     clean_source_name = compact_text(source_name) or source_domain(compact_text(source_url)) or "Unknown source"
     clean_source_url = compact_text(source_url)
+    clean_source_domain = source_domain(clean_source_url)
     clean_summary = compact_text(summary)
     clean_published = normalize_datetime(published_at)
     clean_category = normalize_category(category, source_url=clean_source_url, source_name=clean_source_name)
@@ -365,6 +386,10 @@ def build_candidate_story(
         normalized_headline=normalized,
         source_name=clean_source_name,
         source_url=clean_source_url,
+        source_provider=compact_text(source_provider) or "rss",
+        source_type=compact_text(source_type) or "rss",
+        feed_url=compact_text(feed_url),
+        source_domain=clean_source_domain,
         published_at=clean_published,
         category=clean_category,
         summary=clean_summary,

@@ -29,7 +29,10 @@ def _first_text(item: ET.Element, names: list[str]) -> str:
 
 
 def parse_feed(data: bytes | str, *, url: str) -> list[CandidateStory]:
-    root = ET.fromstring(data)
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError:
+        return []
     channel = root.find("channel")
     source_name = channel.findtext("title", default=url) if channel is not None else url
     items = root.findall(".//item")
@@ -51,21 +54,31 @@ def parse_feed(data: bytes | str, *, url: str) -> list[CandidateStory]:
                 source_name=source_name,
                 category=category,
                 published_at=published,
+                source_provider="rss",
+                source_type="rss",
+                feed_url=url,
             )
         )
     return candidates
 
 
 def fetch_feed(url: str) -> list[CandidateStory]:
-    with urllib.request.urlopen(url, timeout=20) as response:
-        return parse_feed(response.read(), url=url)
+    try:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            return parse_feed(response.read(), url=url)
+    except (OSError, TimeoutError, ET.ParseError, ValueError):
+        return []
 
 
 def collect(limit: int = 3) -> list[CandidateStory]:
     stories: list[CandidateStory] = []
     seen: set[str] = set()
     for url in feed_urls():
-        for story in fetch_feed(url):
+        try:
+            feed_stories = fetch_feed(url)
+        except Exception:
+            feed_stories = []
+        for story in feed_stories:
             key = story.normalized_headline
             if key in seen:
                 continue
