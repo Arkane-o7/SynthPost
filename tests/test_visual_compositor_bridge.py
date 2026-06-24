@@ -193,6 +193,35 @@ class VisualCompositorBridgeTests(unittest.TestCase):
         self.assertEqual(records[0]["render_safety_status"], "legacy_unverified")
         self.assertIn("missing_rights_category", " ".join(records[0]["warnings"]))
 
+    def test_explicitly_unsafe_legacy_visuals_do_not_bypass_validation(self) -> None:
+        with _project_root() as temp_dir:
+            root = Path(temp_dir)
+            story_path = _story_path(root)
+            manifest = {
+                "story_id": "story_001",
+                "episode_id": "ep_test",
+                "visuals": [
+                    {
+                        "path": "media/legacy.png",
+                        "start": 0,
+                        "end": 5,
+                        "sourceLabel": "LEGACY",
+                        "rights_category": "unknown_or_rejected",
+                    }
+                ],
+            }
+
+            records, summary = build_compositor_bridge(manifest, story_path)
+            review_records, review_summary = build_compositor_bridge(manifest, story_path, review_only=True)
+
+        self.assertEqual(records, [])
+        self.assertEqual(summary["validation_status"], "failed")
+        self.assertEqual(summary["rejected_visual_count"], 1)
+        self.assertIn("unsafe_rights_category", " ".join(summary["rejected_visuals"][0]["rejection_reasons"]))
+        self.assertTrue(bridge_validation_errors(summary))
+        self.assertEqual(review_records[0]["render_safety_status"], "review_only")
+        self.assertFalse(bridge_validation_errors(review_summary))
+
     def test_manual_review_and_unsafe_rights_are_not_silently_rendered(self) -> None:
         with _project_root() as temp_dir:
             root = Path(temp_dir)

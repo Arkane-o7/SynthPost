@@ -79,6 +79,18 @@ def build_compositor_bridge(
             _normalize_record_paths(record, project_root)
             record_warnings = _validate_bridge_record(record, strict=False)
             record["warnings"] = _dedupe([*record.get("warnings", []), *record_warnings])
+            if _legacy_blocks_render(record) and not review_enabled:
+                rejected.append(
+                    {
+                        "candidate_id": record.get("candidate_id") or record.get("id"),
+                        "section_id": record.get("section_id"),
+                        "rights_category": record.get("rights_category"),
+                        "rejection_reasons": _dedupe([*_legacy_blocking_reasons(record), *record_warnings]),
+                    }
+                )
+                continue
+            if _legacy_blocks_render(record) and review_enabled:
+                record["render_safety_status"] = "review_only"
             records.append(_clean(record))
 
     warnings.extend(warning for record in records for warning in record.get("warnings", []))
@@ -577,6 +589,23 @@ def _blocking_reasons(record: dict[str, Any]) -> list[str]:
     reasons: list[str] = []
     if _is_unsafe(record):
         reasons.append("unsafe_rights_category")
+    if _missing_blocking_attribution(record):
+        reasons.append("missing_required_attribution")
+    return reasons
+
+
+def _legacy_blocks_render(record: dict[str, Any]) -> bool:
+    rights_category = _text(record.get("rights_category"))
+    return rights_category in UNSAFE_RIGHTS_CATEGORIES or bool(record.get("manual_review_flag")) or _missing_blocking_attribution(record)
+
+
+def _legacy_blocking_reasons(record: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    rights_category = _text(record.get("rights_category"))
+    if rights_category in UNSAFE_RIGHTS_CATEGORIES:
+        reasons.append("unsafe_rights_category")
+    if record.get("manual_review_flag"):
+        reasons.append("manual_review_required")
     if _missing_blocking_attribution(record):
         reasons.append("missing_required_attribution")
     return reasons
