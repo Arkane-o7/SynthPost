@@ -91,7 +91,13 @@ RSS summaries or loose facts.
 ```text
 episodes/<episode_id>/stories/<story_id>/visuals/visuals_audit.json
 episodes/<episode_id>/stories/<story_id>/visuals/visual_candidates.json
+episodes/<episode_id>/stories/<story_id>/visuals/visual_plan.json
 ```
+
+`visual_plan.json` is the section-level rundown. It maps each long-form script
+section to a selected visual candidate, visual role, timing, rights category,
+attribution, fallback status, and reuse/manual-review audit notes. Older stories
+without `script.sections[]` still fall back to the legacy beat segmentation.
 
 Provider priority is newsroom-style and rights-aware:
 
