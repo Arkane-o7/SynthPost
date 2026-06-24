@@ -15,7 +15,12 @@
         "summary": { "type": "string" },
         "source_url": { "type": "string" },
         "source_name": { "type": "string" },
+        "source_domain": { "type": "string" },
+        "source_provider": { "type": "string" },
+        "source_type": { "type": "string" },
+        "source_category": { "type": "string" },
         "category": { "type": "string" },
+        "normalized_category": { "type": "string" },
         "published_at": { "type": "string" },
         "facts": { "type": "array", "items": { "type": "string" } },
         "sources": {
@@ -67,6 +72,51 @@
         "evidence_summary": {
           "type": "object",
           "description": "Readiness summary for the source and claim ledger.",
+          "additionalProperties": true
+        },
+        "source_metadata": {
+          "type": "object",
+          "description": "Normalized source metadata copied from the selected editorial candidate.",
+          "additionalProperties": true
+        },
+        "selected_candidate": {
+          "type": "object",
+          "description": "Compact metadata for the ranked candidate selected for this story.",
+          "properties": {
+            "candidate_id": { "type": "string" },
+            "headline": { "type": "string" },
+            "source": { "type": "string" },
+            "source_url": { "type": "string" },
+            "source_domain": { "type": "string" },
+            "source_provider": { "type": "string" },
+            "source_type": { "type": "string" },
+            "source_category": { "type": "string" },
+            "category": { "type": "string" },
+            "normalized_category": { "type": "string" },
+            "final_editorial_score": { "type": "number" },
+            "selection_status": { "type": "string" },
+            "selection_reason": { "type": "string" },
+            "rejection_reasons": { "type": "array", "items": { "type": "string" } },
+            "score_reasons": { "type": "object", "additionalProperties": true },
+            "scores": { "type": "object", "additionalProperties": true },
+            "visual_opportunities": { "type": "array", "items": { "type": "string" } },
+            "entities": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        },
+        "editorial": {
+          "type": "object",
+          "description": "Editorial scoring, dedupe, and angle metadata for downstream stages.",
+          "additionalProperties": true
+        },
+        "handoff": {
+          "type": "object",
+          "description": "Stage-specific selected-candidate metadata for writing, visuals, and thumbnails.",
+          "properties": {
+            "writing": { "type": "object", "additionalProperties": true },
+            "visuals": { "type": "object", "additionalProperties": true },
+            "thumbnail": { "type": "object", "additionalProperties": true }
+          },
           "additionalProperties": true
         }
       },

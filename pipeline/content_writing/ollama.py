@@ -11,10 +11,74 @@ from ..provenance import artifact_record, record_story_artifact
 from ..storage import read_manifest, write_manifest
 
 
+def _dict_list(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item or "").strip()]
+
+
+def _source_metadata_from_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    metadata = raw.get("source_metadata") if isinstance(raw.get("source_metadata"), dict) else {}
+    fallback = {
+        "source": raw.get("source_name"),
+        "source_name": raw.get("source_name"),
+        "source_url": raw.get("source_url"),
+        "source_domain": raw.get("source_domain"),
+        "source_provider": raw.get("source_provider"),
+        "source_type": raw.get("source_type"),
+        "source_category": raw.get("source_category"),
+        "published_at": raw.get("published_at"),
+    }
+    return {
+        key: metadata.get(key) or value
+        for key, value in fallback.items()
+        if metadata.get(key) or value
+    }
+
+
+def writing_input_for(manifest: dict[str, Any]) -> dict[str, Any]:
+    raw = manifest.get("raw", {}) if isinstance(manifest.get("raw"), dict) else {}
+    handoff = raw.get("handoff") if isinstance(raw.get("handoff"), dict) else {}
+    writing = handoff.get("writing") if isinstance(handoff.get("writing"), dict) else {}
+    editorial = raw.get("editorial") if isinstance(raw.get("editorial"), dict) else {}
+    selected = raw.get("selected_candidate") if isinstance(raw.get("selected_candidate"), dict) else {}
+    source_metadata = writing.get("source_metadata") if isinstance(writing.get("source_metadata"), dict) else {}
+    source_metadata = {**_source_metadata_from_raw(raw), **source_metadata}
+    return {
+        "candidate_id": writing.get("candidate_id") or selected.get("candidate_id") or editorial.get("candidate_id"),
+        "headline": writing.get("headline") or raw.get("headline_source", ""),
+        "category": writing.get("category") or raw.get("category", ""),
+        "summary": writing.get("summary") or raw.get("summary", ""),
+        "facts": _string_list(writing.get("facts")) or _string_list(raw.get("facts")),
+        "claims": _dict_list(writing.get("claims")) or _dict_list(raw.get("claims")),
+        "claim_ids": _string_list(writing.get("claim_ids")) or [
+            str(claim.get("claim_id"))
+            for claim in _dict_list(raw.get("claims"))
+            if claim.get("claim_id")
+        ],
+        "entities": _string_list(writing.get("entities")) or _string_list(raw.get("entities") or raw.get("key_entities")),
+        "sources": _dict_list(writing.get("sources")) or _dict_list(raw.get("sources")),
+        "source_metadata": source_metadata,
+        "why_it_matters": writing.get("why_it_matters") or editorial.get("why_it_matters", ""),
+        "synthpost_angle": writing.get("synthpost_angle") or editorial.get("synthpost_angle") or editorial.get("possible_synthpost_angle", ""),
+        "audience_curiosity_angle": writing.get("audience_curiosity_angle") or editorial.get("audience_curiosity_angle", ""),
+        "explainability_notes": writing.get("explainability_notes") or editorial.get("explainability_notes", ""),
+        "score_reasons": writing.get("score_reasons") if isinstance(writing.get("score_reasons"), dict) else editorial.get("score_reasons", {}),
+        "scores": writing.get("scores") if isinstance(writing.get("scores"), dict) else editorial.get("scores", {}),
+        "selection_reason": writing.get("selection_reason") or editorial.get("selection_reason", ""),
+    }
+
+
 def prompt_for(manifest: dict[str, Any]) -> str:
-    raw = manifest.get("raw", {})
-    sources = raw.get("sources", []) if isinstance(raw.get("sources"), list) else []
-    claims = raw.get("claims", []) if isinstance(raw.get("claims"), list) else []
+    writing_input = writing_input_for(manifest)
+    sources = writing_input["sources"]
+    claims = writing_input["claims"]
     source_lines = "\n".join(
         f"- {source.get('source_id')}: {source.get('name')} ({source.get('url', 'no url')})"
         for source in sources
@@ -25,6 +89,13 @@ def prompt_for(manifest: dict[str, Any]) -> str:
         for claim in claims
         if isinstance(claim, dict)
     )
+    fact_lines = "\n".join(f"- {fact}" for fact in writing_input["facts"])
+    entity_line = ", ".join(writing_input["entities"])
+    score_reason_lines = "\n".join(
+        f"- {key}: {value}"
+        for key, value in (writing_input.get("score_reasons") or {}).items()
+        if value
+    )
     return (
         "Return exactly one valid compact JSON object for a grounded YouTube news script.\n"
         "Do not write markdown, comments, prose outside JSON, or duplicate JSON keys.\n"
@@ -34,10 +105,19 @@ def prompt_for(manifest: dict[str, Any]) -> str:
         "Do not infer consequences, causes, risks, impacts, or forecasts beyond the claim text.\n"
         "If the ledger is small, shorter copy is better than unsupported filler.\n"
         "Keep text concise: 25 to 90 words, direct international news desk tone.\n\n"
-        f"Headline: {raw.get('headline_source', '')}\n"
-        f"Category: {raw.get('category', '')}\n"
-        f"Summary: {raw.get('summary', '')}\n"
+        f"Candidate ID: {writing_input.get('candidate_id') or ''}\n"
+        f"Headline: {writing_input.get('headline', '')}\n"
+        f"Category: {writing_input.get('category', '')}\n"
+        f"Summary: {writing_input.get('summary', '')}\n"
+        f"Entities: {entity_line}\n"
+        f"Why it matters: {writing_input.get('why_it_matters') or ''}\n"
+        f"SynthPost angle: {writing_input.get('synthpost_angle') or ''}\n"
+        f"Audience curiosity angle: {writing_input.get('audience_curiosity_angle') or ''}\n"
+        f"Explainability notes: {writing_input.get('explainability_notes') or ''}\n"
+        f"Selection reason: {writing_input.get('selection_reason') or ''}\n"
+        f"Facts:\n{fact_lines}\n"
         f"Sources:\n{source_lines}\n"
+        f"Score reasons:\n{score_reason_lines}\n"
         f"Claims:\n{claim_lines}\n\n"
         "Output shape: "
         '{"text":"...","headline":"...","category":"...","claim_ids":["claim_01"],'
