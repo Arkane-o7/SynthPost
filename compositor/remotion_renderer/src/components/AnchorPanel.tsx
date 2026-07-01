@@ -3,10 +3,11 @@ import {anchorCrop, brand, layout} from '../styles/brand';
 import type {PublicMedia} from '../types';
 import {AnchorVideoLayer} from './AnchorVideoLayer';
 
-export const AnchorPanel: React.FC<{anchor?: PublicMedia}> = ({anchor}) => {
+export const AnchorPanel: React.FC<{anchor?: PublicMedia; chromaKey?: boolean}> = ({anchor, chromaKey}) => {
   return (
     <AnchorVideoLayer
       anchor={anchor}
+      chromaKey={chromaKey}
       crop={anchorCrop}
       style={{
         left: layout.anchor.left,

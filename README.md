@@ -29,10 +29,11 @@ python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.jso
 python3 assembly/stitch_episode.py ep_2026-06-20
 ```
 
-To let SynthPost call Avatar-Engine directly:
+To let SynthPost call the current Avatar-Engine CC4/browser renderer directly:
 
 ```bash
-python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.json --test-mode --force-avatar --force-composite
+SYNTHPOST_AVATAR_RENDERER=rocketbox \
+  python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.json --force-avatar --force-composite
 ```
 
 The anchor output expected by the sample story is:
@@ -41,21 +42,63 @@ The anchor output expected by the sample story is:
 episodes/ep_2026-06-20/stories/story_001/anchor.mp4
 ```
 
-## Avatar-Engine Notes
-
-The current `avatar-engine/README.md` says the main command is:
+If you only want to test the rest of the pipeline without rendering an avatar, keep using:
 
 ```bash
-python3 scripts/run_job.py jobs/news_anchor_preview.json --force-all
+python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.json --skip-avatar-render --force-composite
 ```
 
-It also exposes a TTS-only command through `scripts/generate_tts.py`, so SynthPost's direction stage supports a future two-pass timing mode with `SYNTHPOST_AVATAR_TTS_PROBE=1`. Without that flag, v1 uses a words-per-minute estimate and scales deterministic camera/gesture timing.
+## Avatar-Engine Notes
 
-Local doctor status observed during setup:
+`avatar-engine/` is updated to the CC4 browser runtime release (`94a552c`, `Add CC4 browser avatar runtime`). The default SynthPost renderer is now `rocketbox`, which is a compatibility key for Avatar-Engine's custom Three.js/Reallusion CC4 runtime, not a Rocketbox asset path.
 
-- Blender, ffmpeg, and Rhubarb were detected.
-- Kokoro was not installed, so Avatar-Engine would use placeholder WAV fallback unless Kokoro is added.
-- The current Avatar-Engine doctor reported missing required template objects in `avatar_template.blend`; the user chose to handle the standalone sample render manually.
+One-time setup for the new renderer:
+
+```bash
+python3.11 -m venv avatar-engine/.venv
+avatar-engine/.venv/bin/pip install -r avatar-engine/requirements.txt
+npm --prefix avatar-engine/web_avatar_runtime install
+```
+
+The licensed avatar binary is intentionally not committed. Provide it locally at:
+
+```text
+avatar-engine/assets/avatars/synthpost_anchor_v1/anchor.glb
+```
+
+SynthPost now writes story-specific Avatar-Engine inputs under:
+
+```text
+avatar-engine/assets/temp/synthpost/<episode_id>/<story_id>/voice.wav
+avatar-engine/assets/temp/synthpost/<episode_id>/<story_id>/rhubarb.json
+```
+
+Then it calls:
+
+```bash
+python -m avatar_engine.render_avatar --job <story>/avatar_job.json --renderer rocketbox --config config/default.yaml
+```
+
+The render output remains `direction.anchor_output_path`, and Avatar-Engine writes `avatar_render_manifest.json` / `render_stats.json` next to the anchor MP4. The default voice is Kokoro `af_bella` at `speed: 1.0` and `lang_code: a`.
+
+Useful environment overrides:
+
+```bash
+SYNTHPOST_AVATAR_ENGINE_PATH=/absolute/path/to/Avatar-Engine
+SYNTHPOST_AVATAR_RENDERER=rocketbox
+SYNTHPOST_AVATAR_ASSET_PATH=assets/avatars/synthpost_anchor_v1/anchor.glb
+SYNTHPOST_AVATAR_META_PATH=assets/avatars/synthpost_anchor_v1/avatar.json
+SYNTHPOST_AVATAR_RENDER_BACKGROUND=chroma_green
+SYNTHPOST_AVATAR_VOICE_ID=af_bella
+```
+
+For the legacy Blender path, set:
+
+```bash
+SYNTHPOST_AVATAR_RENDERER=blender
+```
+
+Local status note: this checkout has `avatar.json`, but `anchor.glb` is not present. A real `rocketbox` render will fail with a clear prerequisite error until that GLB is provided; use `--skip-avatar-render` or `SYNTHPOST_AVATAR_RENDERER=blender` in the meantime.
 
 ## Environment
 

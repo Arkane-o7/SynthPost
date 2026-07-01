@@ -16,6 +16,7 @@ export const FullScreenAnchor: React.FC<StoryProps> = (props) => {
     >
       <AnchorVideoLayer
         anchor={props.anchor}
+        chromaKey={props.anchorChromaKey}
         crop={fullAnchorCrop}
         mediaFilter="saturate(0.92) contrast(1.03) brightness(0.88)"
         overlay="linear-gradient(180deg, rgba(2,8,16,0.10) 0%, rgba(2,8,16,0.04) 44%, rgba(2,8,16,0.42) 78%, rgba(2,8,16,0.68) 100%), linear-gradient(90deg, rgba(2,8,16,0.28) 0%, transparent 26%, transparent 74%, rgba(2,8,16,0.30) 100%)"

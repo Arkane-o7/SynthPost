@@ -29,11 +29,17 @@ def env_float(name: str, default: float) -> float:
 
 
 def avatar_engine_dir() -> Path:
-    return resolve_project_path(env("SYNTHPOST_AVATAR_ENGINE_DIR", "avatar-engine") or "avatar-engine")
+    configured = env("SYNTHPOST_AVATAR_ENGINE_PATH") or env(
+        "SYNTHPOST_AVATAR_ENGINE_DIR"
+    )
+    return resolve_project_path(configured or "avatar-engine")
 
 
 def remotion_dir() -> Path:
-    return resolve_project_path(env("SYNTHPOST_REMOTION_DIR", "compositor/remotion_renderer") or "compositor/remotion_renderer")
+    return resolve_project_path(
+        env("SYNTHPOST_REMOTION_DIR", "compositor/remotion_renderer")
+        or "compositor/remotion_renderer"
+    )
 
 
 def ffmpeg_binary() -> str:
@@ -45,4 +51,11 @@ def words_per_minute() -> float:
 
 
 def sample_story_path() -> Path:
-    return PROJECT_ROOT / "episodes" / "ep_2026-06-20" / "stories" / "story_001" / "story.json"
+    return (
+        PROJECT_ROOT
+        / "episodes"
+        / "ep_2026-06-20"
+        / "stories"
+        / "story_001"
+        / "story.json"
+    )

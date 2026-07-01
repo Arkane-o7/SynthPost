@@ -30,7 +30,7 @@ export const SplitMain: React.FC<StoryProps> = (props) => {
           mixBlendMode: 'screen',
         }}
       />
-      <AnchorPanel anchor={props.anchor} />
+      <AnchorPanel anchor={props.anchor} chromaKey={props.anchorChromaKey} />
       <NewsVisualPanel visuals={props.visuals} sourceLabel={props.sourceLabel} sourceDate={props.sourceDate} />
       <LowerThird
         headline={props.headline}

@@ -1,25 +1,39 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import unittest
+from unittest.mock import patch
 
-from pipeline.direction.avatar import camera_cuts_for, camera_for_template, native_segment_export, template_requires_avatar
+from pipeline.direction.avatar import (
+    avatar_job_from_manifest,
+    camera_cuts_for,
+    camera_for_template,
+    native_segment_export,
+    template_requires_avatar,
+)
 from pipeline.storage import PROJECT_ROOT
 
 
 class DirectionTemplateTests(unittest.TestCase):
     def tearDown(self) -> None:
-        shutil.rmtree(PROJECT_ROOT / "episodes" / "ep_unit_direction", ignore_errors=True)
+        shutil.rmtree(
+            PROJECT_ROOT / "episodes" / "ep_unit_direction", ignore_errors=True
+        )
 
     def test_full_screen_anchor_uses_landscape_intro(self) -> None:
         self.assertEqual(camera_for_template("full_screen_anchor"), "landscape_intro")
-        self.assertEqual(camera_for_template("news-full-screen-anchor"), "landscape_intro")
-        self.assertEqual(camera_cuts_for(20, "opening_anchor")[0]["camera"], "landscape_intro")
+        self.assertEqual(
+            camera_for_template("news-full-screen-anchor"), "landscape_intro"
+        )
+        self.assertEqual(
+            camera_cuts_for(20, "opening_anchor")[0]["camera"], "landscape_intro"
+        )
 
-    def test_split_main_uses_portrait_main(self) -> None:
-        self.assertEqual(camera_for_template("split_main"), "portrait_main")
-        self.assertEqual(camera_cuts_for(20, "split_main")[0]["camera"], "portrait_main")
+    def test_split_main_uses_front_close(self) -> None:
+        self.assertEqual(camera_for_template("split_main"), "front_close")
+        self.assertEqual(camera_cuts_for(20, "split_main")[0]["camera"], "front_close")
 
     def test_full_screen_news_visuals_skips_avatar(self) -> None:
         self.assertFalse(template_requires_avatar("FullScreenNewsVisuals"))
@@ -27,7 +41,14 @@ class DirectionTemplateTests(unittest.TestCase):
         self.assertTrue(template_requires_avatar("split_main"))
 
     def test_native_segment_export_reads_avatar_engine_manifest(self) -> None:
-        anchor_path = PROJECT_ROOT / "episodes" / "ep_unit_direction" / "stories" / "story_001" / "anchor.mp4"
+        anchor_path = (
+            PROJECT_ROOT
+            / "episodes"
+            / "ep_unit_direction"
+            / "stories"
+            / "story_001"
+            / "anchor.mp4"
+        )
         export_dir = anchor_path.with_suffix("")
         segment_path = export_dir / "001_portrait_main.mp4"
         export_dir.mkdir(parents=True)
@@ -51,8 +72,72 @@ class DirectionTemplateTests(unittest.TestCase):
         export = native_segment_export(anchor_path)
 
         self.assertIsNotNone(export)
+        assert export is not None
         self.assertEqual(export["path"], segment_path)
         self.assertEqual(export["export_mode"], "native_segments")
+
+    def test_browser_avatar_job_matches_cc4_contract(self) -> None:
+        script_text = "Good evening. This is a contract test."
+        manifest = {
+            "episode_id": "ep_unit_direction",
+            "story_id": "story_001",
+            "script": {"text": script_text},
+            "composition": {"template": "split_main"},
+        }
+        env = {
+            "SYNTHPOST_AVATAR_VOICE_ID": "af_bella",
+            "SYNTHPOST_AVATAR_RENDER_BACKGROUND": "chroma_green",
+            "SYNTHPOST_AVATAR_ASSET_PATH": "assets/avatars/synthpost_anchor_v1/anchor.glb",
+            "SYNTHPOST_AVATAR_META_PATH": "assets/avatars/synthpost_anchor_v1/avatar.json",
+        }
+
+        with patch.dict(os.environ, env, clear=False):
+            job = avatar_job_from_manifest(
+                manifest, 8.2, render_profile="preview", renderer="rocketbox"
+            )
+
+        self.assertEqual(job["renderer"], "rocketbox")
+        self.assertEqual(job["script"], script_text)
+        self.assertEqual(job["script_text"], script_text)
+        self.assertEqual(job["voice"]["voice_id"], "af_bella")
+        self.assertEqual(
+            job["audio_path"],
+            "assets/temp/synthpost/ep_unit_direction/story_001/voice.wav",
+        )
+        self.assertEqual(
+            job["viseme_path"],
+            "assets/temp/synthpost/ep_unit_direction/story_001/rhubarb.json",
+        )
+        self.assertEqual(
+            job["avatar"]["asset_path"], "assets/avatars/synthpost_anchor_v1/anchor.glb"
+        )
+        self.assertEqual(job["camera"]["name"], "front_close")
+        self.assertEqual(job["camera"]["width"], 1280)
+        self.assertEqual(job["camera"]["height"], 720)
+        self.assertEqual(job["face"]["mode"], "3d_viseme")
+        self.assertEqual(job["render"]["background"], "chroma_green")
+        self.assertTrue(
+            job["render"]["output_path"].endswith(
+                "episodes/ep_unit_direction/stories/story_001/anchor.mp4"
+            )
+        )
+
+    def test_explicit_blender_renderer_keeps_legacy_job_contract(self) -> None:
+        manifest = {
+            "episode_id": "ep_unit_direction",
+            "story_id": "story_001",
+            "script": {"text": "Good evening. This is a legacy test."},
+            "composition": {"template": "full_screen_anchor"},
+        }
+
+        job = avatar_job_from_manifest(
+            manifest, 10.0, render_profile="production", renderer="blender"
+        )
+
+        self.assertEqual(job["renderer"], "blender")
+        self.assertEqual(job["face_mode"], "2d")
+        self.assertEqual(job["camera_cuts"][0]["camera"], "landscape_intro")
+        self.assertIn("output_path", job)
 
 
 if __name__ == "__main__":

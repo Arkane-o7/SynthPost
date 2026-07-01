@@ -10,7 +10,10 @@ episodes/*/stories/*/*.mp4
 episodes/*/stories/*/*.wav
 episodes/*/stories/*/avatar_job.json
 episodes/*/stories/*/preview.png
+episodes/*/stories/*/visuals/
+episodes/*/stories/*/composited.mp4
 episodes/*/_assembly/
+episodes/*/control_room/
 assets/brand/intro.mp4
 assets/brand/outro.mp4
 
@@ -18,8 +21,26 @@ assets/brand/outro.mp4
 compositor/remotion_renderer/node_modules/
 compositor/remotion_renderer/out/
 compositor/remotion_renderer/public/generated/
+control_room/frontend/node_modules/
+control_room/frontend/dist/
 
 # Avatar-Engine generated artifacts. The cloned repo itself stays untouched.
 avatar-engine/assets/output/
 avatar-engine/assets/renders/
 avatar-engine/assets/temp/
+avatar-engine/web_avatar_runtime/node_modules/
+avatar-engine/web_avatar_runtime/dist/
+avatar-engine/.tmp/
+avatar-engine/test-results/
+avatar-engine/playwright-report/
+
+# Avatar-Engine local/licensed avatar binaries and raw exports.
+# Keep small metadata such as avatar.json tracked; provide GLB/VRM assets outside Git or via LFS.
+avatar-engine/assets/avatars/**/*.glb
+avatar-engine/assets/avatars/**/*.vrm
+avatar-engine/assets/avatars/**/*.fbx
+avatar-engine/assets/avatars/**/textures/
+avatar-engine/assets/avatars/**/source_project/
+
+# Misc
+.playwright-mcp/

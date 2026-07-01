@@ -402,6 +402,7 @@ const main = async () => {
     sourceLabel: String(raw.source_name ?? 'SYNTHPOST').toUpperCase(),
     sourceDate: formatDate(raw.published_at),
     anchor,
+    anchorChromaKey: String(direction.avatar_render_background ?? '').toLowerCase() === 'chroma_green',
     visuals,
     points: (manifest.points ?? []).map((point: any) => ({
       text: String(point.text ?? '').toUpperCase(),

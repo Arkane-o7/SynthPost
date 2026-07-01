@@ -75,6 +75,7 @@ export type StoryProps = {
   sourceLabel: string;
   sourceDate: string;
   anchor?: PublicMedia;
+  anchorChromaKey?: boolean;
   visuals: TimedVisual[];
   points: NewsPoint[];
   logo?: PublicMedia;
