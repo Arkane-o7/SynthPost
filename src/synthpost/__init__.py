@@ -1,2 +1,0 @@
-"""SynthPost application package."""
-

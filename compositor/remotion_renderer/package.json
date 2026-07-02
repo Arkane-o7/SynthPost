@@ -4,8 +4,6 @@
   "private": true,
   "scripts": {
     "render:story": "tsx src/renderStory.ts",
-    "render:endscreen": "tsx src/endscreen/renderEndscreen.ts",
-    "render:thumbnail": "tsx src/renderThumbnail.ts",
     "preview": "remotion preview src/Root.tsx",
     "typecheck": "tsc --noEmit"
   },

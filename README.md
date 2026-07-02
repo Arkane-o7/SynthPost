@@ -1,58 +1,135 @@
 # SynthPost
 
-SynthPost is a local, manifest-driven pipeline for generating an AI-assisted YouTube news episode. The current build focuses on Milestone 2: one hand-authored story flows through direction, Avatar-Engine integration, Remotion compositing, and ffmpeg assembly.
+SynthPost is now a slim rendering shell for a future rebuilt newsroom pipeline.
 
-## Current Slice
+This checkout intentionally keeps only the infrastructure that still works and is worth preserving:
 
-- `avatar-engine/` is cloned from `https://github.com/Arkane-o7/Avatar-Engine.git` and is treated as a black box.
-- Every story is driven by one `story.json` manifest.
-- `pipeline/run_story.py` runs direction, optional Avatar rendering, compositor rendering, and optional assembly.
-- The Remotion templates include **Split Main** (`split_main` / `split-main`) and **Full Screen Anchor** (`full_screen_anchor` / `full-screen-anchor`) at `1920x1080`.
-- `full_screen_anchor` is for opening remarks, conclusions, and “our take” segments. It reuses the shared SynthPost logo/lower-third/chyron components and asks Avatar-Engine for the `landscape_intro` camera.
-- The Remotion renderer also includes a reusable **SynthPostEndscreen** composition. Render it with `npm run render:endscreen -- <endscreen.json>` or `python3 -m pipeline.endscreen <episode_id>`.
-- `assembly/stitch_episode.py` normalizes intro, story clips, and outro before concatenation.
-- `src/synthpost/visuals/` plans story visuals with provider metadata, ranking, licensing notes, and timed manifest output.
+- `avatar-engine/` integration and default avatar job generation.
+- Remotion broadcast look/templates/components/styles.
+- Manifest-to-Remotion story rendering.
+- Optional Avatar-Engine anchor rendering.
+- ffmpeg episode assembly with a static brand outro.
 
-## Quick Start
+The old automatic news collection, AI writing, evidence ledger, visual planning, thumbnail generation, and web control-room UI have been removed. Future work should rebuild those as a clean V2 pipeline around explicit story, visual, approval, template, and timeline contracts.
 
-Install Remotion dependencies:
+## Retained Layout
 
-```bash
-cd compositor/remotion_renderer
-npm install
+```text
+avatar-engine/                         Avatar-Engine checkout/integration target
+pipeline/config.py                     Environment/path helpers
+pipeline/storage.py                    Manifest/path helpers
+pipeline/render_profiles.py            Preview/production/final render profiles
+pipeline/provenance.py                 Lightweight artifact records
+pipeline/direction/avatar.py           SynthPost → Avatar-Engine job generation/rendering
+pipeline/compositor.py                 Thin wrapper around Remotion story render
+pipeline/run_story.py                  Render a pre-authored story manifest
+compositor/remotion_renderer/          Remotion renderer package
+assembly/stitch_episode.py             ffmpeg final episode assembly with static outro
+assets/brand/                          Retained brand intro/outro assets
+config/.env.example                    Environment variable examples
+tests/test_direction.py                Avatar integration contract tests
+tests/test_remotion_visual_skill_rendering.py Remotion retained-surface tests
 ```
 
-Render the sample story after an anchor clip exists:
+## What a Story Manifest Must Provide Now
 
-```bash
-python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.json --skip-avatar-render --force-composite
-python3 assembly/stitch_episode.py ep_2026-06-20
+Because the auto pipeline was removed, `pipeline.run_story` expects a pre-authored manifest. At minimum:
+
+```json
+{
+  "story_id": "story_001",
+  "episode_id": "ep_demo",
+  "script": {
+    "headline": "Demo headline",
+    "text": "Anchor narration goes here."
+  },
+  "composition": {
+    "template": "split_main",
+    "output_path": "episodes/ep_demo/stories/story_001/composited.mp4"
+  },
+  "visuals": [
+    {
+      "path": "compositor/remotion_renderer/public/news/datacenter-server-racks.jpg",
+      "start": 0,
+      "end": 12,
+      "fit": "cover",
+      "sourceLabel": "SYNTHPOST"
+    }
+  ]
+}
 ```
 
-To let SynthPost call the current Avatar-Engine CC4/browser renderer directly:
+For timeline-based rendering, provide an approved timeline:
+
+```json
+{
+  "approved_timeline": {
+    "status": "approved",
+    "segments": [
+      {
+        "segment_id": "seg_001",
+        "section_id": "intro",
+        "start_time": 0,
+        "end_time": 8,
+        "duration": 8,
+        "script_text": "Anchor narration...",
+        "anchor": { "visible": true, "speaking": true, "camera": "front_close" },
+        "visual": {
+          "asset_id": "",
+          "media_type": "fallback",
+          "source": "SynthPost",
+          "rights_tier": "green",
+          "review_status": "approved",
+          "audio_mode": "muted",
+          "path": "",
+          "attribution_text": ""
+        },
+        "template": { "template_id": "fullscreen_anchor", "layout": "anchor_fullscreen" },
+        "overlays": { "lower_third": "", "chyron": "", "attribution": "" }
+      }
+    ]
+  }
+}
+```
+
+## Install Renderer Dependencies
+
+```bash
+npm --prefix compositor/remotion_renderer install
+```
+
+## Render a Story
+
+Use an existing anchor video:
+
+```bash
+python3 -m pipeline.run_story episodes/<episode_id>/stories/<story_id>/story.json \
+  --skip-avatar-render \
+  --force-composite \
+  --render-profile preview
+```
+
+Render avatar + composition:
 
 ```bash
 SYNTHPOST_AVATAR_RENDERER=rocketbox \
-  python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.json --force-avatar --force-composite
+python3 -m pipeline.run_story episodes/<episode_id>/stories/<story_id>/story.json \
+  --force-avatar \
+  --force-composite \
+  --render-profile production
 ```
 
-The anchor output expected by the sample story is:
-
-```text
-episodes/ep_2026-06-20/stories/story_001/anchor.mp4
-```
-
-If you only want to test the rest of the pipeline without rendering an avatar, keep using:
+Assemble all story clips in an episode. Assembly normalizes the brand intro, all story clips, and `assets/brand/outro.mp4`, then concatenates them into `final.mp4`:
 
 ```bash
-python3 -m pipeline.run_story episodes/ep_2026-06-20/stories/story_001/story.json --skip-avatar-render --force-composite
+python3 assembly/stitch_episode.py <episode_id> --render-profile production
 ```
 
 ## Avatar-Engine Notes
 
-`avatar-engine/` is updated to the CC4 browser runtime release (`94a552c`, `Add CC4 browser avatar runtime`). The default SynthPost renderer is now `rocketbox`, which is a compatibility key for Avatar-Engine's custom Three.js/Reallusion CC4 runtime, not a Rocketbox asset path.
+The default SynthPost avatar renderer is `rocketbox`, which maps to Avatar-Engine's browser/Three.js runtime.
 
-One-time setup for the new renderer:
+One-time setup:
 
 ```bash
 python3.11 -m venv avatar-engine/.venv
@@ -60,26 +137,11 @@ avatar-engine/.venv/bin/pip install -r avatar-engine/requirements.txt
 npm --prefix avatar-engine/web_avatar_runtime install
 ```
 
-The licensed avatar binary is intentionally not committed. Provide it locally at:
+Expected local licensed avatar asset:
 
 ```text
 avatar-engine/assets/avatars/synthpost_anchor_v1/anchor.glb
 ```
-
-SynthPost now writes story-specific Avatar-Engine inputs under:
-
-```text
-avatar-engine/assets/temp/synthpost/<episode_id>/<story_id>/voice.wav
-avatar-engine/assets/temp/synthpost/<episode_id>/<story_id>/rhubarb.json
-```
-
-Then it calls:
-
-```bash
-python -m avatar_engine.render_avatar --job <story>/avatar_job.json --renderer rocketbox --config config/default.yaml
-```
-
-The render output remains `direction.anchor_output_path`, and Avatar-Engine writes `avatar_render_manifest.json` / `render_stats.json` next to the anchor MP4. The default voice is Kokoro `af_bella` at `speed: 1.0` and `lang_code: a`.
 
 Useful environment overrides:
 
@@ -88,142 +150,17 @@ SYNTHPOST_AVATAR_ENGINE_PATH=/absolute/path/to/Avatar-Engine
 SYNTHPOST_AVATAR_RENDERER=rocketbox
 SYNTHPOST_AVATAR_ASSET_PATH=assets/avatars/synthpost_anchor_v1/anchor.glb
 SYNTHPOST_AVATAR_META_PATH=assets/avatars/synthpost_anchor_v1/avatar.json
-SYNTHPOST_AVATAR_RENDER_BACKGROUND=chroma_green
+SYNTHPOST_AVATAR_RENDER_BACKGROUND=charcoal
 SYNTHPOST_AVATAR_VOICE_ID=af_bella
+SYNTHPOST_AVATAR_VOICE_SPEED=1.10
 ```
 
-For the legacy Blender path, set:
+
+
+## Verification
 
 ```bash
-SYNTHPOST_AVATAR_RENDERER=blender
-```
-
-Local status note: this checkout has `avatar.json`, but `anchor.glb` is not present. A real `rocketbox` render will fail with a clear prerequisite error until that GLB is provided; use `--skip-avatar-render` or `SYNTHPOST_AVATAR_RENDERER=blender` in the meantime.
-
-## Environment
-
-Copy `config/.env.example` into your shell or a local `.env` loader if desired. External services are optional for Milestone 2; missing providers fall back to deterministic local behavior where possible.
-
-## Manifest Contract
-
-Each stage reads `episodes/<episode_id>/stories/<story_id>/story.json` and writes only its own section:
-
-- `raw`: collected or hand-authored source material
-- `script`: spoken copy and headline
-- `direction`: Avatar-Engine job data and anchor output path
-- `visuals`: timed story media
-- `points`: lower-third bullet facts
-- `composition`: Remotion template and output path
-
-The schema lives at `pipeline/schemas/story_manifest.schema.json`.
-
-## Evidence Ledger
-
-Before script generation, `pipeline.evidence` normalizes `raw.sources[]` and `raw.claims[]`.
-Each claim gets a stable `claim_id`, source ids, evidence quote, confidence, and status.
-The writing stage must return `claim_ids`; SynthPost then writes `script.source_ids`,
-`script.evidence_summary`, and a top-level `editorial_review`.
-
-This keeps the AI writer inside the sourced ledger instead of asking it to improvise from
-RSS summaries or loose facts.
-
-## News Visuals
-
-`pipeline/visuals/default.py` is now a thin adapter over `src/synthpost/visuals`. It builds a timed visual rundown from the story manifest, writes rich provenance metadata into `visuals[]` and `visual_assets[]`, and saves audit files at:
-
-```text
-episodes/<episode_id>/stories/<story_id>/visuals/visuals_audit.json
-episodes/<episode_id>/stories/<story_id>/visuals/visual_candidates.json
-episodes/<episode_id>/stories/<story_id>/visuals/visual_plan.json
-episodes/<episode_id>/stories/<story_id>/visuals/visual_skills.json
-```
-
-`visual_plan.json` is the section-level rundown. It maps each long-form script
-section to a selected visual candidate, visual role, timing, rights category,
-attribution, fallback status, and reuse/manual-review audit notes. Older stories
-without `script.sections[]` still fall back to the legacy beat segmentation.
-
-`visual_skills.json` extends that rundown with render-ready specs for maps,
-charts, timelines, document callouts, quote cards, data callouts, context cards,
-entity cards, source cards, B-roll clips, and still images. Specs are
-deterministic and grounded in raw facts, raw claims/evidence, source metadata,
-section claim IDs, and selected visual candidate metadata.
-
-Before Remotion renders a story, SynthPost writes `compositor_visuals[]` and
-`visual_compositor_bridge` into `story.json`. This bridge prefers
-`visual_plan.json` over legacy `visuals[]`, preserves attribution/rights/manual
-review metadata, and carries simple visual-skill placeholders for downstream
-templates without changing the broadcast design.
-
-Provider priority is newsroom-style and rights-aware:
-
-- `manifest_media`: explicit story media from `raw.visual_assets`, `raw.media_assets`, `raw.official_media`, `raw.image_urls`, or `raw.video_urls`
-- India official drop folders: `pb_shabd_dropfolder`, `pib_india`, `isro_media`, `pm_india_media`, `india_ministry_media`, `mea_india_media`
-- Global official/public-domain drop folders: `dvids`, `nasa_media`, `eu_av`, `white_house_media`, `us_state_department_flickr`, `noaa_media`, `usgs_media`, `copernicus_data`
-- Open/public archives: `wikimedia`, `openverse`, `library_of_congress`, `nara_archives`, `internet_archive`, `natural_earth_maps`
-- Context/document sources: `official_page_screenshot`, `document_screenshot`, `court_document_source`, `parliament_or_legislature_source`, `company_press_kit`
-- Generated context cards: `screenshot_provider` creates story-specific source/document/chart-style SVGs from the evidence-backed manifest when real event media is sparse. Set `SYNTHPOST_ENABLE_CONTEXT_GRAPHICS=0` to disable.
-- Social: `social_media_leads` collects leads; `social_reference_ingest` only renders approved yellow references when `SYNTHPOST_ALLOW_RISKY_SOCIAL=1`
-- Stock fallback: `pexels_pixabay_optional` remains available, but is marked as `content_role: atmosphere` and ranks last
-
-Every selected visual carries `rights_tier`, `rights_confidence`, `usage_basis`, `source_authority`, `content_role`, `media_type`, `risk_level`, `manual_review_status`, attribution fields, and a still-image `motion` preset. The candidate audit also records `provider_type`, `source_domain`, `asset_url`, caption/alt text, matched entities, relevance reason, `rights_category`, manual-review flags, selection status, and rejection reasons. Green assets are auto-selectable. Yellow assets require explicit enablement and approval metadata. Red or unknown-rights assets are never auto-selected.
-
-PB-SHABD and PIB are separate sources. PB-SHABD is modeled as a safe authenticated/manual export source, not as an access-control bypass. Put exports in a configured folder such as:
-
-```text
-media/sources/pb_shabd_dropfolder/
-media/sources/pib_india/
-```
-
-Each media file can have a sidecar:
-
-```json
-{
-  "title": "Cabinet briefing visuals",
-  "source_url": "https://shabd.prasarbharati.org/",
-  "source_name": "PB-SHABD / Prasar Bharati",
-  "license": "official_press",
-  "usage_basis": "official_press",
-  "rights_tier": "green",
-  "rights_confidence": "verified",
-  "attribution_required": true,
-  "attribution_text": "Source: PB-SHABD / Prasar Bharati",
-  "keywords": ["cabinet", "briefing", "india"],
-  "safe_to_use": true
-}
-```
-
-Generic stock video is intentionally ranked below manifest, official, open archive, document/map/chart, and approved social media. It is used only when there is no better rights-clear visual for that segment, and it is never presented as actual event evidence.
-
-To provide official or rights-cleared media directly in a story manifest:
-
-```json
-"raw": {
-  "official_media": [
-    {
-      "url": "https://example.gov/media/briefing.mp4",
-      "asset_type": "video",
-      "source_name": "Example Agency",
-      "license": "public domain",
-      "usage_note": "Official government briefing footage.",
-      "rights_tier": "green",
-      "rights_confidence": "verified",
-      "usage_basis": "public_domain",
-      "source_authority": "official",
-      "content_role": "evidence",
-      "media_type": "video",
-      "manual_review_status": "not_required",
-      "safe_to_use": true,
-      "keywords": ["briefing", "agency", "policy"]
-    }
-  ]
-}
-```
-
-Visual pacing is duration-based by default. Use `SYNTHPOST_VISUAL_SECONDS_PER_BEAT`, `SYNTHPOST_VISUAL_MIN_SEGMENTS`, and `SYNTHPOST_VISUAL_MAX_SEGMENTS` to tune how often the right panel changes, or set `SYNTHPOST_VISUAL_SEGMENTS` to force an exact count. Still images get motion presets in Remotion: photos push in, documents scan, maps zoom, charts reveal, screenshots focus, and stock gets a restrained atmospheric pan.
-
-To refresh visuals without rerendering the anchor:
-
-```bash
-python3 -m pipeline.run_story episodes/ep_2026-06-21-ferc-grid/stories/story_001/story.json --force-visuals --skip-avatar-render --force-composite
+python3 -m unittest tests.test_direction tests.test_remotion_visual_skill_rendering
+python3 -m py_compile pipeline/config.py pipeline/storage.py pipeline/render_profiles.py pipeline/provenance.py pipeline/direction/avatar.py pipeline/compositor.py pipeline/run_story.py assembly/stitch_episode.py
+npm --prefix compositor/remotion_renderer run typecheck
 ```

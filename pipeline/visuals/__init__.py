@@ -1,2 +1,0 @@
-"""News visual provider stage."""
-

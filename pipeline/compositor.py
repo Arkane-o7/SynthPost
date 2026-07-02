@@ -2,19 +2,33 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-import sys
+from typing import Any
 
 from . import config
 from .provenance import artifact_record, record_story_artifact
 from .render_profiles import resolve_profile
-from .storage import output_is_fresh, read_manifest, resolve_project_path, write_manifest
+from .storage import output_is_fresh, read_manifest, resolve_project_path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SRC_ROOT = PROJECT_ROOT / "src"
-if str(SRC_ROOT) not in sys.path:
-    sys.path.insert(0, str(SRC_ROOT))
 
-from synthpost.visuals.compositor_bridge import apply_compositor_bridge, bridge_validation_errors  # noqa: E402
+def _visual_input_paths(manifest: dict[str, Any]) -> list[str | Path]:
+    inputs: list[str | Path] = []
+    for visual in manifest.get("compositor_visuals") or manifest.get("visuals") or []:
+        if isinstance(visual, dict) and visual.get("path"):
+            inputs.append(str(visual["path"]))
+    timeline = (
+        manifest.get("approved_timeline")
+        if isinstance(manifest.get("approved_timeline"), dict)
+        else {}
+    )
+    for segment in (
+        timeline.get("segments", [])
+        if isinstance(timeline.get("segments"), list)
+        else []
+    ):
+        visual = segment.get("visual") if isinstance(segment, dict) else None
+        if isinstance(visual, dict) and visual.get("path"):
+            inputs.append(str(visual["path"]))
+    return inputs
 
 
 def render_story(
@@ -24,39 +38,37 @@ def render_story(
     test_mode: bool = False,
     render_profile: str = "production",
 ) -> Path:
+    """Render a story manifest with the retained Remotion renderer.
+
+    This is intentionally a thin wrapper after the pipeline rip-out: it no longer
+    plans, ranks, bridges, or mutates visuals. The story manifest must already
+    contain render-ready `visuals`, `compositor_visuals`, or `approved_timeline`.
+    """
+
     manifest = read_manifest(story_json_path)
-    previous_bridge = {
-        "compositor_visuals": manifest.get("compositor_visuals"),
-        "visual_compositor_bridge": manifest.get("visual_compositor_bridge"),
-    }
-    manifest = apply_compositor_bridge(manifest, story_json_path)
-    next_bridge = {
-        "compositor_visuals": manifest.get("compositor_visuals"),
-        "visual_compositor_bridge": manifest.get("visual_compositor_bridge"),
-    }
-    if next_bridge != previous_bridge:
-        write_manifest(story_json_path, manifest)
-    bridge_errors = bridge_validation_errors(manifest.get("visual_compositor_bridge"))
-    if bridge_errors:
-        raise ValueError("Visual compositor bridge validation failed: " + "; ".join(bridge_errors))
-    composition = manifest.get("composition", {})
+    composition = (
+        manifest.get("composition", {})
+        if isinstance(manifest.get("composition"), dict)
+        else {}
+    )
     output_path = resolve_project_path(composition.get("output_path", ""))
+    if not str(composition.get("output_path", "")).strip():
+        story_path = resolve_project_path(story_json_path)
+        output_path = story_path.with_name("composited.mp4")
     profile = resolve_profile(render_profile)
 
-    inputs = [story_json_path]
-    direction = manifest.get("direction", {})
-    if isinstance(direction, dict) and direction.get("anchor_output_path"):
-        inputs.append(direction["anchor_output_path"])
-    bridge_summary = manifest.get("visual_compositor_bridge") if isinstance(manifest.get("visual_compositor_bridge"), dict) else {}
-    if bridge_summary.get("compositor_visuals_path"):
-        inputs.append(bridge_summary["compositor_visuals_path"])
-    for visual in manifest.get("compositor_visuals") or manifest.get("visuals", []):
-        if isinstance(visual, dict) and visual.get("path"):
-            inputs.append(visual["path"])
+    inputs: list[str | Path] = [story_json_path]
+    direction = (
+        manifest.get("direction", {})
+        if isinstance(manifest.get("direction"), dict)
+        else {}
+    )
+    if direction.get("anchor_output_path"):
+        inputs.append(str(direction["anchor_output_path"]))
+    inputs.extend(_visual_input_paths(manifest))
 
     if output_is_fresh(output_path, inputs) and not force:
         print(f"[compositor] Reusing fresh render: {output_path}")
-        preview_path = resolve_project_path(composition.get("preview_path", output_path.with_name("preview.png").as_posix()))
         record_story_artifact(
             story_json_path,
             "composited_video",
@@ -70,26 +82,8 @@ def render_story(
                 test_mode=test_mode,
                 render_profile=profile.name,
                 flags={"force": force},
-                metadata={"visual_bridge": manifest.get("visual_compositor_bridge")},
             ),
         )
-        if preview_path.exists():
-            record_story_artifact(
-                story_json_path,
-                "composition_preview",
-                artifact_record(
-                    path=preview_path,
-                    stage="compositor",
-                    input_paths=inputs,
-                    provider="remotion",
-                    fresh=False,
-                    reused=True,
-                    test_mode=test_mode,
-                    render_profile=profile.name,
-                    flags={"force": force},
-                    metadata={"visual_bridge": manifest.get("visual_compositor_bridge")},
-                ),
-            )
         return output_path
 
     remotion_dir = config.remotion_dir()
@@ -97,7 +91,13 @@ def render_story(
     if not package_json.exists():
         raise FileNotFoundError(f"Remotion renderer package not found: {package_json}")
 
-    command = ["npm", "run", "render:story", "--", str(resolve_project_path(story_json_path))]
+    command = [
+        "npm",
+        "run",
+        "render:story",
+        "--",
+        str(resolve_project_path(story_json_path)),
+    ]
     if force:
         command.append("--force")
     if test_mode:
@@ -105,10 +105,21 @@ def render_story(
     print(f"[compositor] Running Remotion renderer: {' '.join(command)}")
     subprocess.run(command, cwd=remotion_dir, check=True)
     if not output_path.exists():
-        raise FileNotFoundError(f"Remotion did not create expected composition: {output_path}")
+        raise FileNotFoundError(
+            f"Remotion did not create expected composition: {output_path}"
+        )
+
     rendered_manifest = read_manifest(story_json_path)
-    rendered_composition = rendered_manifest.get("composition", {}) if isinstance(rendered_manifest.get("composition"), dict) else {}
-    preview_path = resolve_project_path(rendered_composition.get("preview_path", output_path.with_name("preview.png").as_posix()))
+    rendered_composition = (
+        rendered_manifest.get("composition", {})
+        if isinstance(rendered_manifest.get("composition"), dict)
+        else {}
+    )
+    preview_path = resolve_project_path(
+        rendered_composition.get(
+            "preview_path", output_path.with_name("preview.png").as_posix()
+        )
+    )
     record_story_artifact(
         story_json_path,
         "composited_video",
@@ -123,7 +134,10 @@ def render_story(
             render_profile=profile.name,
             command=command,
             flags={"force": force},
-            metadata={"visual_bridge": rendered_manifest.get("visual_compositor_bridge")},
+            metadata={
+                "composition_id": rendered_composition.get("composition_id"),
+                "timeline_source": rendered_composition.get("timeline_source"),
+            },
         ),
     )
     if preview_path.exists():
@@ -141,7 +155,6 @@ def render_story(
                 render_profile=profile.name,
                 command=command,
                 flags={"force": force},
-                metadata={"visual_bridge": rendered_manifest.get("visual_compositor_bridge")},
             ),
         )
     return output_path

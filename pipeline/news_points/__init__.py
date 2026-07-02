@@ -1,2 +1,0 @@
-"""News point generation stage."""
-

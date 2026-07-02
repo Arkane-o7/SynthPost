@@ -11,8 +11,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline import config
 from pipeline.provenance import artifact_record, record_episode_artifact
 from pipeline.render_profiles import profile_record, resolve_profile
-from pipeline.storage import PROJECT_ROOT, episode_dir, read_manifest, resolve_project_path
-
+from pipeline.storage import (
+    PROJECT_ROOT,
+    episode_dir,
+    read_manifest,
+    resolve_project_path,
+)
 
 WIDTH = 1920
 HEIGHT = 1080
@@ -45,7 +49,9 @@ def ffprobe_streams(path: Path) -> dict:
 
 def has_audio(path: Path) -> bool:
     data = ffprobe_streams(path)
-    return any(stream.get("codec_type") == "audio" for stream in data.get("streams", []))
+    return any(
+        stream.get("codec_type") == "audio" for stream in data.get("streams", [])
+    )
 
 
 def duration_seconds(path: Path) -> float:
@@ -56,7 +62,15 @@ def duration_seconds(path: Path) -> float:
         return 1.0
 
 
-def ensure_placeholder_clip(path: Path, label: str, duration: float, *, width: int = WIDTH, height: int = HEIGHT, fps: int = FPS) -> None:
+def ensure_placeholder_clip(
+    path: Path,
+    label: str,
+    duration: float,
+    *,
+    width: int = WIDTH,
+    height: int = HEIGHT,
+    fps: int = FPS,
+) -> None:
     if path.exists():
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +105,14 @@ def ensure_placeholder_clip(path: Path, label: str, duration: float, *, width: i
     run(command)
 
 
-def normalize_clip(input_path: Path, output_path: Path, *, width: int = WIDTH, height: int = HEIGHT, fps: int = FPS) -> None:
+def normalize_clip(
+    input_path: Path,
+    output_path: Path,
+    *,
+    width: int = WIDTH,
+    height: int = HEIGHT,
+    fps: int = FPS,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ffmpeg = config.ffmpeg_binary()
     video_filter = (
@@ -101,7 +122,10 @@ def normalize_clip(input_path: Path, output_path: Path, *, width: int = WIDTH, h
     )
     audio_filter = "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000"
     try:
-        is_short_brand_placeholder = input_path.parent == (PROJECT_ROOT / "assets" / "brand") and duration_seconds(input_path) <= 2.5
+        is_short_brand_placeholder = (
+            input_path.parent == (PROJECT_ROOT / "assets" / "brand")
+            and duration_seconds(input_path) <= 2.5
+        )
     except Exception:
         is_short_brand_placeholder = False
     if is_short_brand_placeholder:
@@ -184,54 +208,62 @@ def normalize_clip(input_path: Path, output_path: Path, *, width: int = WIDTH, h
         if has_audio(input_path) and "-af" in command:
             fallback = command[:]
             fallback[fallback.index("-af") + 1] = "aresample=48000"
-            print("[assembly] Audio loudnorm failed, retrying with resample-only audio filter.")
+            print(
+                "[assembly] Audio loudnorm failed, retrying with resample-only audio filter."
+            )
             run(fallback)
             return
         raise
 
 
-def concat_clips(clips: list[Path], output_path: Path, work_dir: Path, *, fps: int = FPS) -> None:
+def concat_clips(
+    clips: list[Path], output_path: Path, work_dir: Path, *, fps: int = FPS
+) -> None:
     list_path = work_dir / "concat.txt"
     with list_path.open("w", encoding="utf-8") as handle:
         for clip in clips:
             safe = str(clip.resolve()).replace("'", "'\\''")
             handle.write(f"file '{safe}'\n")
     command = [
-            config.ffmpeg_binary(),
-            "-hide_banner",
-            "-loglevel",
-            "warning",
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(list_path),
-            "-r",
-            str(fps),
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-ar",
-            "48000",
-            "-ac",
-            "2",
-            "-movflags",
-            "+faststart",
-            str(output_path),
+        config.ffmpeg_binary(),
+        "-hide_banner",
+        "-loglevel",
+        "warning",
+        "-y",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_path),
+        "-r",
+        str(fps),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
+        "-movflags",
+        "+faststart",
+        str(output_path),
     ]
     try:
         run(command)
     except subprocess.CalledProcessError:
-        print("[assembly] Concat demuxer failed, retrying with safe filter re-encode concat.")
+        print(
+            "[assembly] Concat demuxer failed, retrying with safe filter re-encode concat."
+        )
         concat_clips_filter(clips, output_path, fps=fps)
 
 
-def concat_clips_filter(clips: list[Path], output_path: Path, *, fps: int = FPS) -> None:
+def concat_clips_filter(
+    clips: list[Path], output_path: Path, *, fps: int = FPS
+) -> None:
     command = [
         config.ffmpeg_binary(),
         "-hide_banner",
@@ -285,7 +317,9 @@ def stitch_episode(
 ) -> Path:
     profile = resolve_profile(render_profile)
     if test_mode:
-        print("[TEST_MODE] WARNING: Assembly output will be labeled TEST_MODE and written as final_TEST_MODE.mp4.")
+        print(
+            "[TEST_MODE] WARNING: Assembly output will be labeled TEST_MODE and written as final_TEST_MODE.mp4."
+        )
     episode = episode_dir(episode_id)
     manifests = story_manifests(episode_id)
     if not manifests:
@@ -293,22 +327,33 @@ def stitch_episode(
 
     intro = PROJECT_ROOT / "assets" / "brand" / "intro.mp4"
     outro = PROJECT_ROOT / "assets" / "brand" / "outro.mp4"
-    ensure_placeholder_clip(intro, "SYNTHPOST", 1.6, width=profile.width, height=profile.height, fps=profile.fps)
-    ensure_placeholder_clip(outro, "SYNTHPOST", 1.2, width=profile.width, height=profile.height, fps=profile.fps)
+    ensure_placeholder_clip(
+        intro,
+        "SYNTHPOST",
+        1.6,
+        width=profile.width,
+        height=profile.height,
+        fps=profile.fps,
+    )
+    ensure_placeholder_clip(
+        outro,
+        "SYNTHPOST",
+        1.2,
+        width=profile.width,
+        height=profile.height,
+        fps=profile.fps,
+    )
 
     source_clips = [intro]
     for manifest_path in manifests:
         manifest = read_manifest(manifest_path)
-        output = resolve_project_path(manifest.get("composition", {}).get("output_path", ""))
+        output = resolve_project_path(
+            manifest.get("composition", {}).get("output_path", "")
+        )
         if not output.exists():
             raise FileNotFoundError(f"Composited story clip missing: {output}")
         source_clips.append(output)
-    endscreen = episode / "endscreen" / "endscreen.mp4"
-    if endscreen.exists():
-        print(f"[assembly] Using generated endscreen instead of generic outro: {endscreen}")
-        source_clips.append(endscreen)
-    else:
-        source_clips.append(outro)
+    source_clips.append(outro)
 
     work_dir = episode / "_assembly"
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -316,12 +361,20 @@ def stitch_episode(
     for index, clip in enumerate(source_clips):
         out = work_dir / f"{index:03d}_{clip.stem}_{profile.name}_normalized.mp4"
         if force or not out.exists() or clip.stat().st_mtime > out.stat().st_mtime:
-            normalize_clip(clip, out, width=profile.width, height=profile.height, fps=profile.fps)
+            normalize_clip(
+                clip, out, width=profile.width, height=profile.height, fps=profile.fps
+            )
         normalized.append(out)
 
     final_path = episode / ("final_TEST_MODE.mp4" if test_mode else "final.mp4")
     concat_clips(normalized, final_path, work_dir, fps=profile.fps)
-    command = ["python3", "assembly/stitch_episode.py", episode_id, "--render-profile", profile.name]
+    command = [
+        "python3",
+        "assembly/stitch_episode.py",
+        episode_id,
+        "--render-profile",
+        profile.name,
+    ]
     if force:
         command.append("--force")
     if test_mode:
@@ -355,10 +408,16 @@ def stitch_episode(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Stitch SynthPost story clips into one episode MP4.")
+    parser = argparse.ArgumentParser(
+        description="Stitch SynthPost story clips into one episode MP4."
+    )
     parser.add_argument("episode_id")
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--test-mode", action="store_true", help="Write TEST_MODE provenance and final_TEST_MODE.mp4.")
+    parser.add_argument(
+        "--test-mode",
+        action="store_true",
+        help="Write TEST_MODE provenance and final_TEST_MODE.mp4.",
+    )
     parser.add_argument(
         "--render-profile",
         choices=["preview", "production", "final_master"],
@@ -366,7 +425,12 @@ def main() -> None:
         help="Render quality profile for output normalization.",
     )
     args = parser.parse_args()
-    stitch_episode(args.episode_id, force=args.force, test_mode=args.test_mode, render_profile=args.render_profile)
+    stitch_episode(
+        args.episode_id,
+        force=args.force,
+        test_mode=args.test_mode,
+        render_profile=args.render_profile,
+    )
 
 
 if __name__ == "__main__":

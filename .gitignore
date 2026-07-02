@@ -21,8 +21,7 @@ assets/brand/outro.mp4
 compositor/remotion_renderer/node_modules/
 compositor/remotion_renderer/out/
 compositor/remotion_renderer/public/generated/
-control_room/frontend/node_modules/
-control_room/frontend/dist/
+
 
 # Avatar-Engine generated artifacts. The cloned repo itself stays untouched.
 avatar-engine/assets/output/

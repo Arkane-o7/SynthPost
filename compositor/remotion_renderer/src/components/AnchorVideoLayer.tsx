@@ -1,8 +1,8 @@
-import React from 'react';
-import {AbsoluteFill, OffthreadVideo} from 'remotion';
-import {brand} from '../styles/brand';
-import type {PublicMedia} from '../types';
-import {mediaSrc} from './media';
+import React from "react";
+import { AbsoluteFill, OffthreadVideo } from "remotion";
+import { brand } from "../styles/brand";
+import type { PublicMedia } from "../types";
+import { mediaSrc } from "./media";
 
 type AnchorCrop = {
   scale: number;
@@ -11,11 +11,11 @@ type AnchorCrop = {
   objectPosition: string;
 };
 
-const chromaKeyFilterId = 'synthpost-anchor-chroma-key';
-const defaultAnchorFilter = 'saturate(0.9) contrast(1.04) brightness(0.96)';
+const chromaKeyFilterId = "synthpost-anchor-chroma-key";
+const defaultAnchorFilter = "saturate(0.9) contrast(1.04) brightness(0.96)";
 
 const ChromaKeyFilter: React.FC = () => (
-  <svg width="0" height="0" style={{position: 'absolute'}} aria-hidden="true">
+  <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
     <defs>
       <filter id={chromaKeyFilterId} colorInterpolationFilters="sRGB">
         <feColorMatrix
@@ -37,17 +37,30 @@ export const AnchorVideoLayer: React.FC<{
   crop: AnchorCrop;
   style?: React.CSSProperties;
   mediaFilter?: string;
-  overlay?: React.CSSProperties['background'];
+  overlay?: React.CSSProperties["background"];
   chromaKey?: boolean;
-}> = ({anchor, crop, style, mediaFilter, overlay, chromaKey}) => {
+  muted?: boolean;
+  startFrom?: number;
+}> = ({
+  anchor,
+  crop,
+  style,
+  mediaFilter,
+  overlay,
+  chromaKey,
+  muted = false,
+  startFrom,
+}) => {
   const toneFilter = mediaFilter ?? defaultAnchorFilter;
-  const videoFilter = chromaKey ? `url(#${chromaKeyFilterId}) ${toneFilter}` : toneFilter;
+  const videoFilter = chromaKey
+    ? `url(#${chromaKeyFilterId}) ${toneFilter}`
+    : toneFilter;
 
   return (
     <div
       style={{
-        position: 'absolute',
-        overflow: 'hidden',
+        position: "absolute",
+        overflow: "hidden",
         backgroundColor: brand.ink,
         ...style,
       }}
@@ -57,13 +70,15 @@ export const AnchorVideoLayer: React.FC<{
         <AbsoluteFill>
           <OffthreadVideo
             src={mediaSrc(anchor)}
+            muted={muted}
+            startFrom={startFrom}
             style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
               objectPosition: crop.objectPosition,
               transform: `translate(${crop.offsetX}px, ${crop.offsetY}px) scale(${crop.scale})`,
-              transformOrigin: 'center top',
+              transformOrigin: "center top",
               filter: videoFilter,
             }}
           />
@@ -72,8 +87,8 @@ export const AnchorVideoLayer: React.FC<{
       <AbsoluteFill
         style={{
           background: overlay,
-          boxShadow: 'inset 0 0 90px rgba(2, 6, 16, 0.46)',
-          pointerEvents: 'none',
+          boxShadow: "inset 0 0 90px rgba(2, 6, 16, 0.46)",
+          pointerEvents: "none",
         }}
       />
     </div>

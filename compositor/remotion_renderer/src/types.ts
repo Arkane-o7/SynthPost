@@ -1,30 +1,30 @@
 export type PublicMedia = {
   publicPath: string;
   absolutePath?: string;
-  kind: 'image' | 'video';
+  kind: "image" | "video";
   remote?: boolean;
 };
 
 export type TimedVisual = PublicMedia & {
   start: number;
   end: number;
-  fit?: 'cover' | 'contain';
+  fit?: "cover" | "contain";
   sourceLabel?: string;
   audio?: boolean;
   volume?: number;
   mediaType?:
-    | 'video'
-    | 'image'
-    | 'photo'
-    | 'screenshot'
-    | 'document'
-    | 'map'
-    | 'chart'
-    | 'satellite'
-    | 'stock'
-    | 'generated_card'
+    | "video"
+    | "image"
+    | "photo"
+    | "screenshot"
+    | "document"
+    | "map"
+    | "chart"
+    | "satellite"
+    | "stock"
+    | "generated_card"
     | string;
-  contentRole?: 'evidence' | 'context' | 'explanation' | 'atmosphere';
+  contentRole?: "evidence" | "context" | "explanation" | "atmosphere";
   candidateId?: string;
   planId?: string;
   sectionId?: string;
@@ -45,7 +45,13 @@ export type TimedVisual = PublicMedia & {
   skillPlaceholder?: Record<string, unknown>;
   renderSafetyStatus?: string;
   motion?: {
-    preset?: 'push_in' | 'pan_left' | 'document_scan' | 'map_zoom' | 'chart_reveal' | 'screenshot_focus';
+    preset?:
+      | "push_in"
+      | "pan_left"
+      | "document_scan"
+      | "map_zoom"
+      | "chart_reveal"
+      | "screenshot_focus";
     intensity?: number;
     focus?: [number, number];
   };
@@ -60,6 +66,32 @@ export type HeadlineItem = {
   text: string;
   start?: number;
   end?: number;
+};
+
+export type TimelineSegmentProps = {
+  segmentId: string;
+  sectionId: string;
+  start: number;
+  end: number;
+  duration: number;
+  scriptText: string;
+  anchor: {
+    visible: boolean;
+    speaking: boolean;
+    camera?: string;
+  };
+  visual?: TimedVisual;
+  template: {
+    templateId: string;
+    layout?: string;
+  };
+  overlays: {
+    lowerThird?: string;
+    chyron?: string;
+    attribution?: string;
+    quoteText?: string;
+    documentSource?: string;
+  };
 };
 
 export type StoryProps = {
@@ -79,4 +111,5 @@ export type StoryProps = {
   visuals: TimedVisual[];
   points: NewsPoint[];
   logo?: PublicMedia;
+  timelineSegments?: TimelineSegmentProps[];
 };
