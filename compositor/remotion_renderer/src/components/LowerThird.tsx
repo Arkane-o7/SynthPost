@@ -10,7 +10,7 @@ export const LowerThird: React.FC<{
   sourceLabel: string;
   sourceDate: string;
   logo?: PublicMedia;
-}> = ({ headline, headlineItems, sourceLabel, sourceDate, logo }) => {
+}> = ({ headline, headlineItems }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const second = frame / fps;
@@ -18,8 +18,6 @@ export const LowerThird: React.FC<{
     headlineItems && headlineItems.length
       ? headlineItems
       : [{ text: headline }];
-  const sourceMeta =
-    [sourceLabel, sourceDate].filter(Boolean).join(" · ") || "SynthPost";
   const items: HeadlineItem[] = sourceItems
     .map(
       (item): HeadlineItem => ({
@@ -225,7 +223,7 @@ export const LowerThird: React.FC<{
         boxShadow: "0 -18px 58px rgba(0,0,0,0.34)",
       }}
     >
-      <LogoBug logo={logo} />
+      <LogoBug />
       <div
         style={{
           flex: 1,
@@ -289,7 +287,7 @@ export const LowerThird: React.FC<{
               textAlign: "right",
             }}
           >
-            {sourceMeta}
+            SYNTHPOST
           </div>
         </div>
       </div>

@@ -103,17 +103,21 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             source = (REMOTION_SRC / "templates" / template).read_text(encoding="utf-8")
             self.assertIn("DesignCanvas", source)
 
-    def test_brand_logo_and_source_metadata_reach_lower_third(self) -> None:
-        render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
+    def test_lower_third_matches_original_wordmark_and_static_bug_text(self) -> None:
+        logo_bug = (REMOTION_SRC / "components" / "LogoBug.tsx").read_text(
+            encoding="utf-8"
+        )
         lower_third = (REMOTION_SRC / "components" / "LowerThird.tsx").read_text(
             encoding="utf-8"
         )
-        self.assertIn("synthpost_bug.svg", render_story)
-        self.assertNotIn("synthpost-gradient-landscape.png", render_story)
-        self.assertIn("const sourceMeta", lower_third)
-        self.assertIn("{sourceMeta}", lower_third)
+        self.assertIn("Synthpost", logo_bug)
+        self.assertNotIn("<Img", logo_bug)
+        self.assertIn("SYNTHPOST", lower_third)
+        self.assertNotIn("sourceMeta", lower_third)
 
-    def test_visual_attribution_is_not_duplicated_by_retained_templates(self) -> None:
+    def test_news_visuals_use_original_source_label_overlay_without_tiny_duplicate_attribution(
+        self,
+    ) -> None:
         news_panel = (REMOTION_SRC / "components" / "NewsVisualPanel.tsx").read_text(
             encoding="utf-8"
         )
@@ -126,14 +130,17 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         visual_skills = (
             REMOTION_SRC / "components" / "visualSkills" / "VisualSkillRenderer.tsx"
         ).read_text(encoding="utf-8")
-        self.assertNotIn("SourceLabel", news_panel)
-        self.assertNotIn("SourceLabel", fullscreen)
-        self.assertNotIn("<SourceLabel", timeline_story)
-        self.assertNotIn(
-            "firstText(visual.sourceLabel, visual.sectionType, visual.visualRole)",
-            visual_skills,
-        )
-        self.assertIn("<AttributionStrip visual={visual} />", visual_skills)
+        self.assertIn("SourceLabel", news_panel)
+        self.assertIn("SourceLabel", fullscreen)
+        self.assertIn("<SourceLabel", timeline_story)
+        relative_visual = timeline_story.split("const relativeSegmentVisual", 1)[
+            1
+        ].split("const segmentHeadlineItems", 1)[0]
+        self.assertNotIn("segment.overlays.attribution", relative_visual)
+        media_skill = visual_skills.split("const MediaSkill", 1)[1].split(
+            "export const VisualSkillRenderer", 1
+        )[0]
+        self.assertNotIn("<AttributionStrip visual={visual} />", media_skill)
 
     def test_approved_video_trim_reaches_remotion_video_layer(self) -> None:
         render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")

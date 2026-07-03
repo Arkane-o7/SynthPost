@@ -215,6 +215,48 @@ const formatDate = (value: string | undefined): string => {
     .toUpperCase();
 };
 
+const providerLabel = (value: unknown): string => {
+  const raw = String(value ?? "")
+    .replace(/^source:\s*/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw) {
+    return "";
+  }
+  const normalized = raw.toLowerCase();
+  if (
+    [
+      "local",
+      "local upload",
+      "local media",
+      "user provided local media",
+    ].includes(normalized)
+  ) {
+    return "SYNTHPOST";
+  }
+  if (normalized === "nasa") {
+    return "NASA";
+  }
+  if (normalized === "dvids") {
+    return "DVIDS";
+  }
+  if (normalized.includes("wikimedia")) {
+    return "WIKIMEDIA COMMONS";
+  }
+  return raw.toUpperCase();
+};
+
+const visualSourceLabel = (...values: unknown[]): string => {
+  for (const value of values) {
+    const label = providerLabel(value);
+    if (label) {
+      return label;
+    }
+  }
+  return "SYNTHPOST";
+};
+
 const headlineCueItems = (value: unknown): HeadlineItem[] => {
   if (!Array.isArray(value)) {
     return [];
@@ -365,7 +407,13 @@ const timelineSegmentProps = async (
           start,
           end,
           fit: "cover" as const,
-          sourceLabel: String(visualRef.source ?? visualRef.provider ?? ""),
+          sourceLabel: visualSourceLabel(
+            visualRef.source_label,
+            visualRef.source_name,
+            visualRef.source,
+            visualRef.provider,
+            visualRef.source_domain,
+          ),
           audio:
             visualRef.audio_mode === "original" ||
             visualRef.audio_mode === "mixed",
@@ -488,7 +536,14 @@ const main = async () => {
       start: Number(visual.start ?? 0),
       end: Number(visual.end ?? direction.estimated_duration_seconds ?? 30),
       fit: visual.fit ?? "cover",
-      sourceLabel: visual.sourceLabel,
+      sourceLabel: visualSourceLabel(
+        visual.sourceLabel,
+        visual.source_label,
+        visual.source_name,
+        visual.source,
+        visual.provider,
+        visual.source_domain,
+      ),
       audio:
         visual.audio === undefined && visual.play_audio === undefined
           ? undefined

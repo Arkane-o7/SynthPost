@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { brand, layout } from "../styles/brand";
 import type { TimedVisual } from "../types";
+import { SourceLabel } from "./SourceLabel";
 import { activeVisual, clampUnit } from "./VisualMediaLayer";
 import { VisualSkillRenderer } from "./visualSkills/VisualSkillRenderer";
 
@@ -9,7 +10,7 @@ export const NewsVisualPanel: React.FC<{
   visuals: TimedVisual[];
   sourceLabel: string;
   sourceDate: string;
-}> = ({ visuals }) => {
+}> = ({ visuals, sourceLabel, sourceDate }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const second = frame / fps;
@@ -48,6 +49,10 @@ export const NewsVisualPanel: React.FC<{
             "linear-gradient(90deg, rgba(2,8,16,0.36) 0%, transparent 22%, transparent 74%, rgba(2,8,16,0.40) 100%), linear-gradient(180deg, rgba(2,8,16,0.24) 0%, transparent 45%, rgba(2,8,16,0.42) 100%)",
           pointerEvents: "none",
         }}
+      />
+      <SourceLabel
+        label={visual.sourceLabel || sourceLabel}
+        date={sourceDate}
       />
       <div
         style={{

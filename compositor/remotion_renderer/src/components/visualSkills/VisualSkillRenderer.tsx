@@ -760,20 +760,6 @@ const MediaSkill: React.FC<{
       volume={volume}
       mediaStyle={mediaStyle}
     />
-    <div
-      style={{
-        position: "absolute",
-        left: 28,
-        right: 28,
-        bottom: 28,
-        display: "flex",
-        alignItems: "end",
-        justifyContent: "flex-end",
-        pointerEvents: "none",
-      }}
-    >
-      <AttributionStrip visual={visual} />
-    </div>
     <SafetyBadge visual={visual} floating />
   </AbsoluteFill>
 );
