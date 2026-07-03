@@ -111,7 +111,7 @@ Current validation covers:
 
 ## Smoke render
 
-Create a deterministic local test episode, render with a placeholder anchor in `TEST_MODE`, and assemble a final video:
+Create a deterministic local test episode, render with a placeholder anchor in `TEST_MODE`, and assemble a validation video:
 
 ```bash
 make smoke
@@ -128,6 +128,26 @@ episodes/<episode_id>/
 ```
 
 `TEST_MODE` outputs are explicitly not production outputs.
+
+## Real demo render
+
+Create a deterministic local demo episode and render a non-`TEST_MODE` demo MP4:
+
+```bash
+make render-demo
+```
+
+This writes:
+
+```text
+episodes/<episode_id>/
+  stories/<story_id>/story.json
+  stories/<story_id>/preview.png
+  stories/<story_id>/composited.mp4
+  final.mp4
+```
+
+By default this does not mutate or install anything inside `avatar-engine/`; if Avatar Engine is not already set up, use the existing placeholder-anchor fallback. For a real avatar render, set up Avatar Engine and run `python3 -m pipeline.run_episode <episode_id> --with-avatar`.
 
 ## Render a pre-authored story manifest
 

@@ -66,7 +66,7 @@ The first vertical slice is deliberately editorial: create an episode, select a 
 
 The system keeps the retained Remotion templates, avatar integration boundary, render profiles, provenance helpers, and ffmpeg episode assembly.
 
-This demo uses local placeholder media marked as editor-controlled, while the production workflow blocks unsafe rights states before rendering.
+This demo uses local editor-approved media from the retained renderer assets, while the production workflow blocks unsafe rights states before rendering.
 """.strip(),
             category="technology",
         )
@@ -91,18 +91,18 @@ This demo uses local placeholder media marked as editor-controlled, while the pr
                 else script.sections[0].section_id
             ],
             rights_tier=RightsTier.green,
-            usage_basis="repo_placeholder_for_test_mode_demo",
+            usage_basis="repo_editor_approved_demo_asset",
         )
         approve_visual(
             repository,
             visual.asset_id,
             manual=False,
-            attribution_text="Source: SynthPost retained renderer placeholder",
+            attribution_text="Source: SynthPost retained renderer demo asset",
         )
         generate_timeline(repository, story_id)
         approve_timeline(repository, story_id)
         build_story_manifest(
-            repository, story_id, render_profile=render_profile, test_mode=True
+            repository, story_id, render_profile=render_profile, test_mode=False
         )
         return episode.episode_id, story_id
     finally:

@@ -29,4 +29,4 @@ smoke:
 	SYNTHPOST_LLM_PROVIDER=mock python3 -m pipeline.run_episode --smoke --render-profile preview
 
 render-demo:
-	SYNTHPOST_LLM_PROVIDER=mock python3 -m pipeline.run_episode --create-demo --render-profile preview --test-mode
+	SYNTHPOST_LLM_PROVIDER=mock python3 -m pipeline.run_episode --create-demo --render-profile preview
