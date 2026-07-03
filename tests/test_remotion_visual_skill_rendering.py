@@ -86,6 +86,32 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             "durationInFrames={Math.max(1, endFrame - startFrame)}", timeline_story
         )
 
+    def test_retained_templates_scale_1080p_design_canvas_to_preview_profile(
+        self,
+    ) -> None:
+        design_canvas = (REMOTION_SRC / "components" / "DesignCanvas.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("width / layout.width", design_canvas)
+        self.assertIn("height / layout.height", design_canvas)
+        for template in [
+            "TimelineStory.tsx",
+            "SplitMain.tsx",
+            "FullScreenAnchor.tsx",
+            "FullScreenNewsVisuals.tsx",
+        ]:
+            source = (REMOTION_SRC / "templates" / template).read_text(encoding="utf-8")
+            self.assertIn("DesignCanvas", source)
+
+    def test_brand_logo_and_source_metadata_reach_lower_third(self) -> None:
+        render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
+        lower_third = (REMOTION_SRC / "components" / "LowerThird.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("synthpost-gradient-landscape.png", render_story)
+        self.assertIn("const sourceMeta", lower_third)
+        self.assertIn("{sourceMeta}", lower_third)
+
     def test_approved_video_trim_reaches_remotion_video_layer(self) -> None:
         render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
         visual_layer = (REMOTION_SRC / "components" / "VisualMediaLayer.tsx").read_text(

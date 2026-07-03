@@ -7,6 +7,7 @@ import {
 } from "remotion";
 import { AnchorPanel } from "../components/AnchorPanel";
 import { AnchorVideoLayer } from "../components/AnchorVideoLayer";
+import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
 import { NewsVisualPanel } from "../components/NewsVisualPanel";
 import { SourceLabel } from "../components/SourceLabel";
@@ -469,84 +470,86 @@ const Segment: React.FC<{
     template === "document_callout";
 
   return (
-    <AbsoluteFill
-      style={{
-        background: "linear-gradient(115deg, #020610, #07182c 52%, #04070d)",
-        color: brand.white,
-        overflow: "hidden",
-      }}
-    >
+    <DesignCanvas background="linear-gradient(115deg, #020610, #07182c 52%, #04070d)">
       <AbsoluteFill
         style={{
-          opacity: 0.12,
-          background:
-            "repeating-linear-gradient(90deg, rgba(245,247,250,.08) 0 1px, transparent 1px 96px), repeating-linear-gradient(0deg, rgba(245,247,250,.04) 0 1px, transparent 1px 96px)",
-          mixBlendMode: "screen",
+          background: "linear-gradient(115deg, #020610, #07182c 52%, #04070d)",
+          color: brand.white,
+          overflow: "hidden",
         }}
-      />
-
-      {template === "quote_card" ? <QuoteCard segment={segment} /> : null}
-      {template === "document_callout" ? (
-        <DocumentCallout segment={segment} progress={progress} />
-      ) : null}
-      {template === "chart_explainer" ? (
-        <ChartExplainer {...explainerProps} />
-      ) : null}
-      {template === "map_explainer" ? (
-        <MapExplainer {...explainerProps} />
-      ) : null}
-      {template === "timeline_explainer" ? (
-        <TimelineExplainer {...explainerProps} />
-      ) : null}
-      {template === "comparison_card" ? (
-        <ComparisonCard {...explainerProps} />
-      ) : null}
-      {template === "bullet_summary" ? (
-        <BulletSummary {...explainerProps} />
-      ) : null}
-      {template === "source_screenshot" ? (
-        <SourceScreenshot {...explainerProps} />
-      ) : null}
-      {template === "fallback_context_card" ? (
-        <FallbackContextCard {...explainerProps} />
-      ) : null}
-
-      {template === "split_anchor_visual" ? (
-        <RetainedSplitSegment
-          segment={segment}
-          story={story}
-          visual={visual}
-          mutedAnchor={muteAnchor}
-          startFrom={Math.round(segment.start * fps)}
+      >
+        <AbsoluteFill
+          style={{
+            opacity: 0.12,
+            background:
+              "repeating-linear-gradient(90deg, rgba(245,247,250,.08) 0 1px, transparent 1px 96px), repeating-linear-gradient(0deg, rgba(245,247,250,.04) 0 1px, transparent 1px 96px)",
+            mixBlendMode: "screen",
+          }}
         />
-      ) : null}
 
-      {template === "fullscreen_news_visual" ? (
-        <RetainedFullScreenVisualSegment
-          segment={segment}
-          story={story}
-          visual={visual}
-          progress={progress}
-        />
-      ) : null}
+        {template === "quote_card" ? <QuoteCard segment={segment} /> : null}
+        {template === "document_callout" ? (
+          <DocumentCallout segment={segment} progress={progress} />
+        ) : null}
+        {template === "chart_explainer" ? (
+          <ChartExplainer {...explainerProps} />
+        ) : null}
+        {template === "map_explainer" ? (
+          <MapExplainer {...explainerProps} />
+        ) : null}
+        {template === "timeline_explainer" ? (
+          <TimelineExplainer {...explainerProps} />
+        ) : null}
+        {template === "comparison_card" ? (
+          <ComparisonCard {...explainerProps} />
+        ) : null}
+        {template === "bullet_summary" ? (
+          <BulletSummary {...explainerProps} />
+        ) : null}
+        {template === "source_screenshot" ? (
+          <SourceScreenshot {...explainerProps} />
+        ) : null}
+        {template === "fallback_context_card" ? (
+          <FallbackContextCard {...explainerProps} />
+        ) : null}
 
-      {template === "fullscreen_anchor" || template === "fallback_anchor" ? (
-        <RetainedFullScreenAnchorSegment
-          segment={segment}
-          story={story}
-          mutedAnchor={muteAnchor}
-          startFrom={Math.round(segment.start * fps)}
-        />
-      ) : null}
+        {template === "split_anchor_visual" ? (
+          <RetainedSplitSegment
+            segment={segment}
+            story={story}
+            visual={visual}
+            mutedAnchor={muteAnchor}
+            startFrom={Math.round(segment.start * fps)}
+          />
+        ) : null}
 
-      {!standaloneTemplate ? (
-        <SegmentLowerThird
-          segment={segment}
-          sourceLabel={story.sourceLabel}
-          sourceDate={story.sourceDate}
-        />
-      ) : null}
-    </AbsoluteFill>
+        {template === "fullscreen_news_visual" ? (
+          <RetainedFullScreenVisualSegment
+            segment={segment}
+            story={story}
+            visual={visual}
+            progress={progress}
+          />
+        ) : null}
+
+        {template === "fullscreen_anchor" || template === "fallback_anchor" ? (
+          <RetainedFullScreenAnchorSegment
+            segment={segment}
+            story={story}
+            mutedAnchor={muteAnchor}
+            startFrom={Math.round(segment.start * fps)}
+          />
+        ) : null}
+
+        {!standaloneTemplate ? (
+          <SegmentLowerThird
+            segment={segment}
+            sourceLabel={story.sourceLabel}
+            sourceDate={story.sourceDate}
+          />
+        ) : null}
+      </AbsoluteFill>
+    </DesignCanvas>
   );
 };
 

@@ -534,11 +534,18 @@ const main = async () => {
     visuals.push({ ...fallback, start: 0, end: 30, fit: "cover" });
   }
 
-  const logoCandidate = path.join(publicDir, "brand", "synthpost_bug.png");
-  const logo = fsSync.existsSync(logoCandidate)
+  const logoCandidates = [
+    "synthpost_bug.png",
+    "synthpost-gradient-landscape.png",
+    "synthpost-gradient-portrait.png",
+  ];
+  const logoFile = logoCandidates.find((fileName) =>
+    fsSync.existsSync(path.join(publicDir, "brand", fileName)),
+  );
+  const logo = logoFile
     ? {
-        publicPath: "brand/synthpost_bug.png",
-        absolutePath: logoCandidate,
+        publicPath: `brand/${logoFile}`,
+        absolutePath: path.join(publicDir, "brand", logoFile),
         kind: "image" as const,
       }
     : undefined;
