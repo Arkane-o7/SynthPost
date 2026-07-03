@@ -34,6 +34,29 @@ def _timeline_has_source_audio(timeline: dict[str, Any]) -> bool:
     return False
 
 
+def _float_or_zero(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _avatar_target_duration(manifest: dict[str, Any]) -> float:
+    direction = (
+        manifest.get("direction") if isinstance(manifest.get("direction"), dict) else {}
+    )
+    for key in (
+        "audio_duration_seconds",
+        "anchor_duration_seconds",
+        "estimated_duration_seconds",
+        "duration_seconds",
+    ):
+        duration = _float_or_zero(direction.get(key))
+        if duration > 0:
+            return duration
+    return 0.0
+
+
 def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
     """Align pure-narration timeline segments to the actual avatar duration.
 
@@ -46,7 +69,7 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
     """
 
     timeline = _approved_timeline(manifest)
-    if not timeline or timeline.get("status") != "approved":
+    if not timeline or str(timeline.get("status", "")).strip().lower() != "approved":
         return False
     if _timeline_has_source_audio(timeline):
         timeline["timing_sync_warning"] = (
@@ -58,22 +81,13 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
     )
     if not segments:
         return False
-    direction = (
-        manifest.get("direction") if isinstance(manifest.get("direction"), dict) else {}
-    )
-    try:
-        target_duration = float(direction.get("estimated_duration_seconds") or 0)
-    except (TypeError, ValueError):
-        target_duration = 0.0
+    target_duration = _avatar_target_duration(manifest)
     if target_duration <= 0:
         return False
     current_end = 0.0
     for segment in segments:
         if isinstance(segment, dict):
-            try:
-                current_end = max(current_end, float(segment.get("end_time") or 0))
-            except (TypeError, ValueError):
-                pass
+            current_end = max(current_end, _float_or_zero(segment.get("end_time")))
     if current_end <= 0 or abs(current_end - target_duration) < 0.08:
         return False
     scale = target_duration / current_end
@@ -86,12 +100,11 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
         except (TypeError, ValueError):
             original_duration = 0.0
         if original_duration <= 0:
-            try:
-                original_duration = float(segment.get("end_time") or 0) - float(
-                    segment.get("start_time") or 0
-                )
-            except (TypeError, ValueError):
-                original_duration = 1.0
+            original_duration = _float_or_zero(
+                segment.get("end_time")
+            ) - _float_or_zero(segment.get("start_time"))
+        if original_duration <= 0:
+            original_duration = 1.0
         duration = max(0.1, original_duration * scale)
         start = cursor
         end = target_duration if index == len(segments) - 1 else cursor + duration
@@ -123,9 +136,24 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
             if segment:
                 region["start_time"] = segment["start_time"]
                 region["end_time"] = segment["end_time"]
+                region["duration"] = round(
+                    _float_or_zero(segment.get("end_time"))
+                    - _float_or_zero(segment.get("start_time")),
+                    3,
+                )
     timeline["duration_seconds"] = round(target_duration, 3)
     timeline["timing_source"] = "avatar_duration_rescaled"
-    timeline["original_duration_seconds"] = round(current_end, 3)
+    timeline.setdefault("original_duration_seconds", round(current_end, 3))
+    direction = (
+        manifest.get("direction") if isinstance(manifest.get("direction"), dict) else {}
+    )
+    script = manifest.get("script") if isinstance(manifest.get("script"), dict) else {}
+    script_text = str(script.get("text") or "").strip()
+    if direction and script_text:
+        direction["performance_beats"] = avatar.performance_beats_for(
+            script_text, target_duration
+        )
+        manifest["direction"] = direction
     return True
 
 

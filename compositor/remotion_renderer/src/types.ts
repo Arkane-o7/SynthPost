@@ -46,6 +46,8 @@ export type TimedVisual = PublicMedia & {
   provider?: string;
   license?: string;
   attributionText?: string;
+  trimStart?: number;
+  trimEnd?: number;
   rightsCategory?: string;
   manualReviewFlag?: boolean;
   fallbackStatus?: string;

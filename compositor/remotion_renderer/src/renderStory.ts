@@ -345,6 +345,8 @@ const timelineSegmentProps = async (
       }
     }
     const visualPath = String(visualRef.path ?? "");
+    const trimStart = Number(visualRef.trim_start);
+    const trimEnd = Number(visualRef.trim_end);
     const staged = assetId
       ? await stageMedia(
           visualPath,
@@ -372,6 +374,8 @@ const timelineSegmentProps = async (
           contentRole: visualRef.content_role,
           candidateId: assetId,
           attributionText: visualRef.attribution_text,
+          trimStart: Number.isFinite(trimStart) ? trimStart : undefined,
+          trimEnd: Number.isFinite(trimEnd) ? trimEnd : undefined,
         }
       : undefined;
     segments.push({

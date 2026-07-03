@@ -1,7 +1,6 @@
 import React from "react";
 import {
   AbsoluteFill,
-  interpolate,
   Sequence,
   useCurrentFrame,
   useVideoConfig,
@@ -424,7 +423,10 @@ const Segment: React.FC<{
 }> = ({ segment, story }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const localFrame = frame - Math.round(segment.start * fps);
+  // Inside a Remotion <Sequence>, useCurrentFrame() is already relative to
+  // that segment. Keep the anchor video globally offset with startFrom, but do
+  // not subtract segment.start here or later segments render invisible/late.
+  const localFrame = frame;
   const progress = Math.max(
     0,
     Math.min(1, localFrame / Math.max(1, Math.round(segment.duration * fps))),
@@ -433,10 +435,6 @@ const Segment: React.FC<{
   const template = getTemplateDefinition(
     segment.template.templateId,
   ).template_id;
-  const fade = interpolate(localFrame, [0, Math.round(fps * 0.3)], [0, 1], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-  });
   const muteAnchor =
     !segment.anchor.speaking ||
     segment.audio?.mode === "source" ||
@@ -473,7 +471,6 @@ const Segment: React.FC<{
   return (
     <AbsoluteFill
       style={{
-        opacity: fade,
         background: "linear-gradient(115deg, #020610, #07182c 52%, #04070d)",
         color: brand.white,
         overflow: "hidden",
@@ -564,15 +561,19 @@ export const TimelineStory: React.FC<StoryProps> = (props) => {
   }
   return (
     <AbsoluteFill style={{ background: brand.navy }}>
-      {segments.map((segment) => (
-        <Sequence
-          key={segment.segmentId}
-          from={Math.round(segment.start * fps)}
-          durationInFrames={Math.max(1, Math.round(segment.duration * fps))}
-        >
-          <Segment segment={segment} story={props} />
-        </Sequence>
-      ))}
+      {segments.map((segment) => {
+        const startFrame = Math.round(segment.start * fps);
+        const endFrame = Math.round(segment.end * fps);
+        return (
+          <Sequence
+            key={segment.segmentId}
+            from={startFrame}
+            durationInFrames={Math.max(1, endFrame - startFrame)}
+          >
+            <Segment segment={segment} story={props} />
+          </Sequence>
+        );
+      })}
     </AbsoluteFill>
   );
 };

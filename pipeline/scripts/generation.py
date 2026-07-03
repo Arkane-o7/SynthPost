@@ -55,7 +55,7 @@ def split_manual_script(
                 text=paragraph,
                 estimated_duration_seconds=estimate_duration(paragraph),
                 claim_ids=[],
-                suggested_visual_types=["context", "fallback_context_card"],
+                suggested_visual_types=["context", "fallback"],
                 suggested_search_queries=[headline],
                 suggested_template_ids=[
                     "split_anchor_visual" if index > 1 else "fullscreen_anchor"

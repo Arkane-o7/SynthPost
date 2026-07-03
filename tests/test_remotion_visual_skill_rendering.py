@@ -75,6 +75,35 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             timeline_story,
         )
 
+    def test_timeline_story_uses_sequence_relative_frames(self) -> None:
+        timeline_story = (REMOTION_SRC / "templates" / "TimelineStory.tsx").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("const localFrame = frame;", timeline_story)
+        self.assertNotIn("frame - Math.round(segment.start * fps)", timeline_story)
+        self.assertIn("const endFrame = Math.round(segment.end * fps);", timeline_story)
+        self.assertIn(
+            "durationInFrames={Math.max(1, endFrame - startFrame)}", timeline_story
+        )
+
+    def test_approved_video_trim_reaches_remotion_video_layer(self) -> None:
+        render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
+        visual_layer = (REMOTION_SRC / "components" / "VisualMediaLayer.tsx").read_text(
+            encoding="utf-8"
+        )
+        types = (REMOTION_SRC / "types.ts").read_text(encoding="utf-8")
+        self.assertIn(
+            "trimStart: Number.isFinite(trimStart) ? trimStart : undefined",
+            render_story,
+        )
+        self.assertIn(
+            "trimEnd: Number.isFinite(trimEnd) ? trimEnd : undefined", render_story
+        )
+        self.assertIn("trimStart?: number", types)
+        self.assertIn("trimEnd?: number", types)
+        self.assertIn("startFrom={startFrom || undefined}", visual_layer)
+        self.assertIn("endAt={endAt}", visual_layer)
+
     def test_renderer_has_layout_safety_for_long_text(self) -> None:
         renderer = (
             REMOTION_SRC / "components" / "visualSkills" / "VisualSkillRenderer.tsx"

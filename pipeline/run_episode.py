@@ -127,6 +127,7 @@ def render_story_only(
     try:
         run_story(
             manifest_path,
+            force_avatar=force,
             force_composite=force,
             skip_avatar_render=skip_avatar_render,
             test_mode=test_mode,

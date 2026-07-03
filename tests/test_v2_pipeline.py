@@ -96,6 +96,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
 
     def test_avatar_duration_rescale_removes_pure_narration_timeline_gaps(self) -> None:
         manifest = {
+            "script": {"text": "One sentence. Another sentence."},
             "direction": {"estimated_duration_seconds": 37.8},
             "approved_timeline": {
                 "status": "approved",
@@ -142,6 +143,38 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             sum(segment["duration"] for segment in segments), 37.8, places=2
         )
         self.assertEqual(timeline["audio_plan"]["regions"][1]["start_time"], 12.6)
+        self.assertEqual(timeline["audio_plan"]["regions"][1]["duration"], 25.2)
+        self.assertEqual(
+            timeline["duration_seconds"],
+            manifest["direction"]["performance_beats"][-1]["end"],
+        )
+
+    def test_avatar_duration_rescale_prefers_real_audio_duration(self) -> None:
+        manifest = {
+            "direction": {
+                "estimated_duration_seconds": 30.0,
+                "audio_duration_seconds": 42.0,
+            },
+            "approved_timeline": {
+                "status": "APPROVED",
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 10.0,
+                        "duration": 10.0,
+                        "audio": {"mode": "narration"},
+                        "visual": {"audio_mode": "muted"},
+                    }
+                ],
+            },
+        }
+
+        changed = _sync_timeline_to_avatar_duration(manifest)
+
+        self.assertTrue(changed)
+        self.assertEqual(manifest["approved_timeline"]["duration_seconds"], 42.0)
+        self.assertEqual(manifest["approved_timeline"]["segments"][0]["end_time"], 42.0)
 
     def test_avatar_duration_rescale_skips_source_audio_timelines(self) -> None:
         manifest = {
