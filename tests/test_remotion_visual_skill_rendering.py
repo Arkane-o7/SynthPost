@@ -54,6 +54,27 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         self.assertIn("manifest_visuals", render_story)
         self.assertIn("timeline-story", render_story)
 
+    def test_timeline_story_uses_retained_template_surfaces(self) -> None:
+        timeline_story = (REMOTION_SRC / "templates" / "TimelineStory.tsx").read_text(
+            encoding="utf-8"
+        )
+        for token in [
+            "AnchorPanel",
+            "NewsVisualPanel",
+            "LowerThird",
+            "RetainedSplitSegment",
+            "RetainedFullScreenVisualSegment",
+            "RetainedFullScreenAnchorSegment",
+            "standaloneTemplate",
+        ]:
+            self.assertIn(token, timeline_story)
+        self.assertIn('template === "split_anchor_visual"', timeline_story)
+        self.assertIn('template === "fullscreen_news_visual"', timeline_story)
+        self.assertIn(
+            'template === "fullscreen_anchor" || template === "fallback_anchor"',
+            timeline_story,
+        )
+
     def test_renderer_has_layout_safety_for_long_text(self) -> None:
         renderer = (
             REMOTION_SRC / "components" / "visualSkills" / "VisualSkillRenderer.tsx"

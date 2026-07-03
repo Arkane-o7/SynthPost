@@ -72,9 +72,10 @@ def choose_template(
         ):
             return "fullscreen_news_visual"
         return "split_anchor_visual"
-    if section_type in {"key_developments", "stakes"}:
-        return "bullet_summary"
-    return "fallback_context_card" if index else "fullscreen_anchor"
+    # Default to the retained broadcast anchor look. The newer card/explainer
+    # templates should be explicit choices, not automatic replacements for the
+    # original SynthPost template language.
+    return "fallback_anchor" if index else "fullscreen_anchor"
 
 
 def segment_visual_from_candidate(visual: VisualCandidate | None) -> SegmentVisual:

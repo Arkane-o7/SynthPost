@@ -23,9 +23,14 @@ from pipeline.models import (
     VisualCandidate,
 )
 from pipeline.research.extract import build_research_pack
+from pipeline.run_story import _sync_timeline_to_avatar_duration
 from pipeline.scripts.generation import approve_script, save_manual_script
 from pipeline.storage import PROJECT_ROOT
-from pipeline.timeline.planner import approve_timeline, generate_timeline
+from pipeline.timeline.planner import (
+    approve_timeline,
+    choose_template,
+    generate_timeline,
+)
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import approve_visual, stage_local_visual
 from pipeline.workflow import assert_transition, can_transition
@@ -84,6 +89,85 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 rights_tier="red",
                 review_status="approved",
             )
+
+    def test_default_timeline_templates_preserve_retained_anchor_look(self) -> None:
+        self.assertEqual(choose_template("intro", None, 0), "fullscreen_anchor")
+        self.assertEqual(choose_template("context", None, 1), "fallback_anchor")
+
+    def test_avatar_duration_rescale_removes_pure_narration_timeline_gaps(self) -> None:
+        manifest = {
+            "direction": {"estimated_duration_seconds": 37.8},
+            "approved_timeline": {
+                "status": "approved",
+                "duration_seconds": 30.0,
+                "audio_plan": {
+                    "duration_seconds": 30.0,
+                    "regions": [
+                        {"segment_id": "seg_001", "start_time": 0.0, "end_time": 10.0},
+                        {"segment_id": "seg_002", "start_time": 10.0, "end_time": 30.0},
+                    ],
+                },
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 10.0,
+                        "duration": 10.0,
+                        "audio": {"mode": "narration"},
+                        "visual": {"audio_mode": "muted"},
+                    },
+                    {
+                        "segment_id": "seg_002",
+                        "start_time": 10.0,
+                        "end_time": 30.0,
+                        "duration": 20.0,
+                        "audio": {"mode": "narration"},
+                        "visual": {"audio_mode": "muted"},
+                    },
+                ],
+            },
+        }
+
+        changed = _sync_timeline_to_avatar_duration(manifest)
+
+        self.assertTrue(changed)
+        timeline = manifest["approved_timeline"]
+        segments = timeline["segments"]
+        self.assertEqual(timeline["timing_source"], "avatar_duration_rescaled")
+        self.assertEqual(timeline["duration_seconds"], 37.8)
+        self.assertEqual(segments[0]["start_time"], 0.0)
+        self.assertEqual(segments[0]["end_time"], segments[1]["start_time"])
+        self.assertEqual(segments[-1]["end_time"], 37.8)
+        self.assertAlmostEqual(
+            sum(segment["duration"] for segment in segments), 37.8, places=2
+        )
+        self.assertEqual(timeline["audio_plan"]["regions"][1]["start_time"], 12.6)
+
+    def test_avatar_duration_rescale_skips_source_audio_timelines(self) -> None:
+        manifest = {
+            "direction": {"estimated_duration_seconds": 37.8},
+            "approved_timeline": {
+                "status": "approved",
+                "duration_seconds": 30.0,
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 30.0,
+                        "duration": 30.0,
+                        "audio": {"mode": "source"},
+                        "visual": {"audio_mode": "original"},
+                    }
+                ],
+            },
+        }
+
+        changed = _sync_timeline_to_avatar_duration(manifest)
+
+        self.assertFalse(changed)
+        timeline = manifest["approved_timeline"]
+        self.assertEqual(timeline["segments"][0]["end_time"], 30.0)
+        self.assertIn("source/mixed audio", timeline["timing_sync_warning"])
 
     def test_manual_vertical_slice_builds_renderer_manifest(self) -> None:
         temp = tempfile.TemporaryDirectory()

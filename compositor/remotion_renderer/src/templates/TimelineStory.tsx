@@ -6,7 +6,10 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
+import { AnchorPanel } from "../components/AnchorPanel";
 import { AnchorVideoLayer } from "../components/AnchorVideoLayer";
+import { LowerThird } from "../components/LowerThird";
+import { NewsVisualPanel } from "../components/NewsVisualPanel";
 import { SourceLabel } from "../components/SourceLabel";
 import { VisualMediaLayer } from "../components/VisualMediaLayer";
 import { getTemplateDefinition } from "../registry/templates";
@@ -49,6 +52,182 @@ const sourceVolume = (segment: TimelineSegmentProps): number => {
   }
   return segment.visual?.volume ?? 0;
 };
+
+const relativeSegmentVisual = (
+  segment: TimelineSegmentProps,
+  visual: TimedVisual,
+): TimedVisual => ({
+  ...visual,
+  start: 0,
+  end: Math.max(0.1, segment.duration),
+  sourceLabel:
+    segment.overlays.attribution ||
+    visual.sourceLabel ||
+    visual.attributionText,
+});
+
+const segmentHeadlineItems = (segment: TimelineSegmentProps) => [
+  {
+    text:
+      segment.overlays.chyron ||
+      segment.overlays.lowerThird ||
+      segment.sectionId.replace(/_/g, " "),
+    start: 0,
+    end: Math.max(0.1, segment.duration),
+  },
+];
+
+const RetainedSplitSegment: React.FC<{
+  segment: TimelineSegmentProps;
+  story: StoryProps;
+  visual: TimedVisual;
+  mutedAnchor: boolean;
+  startFrom: number;
+}> = ({ segment, story, visual, mutedAnchor, startFrom }) => (
+  <AbsoluteFill
+    style={{
+      backgroundColor: brand.navy,
+      overflow: "hidden",
+      color: brand.white,
+    }}
+  >
+    <AbsoluteFill
+      style={{
+        background:
+          "linear-gradient(105deg, #020610 0%, #071B33 42%, #050A14 100%), linear-gradient(0deg, rgba(245,247,250,0.04) 1px, transparent 1px)",
+        backgroundSize: "100% 100%, 96px 96px",
+      }}
+    />
+    <AbsoluteFill
+      style={{
+        opacity: 0.22,
+        background:
+          "repeating-linear-gradient(90deg, rgba(245,247,250,0.08) 0 1px, transparent 1px 86px), repeating-linear-gradient(0deg, rgba(245,247,250,0.04) 0 1px, transparent 1px 86px)",
+        mixBlendMode: "screen",
+      }}
+    />
+    <AnchorPanel
+      anchor={story.anchor}
+      chromaKey={story.anchorChromaKey}
+      muted={mutedAnchor}
+      startFrom={startFrom}
+    />
+    <NewsVisualPanel
+      visuals={[relativeSegmentVisual(segment, visual)]}
+      sourceLabel={story.sourceLabel}
+      sourceDate={story.sourceDate}
+    />
+    <LowerThird
+      headline={story.headline}
+      headlineItems={segmentHeadlineItems(segment)}
+      sourceLabel={story.sourceLabel}
+      sourceDate={story.sourceDate}
+      logo={story.logo}
+    />
+  </AbsoluteFill>
+);
+
+const RetainedFullScreenVisualSegment: React.FC<{
+  segment: TimelineSegmentProps;
+  story: StoryProps;
+  visual: TimedVisual;
+  progress: number;
+}> = ({ segment, story, visual, progress }) => (
+  <AbsoluteFill
+    style={{
+      backgroundColor: brand.ink,
+      overflow: "hidden",
+      color: brand.white,
+    }}
+  >
+    <VisualMediaLayer
+      visual={relativeSegmentVisual(segment, visual)}
+      progress={progress}
+      muted={visualMuted(segment)}
+      volume={sourceVolume(segment)}
+      mediaStyle={{
+        width: "100%",
+        height: "100%",
+        objectFit: visual.fit ?? "cover",
+        objectPosition: "center center",
+        filter: "saturate(0.94) contrast(1.02) brightness(0.96)",
+      }}
+    />
+    <AbsoluteFill
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(2,8,16,0.04) 0%, rgba(2,8,16,0.00) 46%, rgba(2,8,16,0.22) 78%, rgba(2,8,16,0.50) 100%), linear-gradient(90deg, rgba(2,8,16,0.10) 0%, transparent 30%, transparent 74%, rgba(2,8,16,0.14) 100%)",
+        pointerEvents: "none",
+      }}
+    />
+    <AbsoluteFill
+      style={{
+        opacity: 0.1,
+        background:
+          "repeating-linear-gradient(90deg, rgba(245,247,250,0.08) 0 1px, transparent 1px 110px), repeating-linear-gradient(0deg, rgba(245,247,250,0.04) 0 1px, transparent 1px 110px)",
+        mixBlendMode: "screen",
+        pointerEvents: "none",
+      }}
+    />
+    <SourceLabel
+      label={
+        segment.overlays.attribution || visual.sourceLabel || story.sourceLabel
+      }
+      date={story.sourceDate}
+      left={54}
+      bottom={layout.lower.height + 42}
+    />
+    <LowerThird
+      headline={story.headline}
+      headlineItems={segmentHeadlineItems(segment)}
+      sourceLabel={story.sourceLabel}
+      sourceDate={story.sourceDate}
+      logo={story.logo}
+    />
+  </AbsoluteFill>
+);
+
+const RetainedFullScreenAnchorSegment: React.FC<{
+  segment: TimelineSegmentProps;
+  story: StoryProps;
+  mutedAnchor: boolean;
+  startFrom: number;
+}> = ({ segment, story, mutedAnchor, startFrom }) => (
+  <AbsoluteFill
+    style={{
+      backgroundColor: brand.navy,
+      overflow: "hidden",
+      color: brand.white,
+    }}
+  >
+    <AnchorVideoLayer
+      anchor={story.anchor}
+      chromaKey={story.anchorChromaKey}
+      crop={fullAnchorCrop}
+      muted={mutedAnchor}
+      startFrom={startFrom}
+      mediaFilter="saturate(0.92) contrast(1.03) brightness(0.88)"
+      overlay="linear-gradient(180deg, rgba(2,8,16,0.10) 0%, rgba(2,8,16,0.04) 44%, rgba(2,8,16,0.42) 78%, rgba(2,8,16,0.68) 100%), linear-gradient(90deg, rgba(2,8,16,0.28) 0%, transparent 26%, transparent 74%, rgba(2,8,16,0.30) 100%)"
+      style={{ left: 0, top: 0, width: "100%", height: "100%" }}
+    />
+    <AbsoluteFill
+      style={{
+        opacity: 0.12,
+        background:
+          "repeating-linear-gradient(90deg, rgba(245,247,250,0.08) 0 1px, transparent 1px 110px), repeating-linear-gradient(0deg, rgba(245,247,250,0.04) 0 1px, transparent 1px 110px)",
+        mixBlendMode: "screen",
+        pointerEvents: "none",
+      }}
+    />
+    <LowerThird
+      headline={story.headline}
+      headlineItems={segmentHeadlineItems(segment)}
+      sourceLabel={story.sourceLabel}
+      sourceDate={story.sourceDate}
+      logo={story.logo}
+    />
+  </AbsoluteFill>
+);
 
 const SegmentLowerThird: React.FC<{
   segment: TimelineSegmentProps;
@@ -258,11 +437,16 @@ const Segment: React.FC<{
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const showAnchor = segment.anchor.visible && story.anchor;
   const muteAnchor =
     !segment.anchor.speaking ||
     segment.audio?.mode === "source" ||
     segment.audio?.mode === "silent";
+  const retainedTemplate = [
+    "split_anchor_visual",
+    "fullscreen_news_visual",
+    "fullscreen_anchor",
+    "fallback_anchor",
+  ].includes(template);
   const explainerProps = {
     segment,
     storySourceLabel: story.sourceLabel,
@@ -280,6 +464,11 @@ const Segment: React.FC<{
     "source_screenshot",
     "fallback_context_card",
   ].includes(template);
+  const standaloneTemplate =
+    retainedTemplate ||
+    isCardTemplate ||
+    template === "quote_card" ||
+    template === "document_callout";
 
   return (
     <AbsoluteFill
@@ -325,85 +514,35 @@ const Segment: React.FC<{
         <FallbackContextCard {...explainerProps} />
       ) : null}
 
-      {template === "fullscreen_news_visual" ? (
-        <AbsoluteFill>
-          <VisualMediaLayer
-            visual={visual}
-            progress={progress}
-            muted={visualMuted(segment)}
-            volume={sourceVolume(segment)}
-            mediaStyle={{
-              filter: "saturate(.94) contrast(1.03) brightness(.96)",
-            }}
-          />
-          <SourceLabel
-            label={
-              segment.overlays.attribution ||
-              visual.sourceLabel ||
-              story.sourceLabel
-            }
-            date={story.sourceDate}
-            left={54}
-            bottom={layout.lower.height + 42}
-          />
-        </AbsoluteFill>
-      ) : null}
-
       {template === "split_anchor_visual" ? (
-        <>
-          {showAnchor ? (
-            <AnchorVideoLayer
-              anchor={story.anchor}
-              chromaKey={story.anchorChromaKey}
-              crop={fullAnchorCrop}
-              muted={muteAnchor}
-              startFrom={Math.round(segment.start * fps)}
-              style={{
-                left: 54,
-                top: 74,
-                width: 650,
-                height: 780,
-                border: "1px solid rgba(245,247,250,.18)",
-              }}
-            />
-          ) : null}
-          <div
-            style={{
-              position: "absolute",
-              left: showAnchor ? 760 : 74,
-              top: 74,
-              right: 54,
-              bottom: 210,
-              border: "1px solid rgba(245,247,250,.18)",
-              overflow: "hidden",
-              background: brand.ink,
-            }}
-          >
-            <VisualMediaLayer
-              visual={visual}
-              progress={progress}
-              muted={visualMuted(segment)}
-              volume={sourceVolume(segment)}
-            />
-          </div>
-        </>
-      ) : null}
-
-      {(template === "fullscreen_anchor" || template === "fallback_anchor") &&
-      story.anchor ? (
-        <AnchorVideoLayer
-          anchor={story.anchor}
-          chromaKey={story.anchorChromaKey}
-          crop={fullAnchorCrop}
-          muted={muteAnchor}
+        <RetainedSplitSegment
+          segment={segment}
+          story={story}
+          visual={visual}
+          mutedAnchor={muteAnchor}
           startFrom={Math.round(segment.start * fps)}
-          mediaFilter="saturate(.92) contrast(1.03) brightness(.88)"
-          overlay="linear-gradient(180deg, rgba(2,8,16,.04), rgba(2,8,16,.68))"
-          style={{ left: 0, top: 0, width: "100%", height: "100%" }}
         />
       ) : null}
 
-      {!isCardTemplate ? (
+      {template === "fullscreen_news_visual" ? (
+        <RetainedFullScreenVisualSegment
+          segment={segment}
+          story={story}
+          visual={visual}
+          progress={progress}
+        />
+      ) : null}
+
+      {template === "fullscreen_anchor" || template === "fallback_anchor" ? (
+        <RetainedFullScreenAnchorSegment
+          segment={segment}
+          story={story}
+          mutedAnchor={muteAnchor}
+          startFrom={Math.round(segment.start * fps)}
+        />
+      ) : null}
+
+      {!standaloneTemplate ? (
         <SegmentLowerThird
           segment={segment}
           sourceLabel={story.sourceLabel}
