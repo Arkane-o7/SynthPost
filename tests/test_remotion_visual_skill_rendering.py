@@ -27,7 +27,7 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             "broll_clip",
             "still_image",
         ]:
-            self.assertIn(f"'{skill_type}'", renderer)
+            self.assertIn(f'"{skill_type}"', renderer)
         self.assertIn("export const supportedVisualSkillTypes", renderer)
 
     def test_active_templates_use_visual_skill_renderer(self) -> None:
@@ -108,9 +108,32 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         lower_third = (REMOTION_SRC / "components" / "LowerThird.tsx").read_text(
             encoding="utf-8"
         )
-        self.assertIn("synthpost-gradient-landscape.png", render_story)
+        self.assertIn("synthpost_bug.svg", render_story)
+        self.assertNotIn("synthpost-gradient-landscape.png", render_story)
         self.assertIn("const sourceMeta", lower_third)
         self.assertIn("{sourceMeta}", lower_third)
+
+    def test_visual_attribution_is_not_duplicated_by_retained_templates(self) -> None:
+        news_panel = (REMOTION_SRC / "components" / "NewsVisualPanel.tsx").read_text(
+            encoding="utf-8"
+        )
+        timeline_story = (REMOTION_SRC / "templates" / "TimelineStory.tsx").read_text(
+            encoding="utf-8"
+        )
+        fullscreen = (
+            REMOTION_SRC / "templates" / "FullScreenNewsVisuals.tsx"
+        ).read_text(encoding="utf-8")
+        visual_skills = (
+            REMOTION_SRC / "components" / "visualSkills" / "VisualSkillRenderer.tsx"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("SourceLabel", news_panel)
+        self.assertNotIn("SourceLabel", fullscreen)
+        self.assertNotIn("<SourceLabel", timeline_story)
+        self.assertNotIn(
+            "firstText(visual.sourceLabel, visual.sectionType, visual.visualRole)",
+            visual_skills,
+        )
+        self.assertIn("<AttributionStrip visual={visual} />", visual_skills)
 
     def test_approved_video_trim_reaches_remotion_video_layer(self) -> None:
         render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
@@ -137,7 +160,7 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         self.assertIn("safeLine", renderer)
         self.assertIn("clampStyle", renderer)
         self.assertIn("WebkitLineClamp", renderer)
-        self.assertIn("overflowWrap: 'anywhere'", renderer)
+        self.assertIn('overflowWrap: "anywhere"', renderer)
 
 
 if __name__ == "__main__":

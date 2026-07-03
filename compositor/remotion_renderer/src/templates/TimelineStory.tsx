@@ -10,7 +10,6 @@ import { AnchorVideoLayer } from "../components/AnchorVideoLayer";
 import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
 import { NewsVisualPanel } from "../components/NewsVisualPanel";
-import { SourceLabel } from "../components/SourceLabel";
 import { VisualMediaLayer } from "../components/VisualMediaLayer";
 import { getTemplateDefinition } from "../registry/templates";
 import { brand, fullAnchorCrop, layout, typography } from "../styles/brand";
@@ -168,14 +167,6 @@ const RetainedFullScreenVisualSegment: React.FC<{
         mixBlendMode: "screen",
         pointerEvents: "none",
       }}
-    />
-    <SourceLabel
-      label={
-        segment.overlays.attribution || visual.sourceLabel || story.sourceLabel
-      }
-      date={story.sourceDate}
-      left={54}
-      bottom={layout.lower.height + 42}
     />
     <LowerThird
       headline={story.headline}

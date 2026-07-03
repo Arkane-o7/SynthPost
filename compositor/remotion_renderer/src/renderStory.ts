@@ -534,11 +534,7 @@ const main = async () => {
     visuals.push({ ...fallback, start: 0, end: 30, fit: "cover" });
   }
 
-  const logoCandidates = [
-    "synthpost_bug.png",
-    "synthpost-gradient-landscape.png",
-    "synthpost-gradient-portrait.png",
-  ];
+  const logoCandidates = ["synthpost_bug.svg", "synthpost_bug.png"];
   const logoFile = logoCandidates.find((fileName) =>
     fsSync.existsSync(path.join(publicDir, "brand", fileName)),
   );

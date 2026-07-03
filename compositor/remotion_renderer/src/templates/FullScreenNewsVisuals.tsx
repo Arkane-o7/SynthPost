@@ -8,10 +8,9 @@ import {
 } from "remotion";
 import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
-import { SourceLabel } from "../components/SourceLabel";
 import { activeVisual, clampUnit } from "../components/VisualMediaLayer";
 import { VisualSkillRenderer } from "../components/visualSkills/VisualSkillRenderer";
-import { brand, layout, typography } from "../styles/brand";
+import { brand, typography } from "../styles/brand";
 import type { StoryProps, TimedVisual } from "../types";
 
 const fallbackVisual: TimedVisual = {
@@ -123,13 +122,6 @@ export const FullScreenNewsVisuals: React.FC<StoryProps> = (props) => {
             mixBlendMode: "screen",
             pointerEvents: "none",
           }}
-        />
-
-        <SourceLabel
-          label={active.sourceLabel || props.sourceLabel}
-          date={props.sourceDate}
-          left={54}
-          bottom={layout.lower.height + 42}
         />
 
         {activeHasSourceAudio ? (
