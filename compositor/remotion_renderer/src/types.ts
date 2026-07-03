@@ -24,7 +24,18 @@ export type TimedVisual = PublicMedia & {
     | "stock"
     | "generated_card"
     | string;
-  contentRole?: "evidence" | "context" | "explanation" | "atmosphere";
+  contentRole?:
+    | "evidence"
+    | "primary_footage"
+    | "context"
+    | "explanation"
+    | "location"
+    | "person"
+    | "document"
+    | "data"
+    | "atmosphere"
+    | "fallback"
+    | string;
   candidateId?: string;
   planId?: string;
   sectionId?: string;
@@ -85,12 +96,19 @@ export type TimelineSegmentProps = {
     templateId: string;
     layout?: string;
   };
+  audio?: {
+    mode?: "narration" | "source" | "mixed" | "silent";
+    narrationVolume?: number;
+    sourceVolume?: number;
+    ducking?: boolean;
+  };
   overlays: {
     lowerThird?: string;
     chyron?: string;
     attribution?: string;
     quoteText?: string;
     documentSource?: string;
+    data?: Record<string, unknown>;
   };
 };
 

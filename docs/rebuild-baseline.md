@@ -1,0 +1,102 @@
+# SynthPost V2 Rebuild Baseline
+
+Date: 2026-07-03
+
+This document records the retained rendering shell before rebuilding SynthPost Studio around it.
+
+## Baseline checks run
+
+```bash
+python3 -m unittest tests.test_direction tests.test_remotion_visual_skill_rendering
+npm --prefix compositor/remotion_renderer run typecheck
+```
+
+Both passed before V2 implementation began.
+
+## Retained shell
+
+The repository was intentionally reduced to a renderer-first shell. The working pieces are:
+
+- `pipeline/run_story.py` — low-level entrypoint for rendering one pre-authored story manifest.
+- `pipeline/direction/avatar.py` — SynthPost-to-Avatar-Engine job generation and optional render invocation.
+- `pipeline/compositor.py` — thin wrapper around `npm run render:story` in the Remotion package.
+- `pipeline/config.py` — environment/path helpers.
+- `pipeline/storage.py` — project-relative paths and JSON manifest IO.
+- `pipeline/render_profiles.py` — `preview`, `production`, and `final_master` render profiles.
+- `pipeline/provenance.py` — artifact hashing, ffprobe summaries, and manifest provenance records.
+- `assembly/stitch_episode.py` — ffmpeg normalizer/concatenator for brand intro, story clips, and static brand outro.
+- `compositor/remotion_renderer/` — retained Remotion templates/components/styles.
+- `assets/brand/` — static intro/outro assets generated if absent.
+- `avatar-engine/` — external dependency; not modified by this rebuild.
+
+## Current render flow
+
+1. A story manifest is provided under `episodes/<episode_id>/stories/<story_id>/story.json`.
+2. `pipeline.run_story` applies render-profile/runtime metadata to the manifest.
+3. If the selected template requires an avatar, `pipeline.direction.avatar` builds an Avatar-Engine job and optionally invokes Avatar Engine.
+4. `pipeline.compositor.render_story` invokes the Remotion renderer.
+5. `compositor/remotion_renderer/src/renderStory.ts` stages anchor/visual media into Remotion `public/generated/`, converts the manifest to `StoryProps`, renders a still preview, renders the MP4, and writes composition metadata back to `story.json`.
+6. `assembly/stitch_episode.py` finds all `stories/*/story.json`, reads each `composition.output_path`, normalizes intro/story/outro clips with ffmpeg, concatenates them, and writes `final.mp4` or `final_TEST_MODE.mp4`.
+
+## Current manifest assumptions
+
+The renderer accepts legacy pre-authored story manifests with:
+
+- `story_id`
+- `episode_id`
+- `script.headline`
+- `script.text`
+- `composition.template`
+- `composition.output_path`
+- `visuals[]` or `compositor_visuals[]`
+- optional `direction.anchor_output_path`
+- optional `approved_timeline`
+
+Timeline rendering is selected when `approved_timeline.status == "approved"` and `approved_timeline.segments` exists. `renderStory.ts` still has backward compatibility with `timeline_plan` but V2 treats `approved_timeline` as source of truth.
+
+## Existing template IDs and mappings
+
+`renderStory.ts` mapped these manifest template names:
+
+- `split_main`, `signal_desk_split`, `broadcast_split_firstpost_style` → `split-main`
+- `full_screen_anchor`, `fullscreen_anchor`, `news_full_screen_anchor`, `opening_anchor`, `closing_anchor` → `full-screen-anchor`
+- `FullScreenNewsVisuals`, `full_screen_news_visuals`, `fullscreen_news_visuals`, `full-screen-news-visuals`, `news_visuals_full_screen`, `source_clip_full_screen` → `FullScreenNewsVisuals`
+- `timeline_story`, `approved_timeline` → `timeline-story`
+
+`TimelineStory.tsx` already supported segment-level:
+
+- `split_anchor_visual`
+- `fullscreen_news_visual`
+- `fullscreen_anchor`
+- `fallback_anchor`
+- `quote_card`
+- `document_callout`
+
+V2 formalizes these and adds real Remotion components for chart, map, timeline, comparison, bullet summary, source screenshot, and fallback context cards.
+
+## Visual skill surface
+
+The retained visual rendering helpers are:
+
+- `components/NewsVisualPanel.tsx` — split-screen visual panel.
+- `components/VisualMediaLayer.tsx` — image/video rendering with motion presets.
+- `components/media.ts` — public/remote media URL resolution.
+- `components/visualSkills/VisualSkillRenderer.tsx` — existing editorial visual-card renderer with map/chart/timeline/document/quote/data/context/source/media skill types.
+
+## Avatar timing assumptions
+
+`pipeline/direction/avatar.py` currently builds one Avatar-Engine job per story from `script.text`. Duration is estimated from words per minute unless browser-avatar audio already exists. It does not yet synthesize segment-level pauses for source-audio regions. V2 therefore documents an explicit `audio_plan` and initially uses `timeline_aligned_avatar` as the planned strategy while preserving the existing story-level Avatar Engine boundary.
+
+## Assembly assumptions
+
+Dynamic Remotion endscreen generation was removed. Assembly always uses:
+
+- `assets/brand/intro.mp4`
+- each story `composition.output_path`
+- `assets/brand/outro.mp4`
+
+The intro/outro placeholders are generated by ffmpeg if the files are absent.
+
+## Baseline conclusion
+
+The renderer shell is healthy and should be extended through a manifest builder and validation layer. V2 must not let the web UI write renderer manifests directly or restore the old deleted pipeline. The approved timeline remains the render source of truth.

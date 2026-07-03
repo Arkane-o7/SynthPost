@@ -5,6 +5,7 @@ __pycache__/
 .cache/
 
 # Generated episode and render artifacts
+episodes/
 episodes/*/final.mp4
 episodes/*/stories/*/*.mp4
 episodes/*/stories/*/*.wav
@@ -17,10 +18,16 @@ episodes/*/control_room/
 assets/brand/intro.mp4
 assets/brand/outro.mp4
 
+# Local V2 app state
+.synthpost/
+media_drop/
+
 # Remotion / Node
 compositor/remotion_renderer/node_modules/
 compositor/remotion_renderer/out/
 compositor/remotion_renderer/public/generated/
+web/node_modules/
+web/dist/
 
 
 # Avatar-Engine generated artifacts. The cloned repo itself stays untouched.

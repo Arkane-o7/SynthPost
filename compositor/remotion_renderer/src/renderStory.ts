@@ -363,12 +363,13 @@ const timelineSegmentProps = async (
           start,
           end,
           fit: "cover" as const,
-          sourceLabel: String(visualRef.source ?? ""),
+          sourceLabel: String(visualRef.source ?? visualRef.provider ?? ""),
           audio:
             visualRef.audio_mode === "original" ||
             visualRef.audio_mode === "mixed",
           volume: visualRef.audio_mode === "mixed" ? 0.45 : 1,
           mediaType: visualRef.media_type,
+          contentRole: visualRef.content_role,
           candidateId: assetId,
           attributionText: visualRef.attribution_text,
         }
@@ -390,12 +391,19 @@ const timelineSegmentProps = async (
         templateId: String(segment.template?.template_id ?? "fallback_anchor"),
         layout: String(segment.template?.layout ?? ""),
       },
+      audio: {
+        mode: segment.audio?.mode,
+        narrationVolume: Number(segment.audio?.narration_volume ?? 1),
+        sourceVolume: Number(segment.audio?.source_volume ?? 0),
+        ducking: Boolean(segment.audio?.ducking),
+      },
       overlays: {
         lowerThird: String(segment.overlays?.lower_third ?? ""),
         chyron: String(segment.overlays?.chyron ?? ""),
         attribution: String(segment.overlays?.attribution ?? ""),
         quoteText: String(segment.overlays?.quote_text ?? ""),
         documentSource: String(segment.overlays?.document_source ?? ""),
+        data: segment.overlays?.data,
       },
     });
   }

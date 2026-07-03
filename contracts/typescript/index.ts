@@ -1,0 +1,269 @@
+// SynthPost V2 TypeScript contracts. Keep field names snake_case to match persisted JSON.
+
+export type Project = {
+  project_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  default_category: string;
+  default_render_profile: string;
+  status: 'active' | 'archived';
+};
+
+export type Episode = {
+  episode_id: string;
+  project_id: string;
+  title: string;
+  story_ids: string[];
+  status: string;
+  render_profile: string;
+  final_output_path: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SourceDefinition = {
+  source_id: string;
+  name: string;
+  source_type: 'rss' | 'atom' | 'website' | 'api' | 'custom_url' | 'manual_story';
+  category: string;
+  homepage_url: string | null;
+  feed_url: string | null;
+  country: string | null;
+  enabled: boolean;
+  priority: number;
+  reliability_score: number;
+  custom: boolean;
+  last_checked_at: string | null;
+};
+
+export type StoryScores = Record<'importance' | 'freshness' | 'public_interest' | 'visual_potential' | 'explainability' | 'source_reliability' | 'format_suitability' | 'originality', number>;
+
+export type StoryCandidate = {
+  candidate_id: string;
+  title: string;
+  canonical_url: string | null;
+  source_id: string | null;
+  source_name: string;
+  published_at: string | null;
+  author: string | null;
+  category: string;
+  summary: string;
+  thumbnail_url: string | null;
+  language: string;
+  discovered_at: string;
+  scores: StoryScores;
+  final_score: number;
+  score_reasons: string[];
+  selection_status: 'suggested' | 'selected' | 'rejected' | 'duplicate';
+  rejection_reasons: string[];
+  duplicate_group_id: string | null;
+  episode_id?: string | null;
+  story_id?: string | null;
+  workflow_state?: string;
+  manual_body?: string | null;
+};
+
+export type SourceDocument = {
+  document_id: string;
+  story_id: string;
+  url: string | null;
+  title: string;
+  publisher: string | null;
+  author: string | null;
+  published_at: string | null;
+  retrieved_at: string;
+  content_text: string;
+  content_hash: string;
+  document_type: string;
+  primary_source: boolean;
+  extraction_status: string;
+  warnings: string[];
+};
+
+export type Claim = {
+  claim_id: string;
+  claim_text: string;
+  evidence_ids: string[];
+  confidence: number;
+  claim_type: string;
+  supported: boolean;
+  notes: string;
+};
+
+export type EvidenceItem = {
+  evidence_id: string;
+  document_id: string;
+  excerpt: string;
+  location: string | null;
+  url: string | null;
+};
+
+export type ResearchPack = {
+  research_pack_id: string;
+  story_id: string;
+  documents: SourceDocument[];
+  evidence: EvidenceItem[];
+  claims: Claim[];
+  timeline_events: Record<string, unknown>[];
+  people: string[];
+  organizations: string[];
+  locations: string[];
+  numbers: string[];
+  dates: string[];
+  contradictions: string[];
+  uncertainties: string[];
+  research_summary: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ScriptSection = {
+  section_id: string;
+  section_type: 'cold_open' | 'intro' | 'context' | 'key_developments' | 'why_it_matters' | 'stakes' | 'uncertainty' | 'conclusion' | 'outro';
+  text: string;
+  estimated_duration_seconds: number;
+  claim_ids: string[];
+  suggested_visual_types: string[];
+  suggested_search_queries: string[];
+  suggested_template_ids: string[];
+  editorial_notes: string[];
+  approval_status: string;
+  locked?: boolean;
+};
+
+export type ScriptDocument = {
+  script_id: string;
+  story_id: string;
+  headline: string;
+  dek: string;
+  category: string;
+  estimated_duration_seconds: number;
+  version: number;
+  status: string;
+  sections: ScriptSection[];
+  lower_thirds: string[];
+  chyrons: string[];
+  source_ids: string[];
+  warnings?: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type VisualCandidate = {
+  asset_id: string;
+  story_id: string;
+  section_ids: string[];
+  provider: string;
+  source_url: string | null;
+  source_domain: string | null;
+  download_path: string | null;
+  thumbnail_path: string | null;
+  media_type: 'image' | 'video' | 'document' | 'chart' | 'map' | 'audio' | 'fallback';
+  mime_type: string | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  title: string;
+  description: string;
+  creator: string | null;
+  published_at: string | null;
+  relevance_score: number;
+  visual_quality_score: number;
+  source_authority: number;
+  content_role: string;
+  rights_tier: 'green' | 'yellow' | 'red';
+  rights_confidence: number;
+  usage_basis: string;
+  license: string | null;
+  attribution_required: boolean;
+  attribution_text: string | null;
+  manual_review_flag: boolean;
+  review_status: 'suggested' | 'approved' | 'manual_approved' | 'rejected' | 'blocked';
+  warnings: string[];
+  trim_start: number | null;
+  trim_end: number | null;
+  motion: Record<string, unknown>;
+  created_at: string;
+};
+
+export type TimelineSegment = {
+  segment_id: string;
+  section_id: string;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  script_text: string;
+  claim_ids: string[];
+  anchor: { visible: boolean; speaking: boolean; camera?: string };
+  visual: {
+    asset_id?: string | null;
+    path?: string | null;
+    media_type: string;
+    content_role: string;
+    source?: string | null;
+    source_url?: string | null;
+    rights_tier: 'green' | 'yellow' | 'red';
+    review_status: 'suggested' | 'approved' | 'manual_approved' | 'rejected' | 'blocked';
+    audio_mode: 'muted' | 'original' | 'mixed';
+    trim_start?: number | null;
+    trim_end?: number | null;
+    attribution_text?: string | null;
+  };
+  template: { template_id: string; layout?: string | null };
+  audio: { mode: 'narration' | 'source' | 'mixed' | 'silent'; narration_volume: number; source_volume: number; ducking: boolean };
+  overlays: { lower_third: string; chyron: string; attribution: string; quote_text: string; document_source: string; data?: Record<string, unknown> };
+  status: string;
+};
+
+export type TimelinePlan = {
+  timeline_id: string;
+  story_id: string;
+  version: number;
+  status: 'draft' | 'review' | 'approved' | 'rejected';
+  segments: TimelineSegment[];
+  audio_plan?: Record<string, unknown> | null;
+  validation_warnings?: string[];
+  validation_errors?: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type RenderJob = {
+  job_id: string;
+  episode_id: string | null;
+  story_id: string | null;
+  job_type: string;
+  render_profile: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  stage: string;
+  started_at: string | null;
+  completed_at: string | null;
+  output_paths: Record<string, string>;
+  log_path: string | null;
+  error: string | null;
+  traceback?: string | null;
+  payload?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type ArtifactRecord = {
+  artifact_id: string;
+  artifact_type: string;
+  path: string;
+  content_hash: string | null;
+  created_at: string;
+  producer: string;
+  inputs: string[];
+  render_profile: string | null;
+  test_mode: boolean;
+  metadata: Record<string, unknown>;
+};
+
+export const isProject = (value: unknown): value is Project => typeof value === 'object' && value !== null && typeof (value as Project).project_id === 'string';
+export const isEpisode = (value: unknown): value is Episode => typeof value === 'object' && value !== null && typeof (value as Episode).episode_id === 'string';
+export const isStoryCandidate = (value: unknown): value is StoryCandidate => typeof value === 'object' && value !== null && typeof (value as StoryCandidate).candidate_id === 'string';
+export const isTimelinePlan = (value: unknown): value is TimelinePlan => typeof value === 'object' && value !== null && Array.isArray((value as TimelinePlan).segments);

@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synthpost.local/contracts/synthpost.v2.schema.json",
+  "title": "SynthPost V2 Canonical Contracts",
+  "type": "object",
+  "$defs": {
+    "Project": {
+      "type": "object",
+      "required": ["project_id", "title", "created_at", "updated_at", "default_category", "default_render_profile", "status"],
+      "properties": {
+        "project_id": {"type": "string"},
+        "title": {"type": "string"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"},
+        "default_category": {"type": "string"},
+        "default_render_profile": {"type": "string"},
+        "status": {"enum": ["active", "archived"]}
+      }
+    },
+    "Episode": {
+      "type": "object",
+      "required": ["episode_id", "project_id", "title", "story_ids", "status", "render_profile", "final_output_path", "created_at", "updated_at"],
+      "properties": {
+        "episode_id": {"type": "string"},
+        "project_id": {"type": "string"},
+        "title": {"type": "string"},
+        "story_ids": {"type": "array", "items": {"type": "string"}},
+        "status": {"type": "string"},
+        "render_profile": {"type": "string"},
+        "final_output_path": {"type": ["string", "null"]},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "SourceDefinition": {
+      "type": "object",
+      "required": ["source_id", "name", "source_type", "category", "homepage_url", "feed_url", "country", "enabled", "priority", "reliability_score", "custom", "last_checked_at"],
+      "properties": {
+        "source_id": {"type": "string"},
+        "name": {"type": "string"},
+        "source_type": {"enum": ["rss", "atom", "website", "api", "custom_url", "manual_story"]},
+        "category": {"type": "string"},
+        "homepage_url": {"type": ["string", "null"]},
+        "feed_url": {"type": ["string", "null"]},
+        "country": {"type": ["string", "null"]},
+        "enabled": {"type": "boolean"},
+        "priority": {"type": "integer"},
+        "reliability_score": {"type": "number"},
+        "custom": {"type": "boolean"},
+        "last_checked_at": {"type": ["string", "null"]}
+      }
+    },
+    "StoryCandidate": {
+      "type": "object",
+      "required": ["candidate_id", "title", "canonical_url", "source_id", "source_name", "published_at", "author", "category", "summary", "thumbnail_url", "language", "discovered_at", "scores", "final_score", "score_reasons", "selection_status", "rejection_reasons", "duplicate_group_id"],
+      "properties": {
+        "candidate_id": {"type": "string"},
+        "title": {"type": "string"},
+        "canonical_url": {"type": ["string", "null"]},
+        "source_id": {"type": ["string", "null"]},
+        "source_name": {"type": "string"},
+        "published_at": {"type": ["string", "null"]},
+        "author": {"type": ["string", "null"]},
+        "category": {"type": "string"},
+        "summary": {"type": "string"},
+        "thumbnail_url": {"type": ["string", "null"]},
+        "language": {"type": "string"},
+        "discovered_at": {"type": "string"},
+        "scores": {"type": "object"},
+        "final_score": {"type": "number"},
+        "score_reasons": {"type": "array", "items": {"type": "string"}},
+        "selection_status": {"type": "string"},
+        "rejection_reasons": {"type": "array", "items": {"type": "string"}},
+        "duplicate_group_id": {"type": ["string", "null"]}
+      }
+    },
+    "SourceDocument": {
+      "type": "object",
+      "required": ["document_id", "story_id", "url", "title", "publisher", "author", "published_at", "retrieved_at", "content_text", "content_hash", "document_type", "primary_source", "extraction_status", "warnings"],
+      "properties": {
+        "document_id": {"type": "string"},
+        "story_id": {"type": "string"},
+        "url": {"type": ["string", "null"]},
+        "title": {"type": "string"},
+        "publisher": {"type": ["string", "null"]},
+        "author": {"type": ["string", "null"]},
+        "published_at": {"type": ["string", "null"]},
+        "retrieved_at": {"type": "string"},
+        "content_text": {"type": "string"},
+        "content_hash": {"type": "string"},
+        "document_type": {"type": "string"},
+        "primary_source": {"type": "boolean"},
+        "extraction_status": {"type": "string"},
+        "warnings": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "ResearchPack": {
+      "type": "object",
+      "required": ["research_pack_id", "story_id", "documents", "claims", "timeline_events", "people", "organizations", "locations", "numbers", "dates", "contradictions", "uncertainties", "research_summary"],
+      "properties": {
+        "research_pack_id": {"type": "string"},
+        "story_id": {"type": "string"},
+        "documents": {"type": "array"},
+        "evidence": {"type": "array"},
+        "claims": {"type": "array", "items": {"$ref": "#/$defs/Claim"}},
+        "timeline_events": {"type": "array"},
+        "people": {"type": "array", "items": {"type": "string"}},
+        "organizations": {"type": "array", "items": {"type": "string"}},
+        "locations": {"type": "array", "items": {"type": "string"}},
+        "numbers": {"type": "array", "items": {"type": "string"}},
+        "dates": {"type": "array", "items": {"type": "string"}},
+        "contradictions": {"type": "array", "items": {"type": "string"}},
+        "uncertainties": {"type": "array", "items": {"type": "string"}},
+        "research_summary": {"type": "string"}
+      }
+    },
+    "Claim": {
+      "type": "object",
+      "required": ["claim_id", "claim_text", "evidence_ids", "confidence", "claim_type", "supported", "notes"],
+      "properties": {
+        "claim_id": {"type": "string"},
+        "claim_text": {"type": "string"},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "number"},
+        "claim_type": {"type": "string"},
+        "supported": {"type": "boolean"},
+        "notes": {"type": "string"}
+      }
+    },
+    "ScriptDocument": {
+      "type": "object",
+      "required": ["script_id", "story_id", "headline", "dek", "category", "estimated_duration_seconds", "version", "status", "sections", "lower_thirds", "chyrons", "source_ids", "created_at", "updated_at"],
+      "properties": {
+        "script_id": {"type": "string"},
+        "story_id": {"type": "string"},
+        "headline": {"type": "string"},
+        "dek": {"type": "string"},
+        "category": {"type": "string"},
+        "estimated_duration_seconds": {"type": "number"},
+        "version": {"type": "integer"},
+        "status": {"type": "string"},
+        "sections": {"type": "array", "items": {"$ref": "#/$defs/ScriptSection"}},
+        "lower_thirds": {"type": "array"},
+        "chyrons": {"type": "array"},
+        "source_ids": {"type": "array"},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "ScriptSection": {
+      "type": "object",
+      "required": ["section_id", "section_type", "text", "estimated_duration_seconds", "claim_ids", "suggested_visual_types", "suggested_search_queries", "suggested_template_ids", "editorial_notes", "approval_status"],
+      "properties": {
+        "section_id": {"type": "string"},
+        "section_type": {"enum": ["cold_open", "intro", "context", "key_developments", "why_it_matters", "stakes", "uncertainty", "conclusion", "outro"]},
+        "text": {"type": "string"},
+        "estimated_duration_seconds": {"type": "number"},
+        "claim_ids": {"type": "array", "items": {"type": "string"}},
+        "suggested_visual_types": {"type": "array"},
+        "suggested_search_queries": {"type": "array"},
+        "suggested_template_ids": {"type": "array"},
+        "editorial_notes": {"type": "array"},
+        "approval_status": {"type": "string"}
+      }
+    },
+    "VisualCandidate": {
+      "type": "object",
+      "required": ["asset_id", "story_id", "section_ids", "provider", "source_url", "source_domain", "download_path", "thumbnail_path", "media_type", "mime_type", "width", "height", "duration_seconds", "title", "description", "creator", "published_at", "relevance_score", "visual_quality_score", "source_authority", "content_role", "rights_tier", "rights_confidence", "usage_basis", "license", "attribution_required", "attribution_text", "manual_review_flag", "review_status", "warnings", "trim_start", "trim_end", "motion", "created_at"],
+      "properties": {
+        "asset_id": {"type": "string"},
+        "story_id": {"type": "string"},
+        "section_ids": {"type": "array"},
+        "provider": {"type": "string"},
+        "source_url": {"type": ["string", "null"]},
+        "source_domain": {"type": ["string", "null"]},
+        "download_path": {"type": ["string", "null"]},
+        "thumbnail_path": {"type": ["string", "null"]},
+        "media_type": {"type": "string"},
+        "mime_type": {"type": ["string", "null"]},
+        "width": {"type": ["integer", "null"]},
+        "height": {"type": ["integer", "null"]},
+        "duration_seconds": {"type": ["number", "null"]},
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "creator": {"type": ["string", "null"]},
+        "published_at": {"type": ["string", "null"]},
+        "relevance_score": {"type": "number"},
+        "visual_quality_score": {"type": "number"},
+        "source_authority": {"type": "number"},
+        "content_role": {"type": "string"},
+        "rights_tier": {"enum": ["green", "yellow", "red"]},
+        "rights_confidence": {"type": "number"},
+        "usage_basis": {"type": "string"},
+        "license": {"type": ["string", "null"]},
+        "attribution_required": {"type": "boolean"},
+        "attribution_text": {"type": ["string", "null"]},
+        "manual_review_flag": {"type": "boolean"},
+        "review_status": {"enum": ["suggested", "approved", "manual_approved", "rejected", "blocked"]},
+        "warnings": {"type": "array"},
+        "trim_start": {"type": ["number", "null"]},
+        "trim_end": {"type": ["number", "null"]},
+        "motion": {"type": "object"},
+        "created_at": {"type": "string"}
+      }
+    },
+    "TimelinePlan": {
+      "type": "object",
+      "required": ["timeline_id", "story_id", "version", "status", "segments", "created_at", "updated_at"],
+      "properties": {
+        "timeline_id": {"type": "string"},
+        "story_id": {"type": "string"},
+        "version": {"type": "integer"},
+        "status": {"type": "string"},
+        "segments": {"type": "array", "items": {"$ref": "#/$defs/TimelineSegment"}},
+        "audio_plan": {"type": ["object", "null"]},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"}
+      }
+    },
+    "TimelineSegment": {
+      "type": "object",
+      "required": ["segment_id", "section_id", "start_time", "end_time", "duration", "script_text", "claim_ids", "anchor", "visual", "template", "audio", "overlays", "status"],
+      "properties": {
+        "segment_id": {"type": "string"},
+        "section_id": {"type": "string"},
+        "start_time": {"type": "number"},
+        "end_time": {"type": "number"},
+        "duration": {"type": "number"},
+        "script_text": {"type": "string"},
+        "claim_ids": {"type": "array"},
+        "anchor": {"type": "object"},
+        "visual": {"type": "object"},
+        "template": {"type": "object"},
+        "audio": {"type": "object"},
+        "overlays": {"type": "object"},
+        "status": {"type": "string"}
+      }
+    },
+    "RenderJob": {
+      "type": "object",
+      "required": ["job_id", "episode_id", "story_id", "job_type", "render_profile", "status", "progress", "stage", "started_at", "completed_at", "output_paths", "log_path", "error"],
+      "properties": {
+        "job_id": {"type": "string"},
+        "episode_id": {"type": ["string", "null"]},
+        "story_id": {"type": ["string", "null"]},
+        "job_type": {"type": "string"},
+        "render_profile": {"type": "string"},
+        "status": {"enum": ["queued", "running", "completed", "failed", "cancelled"]},
+        "progress": {"type": "number"},
+        "stage": {"type": "string"},
+        "started_at": {"type": ["string", "null"]},
+        "completed_at": {"type": ["string", "null"]},
+        "output_paths": {"type": "object"},
+        "log_path": {"type": ["string", "null"]},
+        "error": {"type": ["string", "null"]}
+      }
+    },
+    "ArtifactRecord": {
+      "type": "object",
+      "required": ["artifact_id", "artifact_type", "path", "content_hash", "created_at", "producer", "inputs", "render_profile", "test_mode", "metadata"],
+      "properties": {
+        "artifact_id": {"type": "string"},
+        "artifact_type": {"type": "string"},
+        "path": {"type": "string"},
+        "content_hash": {"type": ["string", "null"]},
+        "created_at": {"type": "string"},
+        "producer": {"type": "string"},
+        "inputs": {"type": "array"},
+        "render_profile": {"type": ["string", "null"]},
+        "test_mode": {"type": "boolean"},
+        "metadata": {"type": "object"}
+      }
+    }
+  }
+}
