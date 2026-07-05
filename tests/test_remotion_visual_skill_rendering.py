@@ -53,6 +53,12 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         self.assertNotIn("compositor_visuals_path", render_story)
         self.assertIn("manifest_visuals", render_story)
         self.assertIn("timeline-story", render_story)
+        self.assertIn(
+            "visualSkillType: visualRef.visual_skill_type ?? visualRef.skill_type",
+            render_story,
+        )
+        self.assertIn("visualSkill: visualRef.visual_skill", render_story)
+        self.assertIn("skillPlaceholder: visualRef.skill_placeholder", render_story)
 
     def test_timeline_story_uses_retained_template_surfaces(self) -> None:
         timeline_story = (REMOTION_SRC / "templates" / "TimelineStory.tsx").read_text(
@@ -137,10 +143,8 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             1
         ].split("const segmentHeadlineItems", 1)[0]
         self.assertNotIn("segment.overlays.attribution", relative_visual)
-        media_skill = visual_skills.split("const MediaSkill", 1)[1].split(
-            "export const VisualSkillRenderer", 1
-        )[0]
-        self.assertNotIn("<AttributionStrip visual={visual} />", media_skill)
+        self.assertNotIn("<AttributionStrip visual={visual} />", visual_skills)
+        self.assertNotIn("const AttributionStrip", visual_skills)
 
     def test_approved_video_trim_reaches_remotion_video_layer(self) -> None:
         render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")

@@ -99,23 +99,6 @@ export const visualSkillPayload = (visual: TimedVisual): SkillPayload => {
   return { type, spec: objectValue(skill.spec), placeholder };
 };
 
-export const visualAttributionText = (visual: TimedVisual): string => {
-  const parts = [
-    firstText(visual.attributionText, visual.sourceLabel, visual.provider),
-    firstText(visual.sourceDomain),
-    firstText(visual.license),
-    firstText(visual.rightsCategory),
-  ].filter(Boolean);
-  return parts.join(" / ");
-};
-
-export const isFirstPartyVisual = (visual: TimedVisual): boolean => {
-  return (
-    visual.rightsCategory === "first_party_generated" ||
-    visual.provider === "synthpost_generated"
-  );
-};
-
 const skillTitle = (visual: TimedVisual, payload: SkillPayload): string => {
   return upper(
     firstText(
@@ -236,7 +219,6 @@ const CardShell: React.FC<{
           </div>
         ) : null}
         <div style={{ flex: 1, minHeight: 0 }}>{children}</div>
-        <AttributionStrip visual={visual} />
       </div>
     </AbsoluteFill>
   );
@@ -272,31 +254,6 @@ const SafetyBadge: React.FC<{ visual: TimedVisual; floating?: boolean }> = ({
       }}
     >
       Review Only
-    </div>
-  );
-};
-
-const AttributionStrip: React.FC<{ visual: TimedVisual }> = ({ visual }) => {
-  const attribution = isFirstPartyVisual(visual)
-    ? "SynthPost generated visual"
-    : visualAttributionText(visual);
-  if (!attribution) {
-    return null;
-  }
-  return (
-    <div
-      style={{
-        color: "rgba(245,247,250,0.58)",
-        fontFamily: typography.sans,
-        fontSize: 15,
-        fontWeight: 700,
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-      }}
-    >
-      {attribution}
     </div>
   );
 };
@@ -430,7 +387,7 @@ const ChartSkill: React.FC<{
         <div
           style={{
             display: "flex",
-            alignItems: "end",
+            alignItems: "stretch",
             gap: 22,
             height: "100%",
             paddingTop: 30,
@@ -448,16 +405,35 @@ const ChartSkill: React.FC<{
               extrapolateRight: "clamp",
             });
             return (
-              <div key={`${label}-${index}`} style={{ flex: 1, minWidth: 0 }}>
+              <div
+                key={`${label}-${index}`}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: "100%",
+                  display: "grid",
+                  gridTemplateRows: "1fr auto",
+                  gap: 14,
+                }}
+              >
                 <div
                   style={{
-                    height: `${reveal}%`,
-                    background: `linear-gradient(180deg, ${brand.signalBlue}, ${brand.yellow})`,
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "flex-end",
                   }}
-                />
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      minHeight: reveal > 0 ? 8 : 0,
+                      height: `${reveal}%`,
+                      background: `linear-gradient(180deg, ${brand.signalBlue}, ${brand.yellow})`,
+                    }}
+                  />
+                </div>
                 <div
                   style={{
-                    marginTop: 14,
                     color: brand.white,
                     fontFamily: typography.sans,
                     fontSize: 18,

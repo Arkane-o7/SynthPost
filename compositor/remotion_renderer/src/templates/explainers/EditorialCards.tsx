@@ -42,8 +42,10 @@ export const ChartExplainer: React.FC<Props> = ({segment}) => {
         {(values.length ? values : fallback.map((label, index) => ({label, value: 45 + index * 14}))).slice(0, 7).map((item, index) => {
           const numeric = Math.max(8, Math.min(100, Number(item.value ?? 30 + index * 10)));
           return (
-            <div key={index} style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 16}}>
-              <div style={{height: `${numeric}%`, background: `linear-gradient(180deg, ${brand.red}, rgba(228,28,35,.38))`, boxShadow: '0 18px 44px rgba(228,28,35,.22)'}} />
+            <div key={index} style={{flex: 1, minWidth: 0, height: '100%', display: 'grid', gridTemplateRows: '1fr auto', gap: 16}}>
+              <div style={{height: '100%', display: 'flex', alignItems: 'flex-end'}}>
+                <div style={{width: '100%', minHeight: 12, height: `${numeric}%`, background: `linear-gradient(180deg, ${brand.red}, rgba(228,28,35,.38))`, boxShadow: '0 18px 44px rgba(228,28,35,.22)'}} />
+              </div>
               <div style={{fontFamily: typography.sans, fontSize: 20, fontWeight: 900, color: 'rgba(245,247,250,.82)'}}>{String(item.label ?? `Item ${index + 1}`)}</div>
             </div>
           );

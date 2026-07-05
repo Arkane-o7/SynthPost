@@ -1,0 +1,36 @@
+{
+  "job_id": "demo_scene_props_preview",
+  "script": "Quick scene preview. The updated desk props are rendering with the avatar and synced speech.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "fps": 2,
+  "resolution": [960, 540],
+  "render_quality": "draft",
+  "render_samples": 4,
+  "disable_shadows": true,
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {"start": 0.0, "camera": "landscape_intro"},
+    {"start": 2.0, "camera": "portrait_main"}
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 2.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 2.0,
+      "end": 4.0,
+      "gesture": "explain_small",
+      "expression": "focused"
+    }
+  ],
+  "output_path": "assets/output/demo_scene_props_preview.mp4"
+}

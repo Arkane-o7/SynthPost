@@ -1,0 +1,40 @@
+{
+  "job_id": "demo_scene_props",
+  "script": "Welcome to the updated desk avatar scene. This demo is rendering through the real Blender template, with the current background props, local voice generation, lip sync, and final video export.",
+  "character": "avatar_01",
+  "face_mode": "2d",
+  "fps": 30,
+  "resolution": [1920, 1080],
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_heart",
+    "speed": 1.0,
+    "sample_rate": 24000
+  },
+  "camera_cuts": [
+    {"start": 0.0, "camera": "landscape_intro"},
+    {"start": 3.0, "camera": "portrait_main"},
+    {"start": 6.0, "camera": "landscape_conclusion"}
+  ],
+  "performance_beats": [
+    {
+      "start": 0.0,
+      "end": 3.0,
+      "gesture": "seated_idle",
+      "expression": "calm"
+    },
+    {
+      "start": 3.0,
+      "end": 6.0,
+      "gesture": "explain_small",
+      "expression": "focused"
+    },
+    {
+      "start": 6.0,
+      "end": 9.0,
+      "gesture": "nod_yes",
+      "expression": "smile"
+    }
+  ],
+  "output_path": "assets/output/demo_scene_props.mp4"
+}

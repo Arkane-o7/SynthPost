@@ -1,0 +1,47 @@
+{
+  "renderer": "rocketbox",
+  "episode_id": "ep_synthpost_anchor_v1_chroma",
+  "story_id": "story_synthpost_anchor_v1_chroma_001",
+  "script_text": "Good evening. This is a SynthPost anchor test using a Character Creator avatar with Reallusion facial morphs.",
+  "audio_path": "assets/output/tts/synthpost_anchor_v1_af_bella_s100.wav",
+  "viseme_path": "assets/output/tts/synthpost_anchor_v1_af_bella_s100_rhubarb.json",
+  "avatar": {
+    "asset_path": "assets/avatars/synthpost_anchor_v1/anchor.glb",
+    "metadata_path": "assets/avatars/synthpost_anchor_v1/avatar.json",
+    "style": "professional_news_anchor",
+    "face_type": "3d",
+    "body_form": "F",
+    "requires_3d_lips": true
+  },
+  "camera": {
+    "name": "front_close",
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "duration_seconds": 5
+  },
+  "avatar_transform": {
+    "rotation_y_degrees": -3
+  },
+  "camera_overrides": {
+    "distance_multiplier": 3.5,
+    "target_height_factor": 0.84,
+    "height_factor": 0.86
+  },
+  "render": {
+    "background": "chroma_green",
+    "output_path": "assets/output/synthpost_anchor_v1_chroma.mp4",
+    "preview_png_path": "assets/output/synthpost_anchor_v1_chroma.png"
+  },
+  "animation": {
+    "idle_loop": "procedural_anchor",
+    "gesture_events": []
+  },
+  "face": {
+    "mode": "3d_viseme",
+    "viseme_source": "rhubarb",
+    "blendshape_profile": "reallusion_viseme",
+    "fallback_mode": "legacy_2d",
+    "allow_fallback": false
+  }
+}

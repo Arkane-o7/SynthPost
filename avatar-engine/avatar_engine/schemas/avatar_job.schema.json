@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "avatar_job.schema.json",
+  "title": "Avatar Job (Generic)",
+  "description": "Common schema for Avatar-Engine job files.  The 'renderer' field selects which backend processes the job.",
+  "type": "object",
+  "required": ["renderer"],
+  "properties": {
+    "renderer": {
+      "type": "string",
+      "enum": ["talkinghead", "blender"],
+      "description": "Renderer selection.  Use 'talkinghead' for the fast Three.js browser runtime or 'blender' for the Blender-based legacy path."
+    }
+  },
+  "oneOf": [
+    {
+      "description": "TalkingHead renderer job",
+      "properties": {
+        "renderer": { "const": "talkinghead" }
+      },
+      "$ref": "talkinghead_job.schema.json"
+    },
+    {
+      "description": "Blender renderer job (legacy format)",
+      "properties": {
+        "renderer": { "const": "blender" },
+        "job_id": { "type": "string" },
+        "script": { "type": "string" },
+        "character": { "type": "string" },
+        "fps": { "type": "integer" },
+        "resolution": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "output_path": { "type": "string" }
+      },
+      "required": ["renderer", "job_id", "script", "character", "fps", "resolution", "output_path"]
+    }
+  ],
+  "additionalProperties": true
+}

@@ -1,0 +1,43 @@
+{
+  "renderer": "talkinghead",
+  "episode_id": "ep_bm01_demo",
+  "story_id": "story_bm01_001",
+  "script_text": "Good evening. I am your AI news anchor. Markets moved sharply today as investors reacted to the latest economic data. Here is what you need to know.",
+  "audio_path": "tests/fixtures/sample_tts.wav",
+  "viseme_path": "tests/fixtures/sample_tts_rhubarb.json",
+  "avatar": {
+    "asset_path": "assets/avatars/business_male_01/avatar.glb",
+    "metadata_path": "assets/avatars/business_male_01/avatar.json",
+    "style": "professional_realistic_business",
+    "face_type": "3d",
+    "body_form": "M",
+    "requires_3d_lips": true
+  },
+  "camera": {
+    "name": "front_medium",
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "duration_seconds": 5
+  },
+  "render": {
+    "background": "chroma_green",
+    "output_path": "assets/output/business_male_01_preview.mp4",
+    "preview_png_path": "assets/output/business_male_01_preview.png"
+  },
+  "animation": {
+    "idle_loop": "news_idle",
+    "gesture_style": "calm_anchor",
+    "gesture_events": [
+      { "time": 1.5, "type": "explain_small" },
+      { "time": 3.5, "type": "nod" }
+    ]
+  },
+  "face": {
+    "mode": "3d_viseme",
+    "viseme_source": "rhubarb",
+    "blendshape_profile": "rpm_arkit_oculus",
+    "fallback_mode": "legacy_2d",
+    "allow_fallback": false
+  }
+}

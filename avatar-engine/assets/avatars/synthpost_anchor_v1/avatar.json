@@ -1,0 +1,40 @@
+{
+  "id": "synthpost_anchor_v1",
+  "name": "SynthPost Anchor V1",
+  "source_tool": "Reallusion Character Creator",
+  "format": "glb",
+  "asset_file": "anchor.glb",
+  "style": "professional_news_anchor",
+  "face_type": "3d",
+  "supports_3d_lips": true,
+  "supports_visemes": true,
+  "supports_arkit_like_expressions": true,
+  "blendshape_profile": "reallusion_viseme",
+  "viseme_shapes": [
+    "V_Open",
+    "V_Explosive",
+    "V_Dental_Lip",
+    "V_Tight_O",
+    "V_Tight",
+    "V_Wide",
+    "V_Affricate",
+    "V_Lip_Open"
+  ],
+  "blink_shapes": ["Eye_Blink_L", "Eye_Blink_R"],
+  "viseme_mapping": {
+    "B": "E"
+  },
+  "hair_meshes": ["Side_part_wavy.001"],
+  "transparent_meshes": ["Female_Angled.001", "Side_part_wavy.001"],
+  "sample_expression_shapes": [
+    "Brow_Raise_Inner_L",
+    "Brow_Raise_Inner_R",
+    "Mouth_Smile_L",
+    "Mouth_Smile_R",
+    "Jaw_Open",
+    "Mouth_Close"
+  ],
+  "legacy_2d_face_supported": false,
+  "runtime": "custom_threejs_morph_driver",
+  "notes": "New Character Creator export in anchor.glb. Facial morphs are on CC_Base_Body.001 and related face meshes. Hair mesh is Side_part_wavy.001. Runtime maps Rhubarb/Oculus visemes to Reallusion V_* targets."
+}

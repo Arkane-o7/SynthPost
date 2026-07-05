@@ -1,0 +1,42 @@
+{
+  "renderer": "talkinghead",
+  "episode_id": "ep_fixture",
+  "story_id": "story_001",
+  "script_text": "Good evening. This is a test of the TalkingHead avatar renderer.",
+  "audio_path": "tests/fixtures/sample.wav",
+  "viseme_path": "tests/fixtures/sample_rhubarb.json",
+  "avatar": {
+    "asset_path": "assets/avatars/synthpost_anchor_v1/avatar.glb",
+    "metadata_path": "assets/avatars/synthpost_anchor_v1/avatar.json",
+    "style": "professional_stylized_news_anchor",
+    "face_type": "3d",
+    "requires_3d_lips": true
+  },
+  "camera": {
+    "name": "front_medium",
+    "width": 1920,
+    "height": 1080,
+    "fps": 24,
+    "duration_seconds": 30
+  },
+  "render": {
+    "background": "chroma_green",
+    "output_path": "assets/output/ep_fixture_story_001_talkinghead.mp4",
+    "preview_png_path": "assets/output/ep_fixture_story_001_talkinghead_preview.png"
+  },
+  "animation": {
+    "idle_loop": "news_idle",
+    "gesture_style": "calm_anchor",
+    "gesture_events": [
+      { "time": 4.2, "type": "explain_small" },
+      { "time": 12.0, "type": "nod" }
+    ]
+  },
+  "face": {
+    "mode": "3d_viseme",
+    "viseme_source": "rhubarb",
+    "blendshape_profile": "auto_detect",
+    "fallback_mode": "legacy_2d",
+    "allow_fallback": false
+  }
+}

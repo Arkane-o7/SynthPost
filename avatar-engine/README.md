@@ -1,29 +1,40 @@
 # desk-avatar-engine
 
-`desk-avatar-engine` is the local news-anchor rendering module for an AI-automated news channel. It loads a job JSON, creates local placeholder or Kokoro TTS audio, generates Rhubarb mouth cues, drives a Blender anchor desk scene, renders camera POV frames, and uses FFmpeg to export an MP4 for the larger episode pipeline.
+`desk-avatar-engine` is the local news-anchor rendering module for an AI-automated news channel. It supports two local-first paths:
+
+- a legacy Blender desk scene pipeline for 2D/texture-mouth anchor renders, and
+- a fast browser/Three.js CC4/Reallusion avatar pipeline for the current 3D SynthPost anchor.
+
+The current 3D path loads a local GLB avatar, generates/consumes Kokoro TTS audio, generates Rhubarb mouth cues, drives Reallusion facial morphs and CC4 skeleton bones, captures deterministic PNG frames from the browser canvas, and muxes the final MP4 with FFmpeg.
 
 This is intentionally not a photorealistic MetaHuman pipeline and does not use cloud APIs.
 
 ## Current Status
 
 - The local pipeline runs end to end from a job JSON to an MP4.
+- The active 3D anchor is `assets/avatars/synthpost_anchor_v1/anchor.glb` with metadata in `assets/avatars/synthpost_anchor_v1/avatar.json`.
+- The active 3D renderer is a custom Three.js CC4/Reallusion runtime under the legacy `rocketbox` renderer name. The name is kept for compatibility; it is not using Rocketbox assets anymore.
+- The 3D runtime maps Rhubarb/Oculus visemes to Reallusion `V_*` morphs and drives jaw, lower/upper teeth, tongue, blink, head/body posture, and subtle procedural speaking gestures.
+- Browser capture uses deterministic canvas PNG frames plus FFmpeg audio muxing. Do not use Playwright viewport video or canvas `MediaRecorder` for production captures.
 - Rhubarb, Blender, FFmpeg, and local Kokoro TTS defaults can be configured through `config/default.yaml`.
-- `blender/avatar_template.blend` is the production scene. Runtime scripts load it only and must not overwrite it.
-- 2D face mode uses `FACE_Backdrop` and `FACE_Surface`; Rhubarb cues swap mouth PNG textures on `FACE_Surface`.
-- Camera jobs use semantic POVs: `landscape_intro`, `portrait_main`, and `landscape_conclusion`.
-- The Blender template can preserve per-camera aspect ratios.
+- The selected default Kokoro voice is `af_bella` at `speed: 1.0`, `lang_code: a`.
+- `blender/avatar_template.blend` is the protected legacy production scene. Runtime scripts load it only and must not overwrite it.
+- 2D face mode still uses `FACE_Backdrop` and `FACE_Surface`; Rhubarb cues swap mouth PNG textures on `FACE_Surface`.
+- Legacy Blender camera jobs use semantic POVs: `landscape_intro`, `portrait_main`, and `landscape_conclusion`.
 - Export supports either one combined preview MP4 or separate native-aspect camera clips for downstream editing.
-- Render profiles keep preview and production settings consistent across jobs.
-- Preview mode can render very quickly with draft settings; final mode keeps lighting/shadows for publishable segments.
 
 ## Documentation
 
 - [News Anchor Workflow](docs/NEWS_ANCHOR_WORKFLOW.md): how this module fits into the AI news channel.
+- [Current 3D Runtime Design](docs/talkinghead_runtime_design.md): custom Three.js/CC4 renderer, capture path, and job contract.
+- [SynthPost Integration Guide](docs/synthpost_integration.md): how downstream projects should call Avatar-Engine.
+- [Renderer Benchmark Notes](docs/talkinghead_benchmark.md): current browser renderer timing notes and caveats.
+- [Change Log](CHANGELOG.md): migration-oriented summary since the last GitHub baseline.
 - [Blender Scene Guide](docs/BLENDER_SCENE_GUIDE.md): required objects, cameras, face setup, Actions, and scene contract.
 - [Rendering And Optimization](docs/RENDERING_AND_OPTIMIZATION.md): preview vs final quality, polygon reduction, baking, and speed tips.
-- [Avatar 01 Notes](assets/characters/avatar_01/README.md): character asset expectations and mouth texture setup.
+- [Avatar 01 Notes](assets/characters/avatar_01/README.md): legacy character asset expectations and mouth texture setup.
 - [Gesture Asset Notes](assets/characters/avatar_01/gestures/README.md): placeholder for future exported gesture clips.
-- [Agent Notes](AGENTS.md): repo guardrails for future Codex/agent work.
+- [Agent Notes](AGENTS.md): repo guardrails for future agent work.
 
 ## Project Flow
 
@@ -45,7 +56,7 @@ Native segment jobs output a folder instead:
 assets/output/<job_id>/
 ```
 
-Pipeline:
+Legacy Blender pipeline:
 
 1. Load and validate the job JSON.
 2. Generate local Kokoro TTS audio when available, or a placeholder WAV when Kokoro is missing or test mode is enabled.
@@ -55,7 +66,52 @@ Pipeline:
 6. Render PNG frames to `assets/renders/<job_id>/`.
 7. Export an MP4 with FFmpeg when FFmpeg is available.
 
-## Quick News Anchor Commands
+Current 3D CC4 pipeline:
+
+1. Generate or provide a WAV file.
+2. Generate Rhubarb JSON for that WAV.
+3. Render a `rocketbox`/custom-Three.js job with `avatar_engine.render_avatar`.
+4. Browser runtime loads `anchor.glb`, applies Reallusion morphs/bones, captures PNG frames, and FFmpeg muxes the original WAV into the MP4.
+
+## Quick 3D SynthPost Anchor Commands
+
+Run from the repository root (`desk-avatar-engine`) unless noted.
+
+Generate the selected `af_bella` Kokoro voice and Rhubarb cues:
+
+```bash
+.venv/bin/python3 scripts/generate_tts.py \
+  jobs/synthpost_anchor_v1_tts_af_bella.json \
+  assets/output/tts/synthpost_anchor_v1_af_bella_s100.wav \
+  --config config/default.yaml
+
+.venv/bin/python3 scripts/generate_lipsync.py \
+  assets/output/tts/synthpost_anchor_v1_af_bella_s100.wav \
+  assets/output/tts/synthpost_anchor_v1_af_bella_s100_rhubarb.json \
+  --config config/default.yaml
+```
+
+Render the current 3D anchor preview:
+
+```bash
+npm --prefix web_avatar_runtime run build
+.venv/bin/python3 -c 'import runpy, sys; sys.argv=["render_avatar","--job","jobs/synthpost_anchor_v1_preview.json","--renderer","rocketbox"]; runpy.run_module("avatar_engine.render_avatar", run_name="__main__")'
+```
+
+Render chroma output for compositing:
+
+```bash
+.venv/bin/python3 -c 'import runpy, sys; sys.argv=["render_avatar","--job","jobs/synthpost_anchor_v1_chroma.json","--renderer","rocketbox"]; runpy.run_module("avatar_engine.render_avatar", run_name="__main__")'
+```
+
+Outputs:
+
+```text
+assets/output/synthpost_anchor_v1_preview.mp4
+assets/output/synthpost_anchor_v1_chroma.mp4
+```
+
+## Quick Legacy Blender News Anchor Commands
 
 Always activate the venv first:
 
@@ -164,7 +220,7 @@ tools:
 
 tts:
   engine: kokoro
-  voice: af_heart
+  voice: af_bella
   speed: 1.0
   sample_rate: 24000
   lang_code: a
@@ -204,7 +260,31 @@ It checks Python, config loading, Blender, FFmpeg, Rhubarb, Kokoro availability,
 
 ## Kokoro TTS
 
-Kokoro is optional but preferred for normal local speech generation. Install and configure Kokoro in the same Python environment used to run `scripts/run_job.py`.
+Kokoro is optional but preferred for normal local speech generation. Install and configure Kokoro in the same Python environment used to run `scripts/run_job.py` and `avatar_engine.render_avatar`.
+
+The current selected voice for SynthPost anchor tests is:
+
+```yaml
+tts:
+  engine: kokoro
+  voice: af_bella
+  speed: 1.0
+  sample_rate: 24000
+  lang_code: a
+```
+
+Audition helpers are available for choosing future voices:
+
+```bash
+.venv/bin/python3 scripts/audition_kokoro_voices.py --speed 0.95
+.venv/bin/python3 scripts/audition_kokoro_voices.py --speed 1.10
+.venv/bin/python3 scripts/audition_kokoro_voices.py \
+  --output-dir assets/output/tts/auditions/indian_accent_english_s110 \
+  --voices hf_alpha,hf_beta,hm_omega,hm_psi \
+  --speed 1.10
+```
+
+Generated audition WAVs are written under `assets/output/tts/auditions/` and are intentionally ignored by Git.
 
 For the common Python package setup:
 

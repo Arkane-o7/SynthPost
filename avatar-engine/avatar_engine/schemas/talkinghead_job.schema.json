@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "talkinghead_job.schema.json",
+  "title": "TalkingHead Avatar Job",
+  "description": "Input contract for the TalkingHeadAvatarRenderer in Avatar-Engine.",
+  "type": "object",
+  "required": [
+    "renderer",
+    "episode_id",
+    "audio_path",
+    "viseme_path",
+    "avatar",
+    "camera",
+    "render",
+    "face"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "renderer": {
+      "type": "string",
+      "const": "talkinghead",
+      "description": "Must be 'talkinghead' to select the TalkingHead renderer."
+    },
+    "episode_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for the episode."
+    },
+    "story_id": {
+      "type": "string",
+      "description": "Identifier for the story segment within the episode."
+    },
+    "script_text": {
+      "type": "string",
+      "description": "The text spoken by the avatar (for reference / subtitles)."
+    },
+    "audio_path": {
+      "type": "string",
+      "description": "Relative path (from repo root) to the pre-rendered audio WAV file.",
+      "pattern": "\\.wav$"
+    },
+    "viseme_path": {
+      "type": "string",
+      "description": "Relative path to the Rhubarb lip-sync JSON (outputFormat=json)."
+    },
+    "avatar": {
+      "type": "object",
+      "required": ["asset_path", "metadata_path"],
+      "properties": {
+        "asset_path": {
+          "type": "string",
+          "description": "Relative path to the avatar GLB or VRM file.",
+          "pattern": "\\.(glb|vrm)$"
+        },
+        "metadata_path": {
+          "type": "string",
+          "description": "Relative path to the avatar.json metadata file."
+        },
+        "style": { "type": "string" },
+        "face_type": {
+          "type": "string",
+          "enum": ["3d", "legacy_2d"],
+          "description": "Must be '3d' for TalkingHead mode."
+        },
+        "requires_3d_lips": {
+          "type": "boolean",
+          "description": "When true, fail if the avatar does not support 3D lip animation."
+        }
+      },
+      "additionalProperties": true
+    },
+    "camera": {
+      "type": "object",
+      "required": ["name", "width", "height", "fps"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "front_medium",
+            "front_close",
+            "portrait_main",
+            "landscape_intro",
+            "landscape_conclusion",
+            "side_three_quarter"
+          ],
+          "description": "Semantic camera preset name."
+        },
+        "width": { "type": "integer", "minimum": 64 },
+        "height": { "type": "integer", "minimum": 64 },
+        "fps": { "type": "integer", "minimum": 1 },
+        "duration_seconds": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": true
+    },
+    "render": {
+      "type": "object",
+      "required": ["output_path"],
+      "properties": {
+        "background": {
+          "type": "string",
+          "description": "Background mode: 'transparent', 'chroma_green', or a CSS colour."
+        },
+        "fallback_background": { "type": "string" },
+        "output_path": {
+          "type": "string",
+          "description": "Relative path for the final MP4 output."
+        },
+        "alpha_output_path": { "type": "string" },
+        "preview_png_path": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "animation": {
+      "type": "object",
+      "properties": {
+        "idle_loop": { "type": "string" },
+        "gesture_style": { "type": "string" },
+        "gesture_events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["time", "type"],
+            "properties": {
+              "time": { "type": "number" },
+              "type": { "type": "string" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "face": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["3d_viseme", "legacy_2d"],
+          "description": "Primary face animation mode. '3d_viseme' is required for TalkingHead."
+        },
+        "viseme_source": {
+          "type": "string",
+          "enum": ["rhubarb", "talkinghead", "azure", "custom"],
+          "description": "Which tool produced the viseme timings."
+        },
+        "blendshape_profile": {
+          "type": "string",
+          "description": "Avatar blendshape profile: 'arkit', 'vrm', 'oculus', 'auto_detect', etc."
+        },
+        "fallback_mode": {
+          "type": "string",
+          "description": "Fallback face mode (only used when AVATAR_ENGINE_ALLOW_2D_FACE_FALLBACK=1)."
+        },
+        "allow_fallback": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this job permits falling back to 2D face mode."
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "examples": [
+    {
+      "renderer": "talkinghead",
+      "episode_id": "ep_test",
+      "story_id": "story_001",
+      "script_text": "The story text here.",
+      "audio_path": "episodes/ep_test/stories/story_001/audio/voice.wav",
+      "viseme_path": "episodes/ep_test/stories/story_001/lipsync/rhubarb.json",
+      "avatar": {
+        "asset_path": "assets/avatars/synthpost_anchor_v1/avatar.glb",
+        "metadata_path": "assets/avatars/synthpost_anchor_v1/avatar.json",
+        "style": "professional_stylized_news_anchor",
+        "face_type": "3d",
+        "requires_3d_lips": true
+      },
+      "camera": {
+        "name": "front_medium",
+        "width": 1920,
+        "height": 1080,
+        "fps": 24,
+        "duration_seconds": 30
+      },
+      "render": {
+        "background": "chroma_green",
+        "output_path": "episodes/ep_test/stories/story_001/anchor/001_talkinghead.mp4",
+        "preview_png_path": "episodes/ep_test/stories/story_001/anchor/001_talkinghead_preview.png"
+      },
+      "animation": {
+        "idle_loop": "news_idle",
+        "gesture_style": "calm_anchor",
+        "gesture_events": [
+          { "time": 4.2, "type": "explain_small" },
+          { "time": 12.0, "type": "nod" }
+        ]
+      },
+      "face": {
+        "mode": "3d_viseme",
+        "viseme_source": "rhubarb",
+        "blendshape_profile": "auto_detect",
+        "fallback_mode": "legacy_2d",
+        "allow_fallback": false
+      }
+    }
+  ]
+}

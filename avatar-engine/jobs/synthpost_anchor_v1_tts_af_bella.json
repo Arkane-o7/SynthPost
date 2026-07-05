@@ -1,0 +1,11 @@
+{
+  "job_id": "synthpost_anchor_v1_af_bella",
+  "script": "Good evening. This is a SynthPost anchor test using a Character Creator avatar with Reallusion facial morphs.",
+  "voice": {
+    "engine": "kokoro",
+    "voice_id": "af_bella",
+    "speed": 1.0,
+    "sample_rate": 24000,
+    "lang_code": "a"
+  }
+}

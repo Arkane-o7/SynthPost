@@ -1,0 +1,51 @@
+{
+  "renderer": "rocketbox",
+  "episode_id": "ep_bm01_rocketbox_demo",
+  "story_id": "story_bm01_rocketbox_001",
+  "script_text": "Good evening. I am your AI news anchor. This is a direct Rocketbox morph target renderer test.",
+  "audio_path": "tests/fixtures/sample_tts.wav",
+  "viseme_path": "tests/fixtures/sample_tts_rhubarb.json",
+  "avatar": {
+    "asset_path": "assets/avatars/business_male_01/avatar.glb",
+    "metadata_path": "assets/avatars/business_male_01/avatar.json",
+    "style": "professional_realistic_business",
+    "face_type": "3d",
+    "body_form": "M",
+    "requires_3d_lips": true
+  },
+  "camera": {
+    "name": "front_medium",
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "duration_seconds": 5
+  },
+  "avatar_transform": {
+    "rotation_y_degrees": 0
+  },
+  "camera_overrides": {
+    "distance_multiplier": 1.85,
+    "target_height_factor": 0.72,
+    "height_factor": 0.72
+  },
+  "render": {
+    "background": "chroma_green",
+    "output_path": "assets/output/business_male_01_rocketbox_preview.mp4",
+    "preview_png_path": "assets/output/business_male_01_rocketbox_preview.png"
+  },
+  "animation": {
+    "idle_loop": "procedural_anchor",
+    "gesture_events": [
+      { "time": 1.2, "type": "emphasis_small", "duration": 0.9 },
+      { "time": 2.6, "type": "explain_right", "duration": 1.0 },
+      { "time": 3.8, "type": "nod", "duration": 0.45 }
+    ]
+  },
+  "face": {
+    "mode": "3d_viseme",
+    "viseme_source": "rhubarb",
+    "blendshape_profile": "rpm_arkit_oculus",
+    "fallback_mode": "legacy_2d",
+    "allow_fallback": false
+  }
+}

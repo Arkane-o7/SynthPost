@@ -1,0 +1,42 @@
+{
+  "renderer": "talkinghead",
+  "episode_id": "ep_demo",
+  "story_id": "story_001",
+  "script_text": "Good evening. Markets moved sharply today. Here is what you need to know.",
+  "audio_path": "tests/fixtures/sample_tts.wav",
+  "viseme_path": "tests/fixtures/sample_tts_rhubarb.json",
+  "avatar": {
+    "asset_path": "assets/avatars/synthpost_anchor_v1/avatar.glb",
+    "metadata_path": "assets/avatars/synthpost_anchor_v1/avatar.json",
+    "style": "professional_stylized_news_anchor",
+    "face_type": "3d",
+    "requires_3d_lips": true
+  },
+  "camera": {
+    "name": "front_medium",
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "duration_seconds": 5
+  },
+  "render": {
+    "background": "chroma_green",
+    "output_path": "assets/output/talkinghead_preview.mp4",
+    "preview_png_path": "assets/output/talkinghead_preview.png"
+  },
+  "animation": {
+    "idle_loop": "news_idle",
+    "gesture_style": "calm_anchor",
+    "gesture_events": [
+      { "time": 1.5, "type": "explain_small" },
+      { "time": 3.5, "type": "nod" }
+    ]
+  },
+  "face": {
+    "mode": "3d_viseme",
+    "viseme_source": "rhubarb",
+    "blendshape_profile": "auto_detect",
+    "fallback_mode": "legacy_2d",
+    "allow_fallback": false
+  }
+}

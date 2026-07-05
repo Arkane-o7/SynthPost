@@ -5,8 +5,8 @@ tools:
 
 tts:
   engine: kokoro
-  voice: af_heart
-  speed: 1.0
+  voice: af_bella
+  speed: 1.10
   sample_rate: 24000
   lang_code: a
 
@@ -29,6 +29,8 @@ render_profiles:
   production:
     fps: 24
     resolution: [1920, 1080]
+    render_quality: fast
+    render_samples: 8
     camera_resolution_scale: 1.0
     camera_resolution_overrides:
       portrait_main:
@@ -37,3 +39,40 @@ render_profiles:
     use_per_camera_resolution: true
 
 test_mode: false
+
+# Browser renderer settings. The active SynthPost CC4 runtime is selected with
+# renderer="rocketbox" for compatibility, even though it now uses a custom
+# Three.js/Reallusion driver rather than Rocketbox assets.
+# Set AVATAR_ENGINE_ALLOW_RENDERER_FALLBACK=1 to allow Blender fallback on failure.
+# Set AVATAR_ENGINE_ALLOW_2D_FACE_FALLBACK=1 to allow legacy 2D face mode.
+talkinghead:
+  # The web_avatar_runtime is built automatically if dist/ is missing.
+  # Set to false to disable auto-build (requires manual: cd web_avatar_runtime && npm ci && npm run build)
+  auto_build_runtime: true
+  # Browser capture timeout padding beyond clip duration (seconds)
+  browser_timeout_padding_s: 90
+  # Playwright browser to use: chromium, firefox, or webkit
+  playwright_browser: chromium
+  # Avatar asset base path (relative to repo root)
+  default_avatar_asset: assets/avatars/synthpost_anchor_v1/anchor.glb
+  default_avatar_metadata: assets/avatars/synthpost_anchor_v1/avatar.json
+  default_avatar_body_form: F
+
+  # Defaults applied to browser/CC4 jobs when the job JSON omits the field.
+  # Jobs can still override any of these values explicitly.
+  default_camera:
+    name: front_close
+  default_camera_overrides:
+    distance_multiplier: 3.0
+    target_height_factor: 0.85
+    height_factor: 0.87
+  default_render_background: charcoal
+  default_animation:
+    idle_loop: procedural_anchor
+    gesture_events: []
+  default_face:
+    mode: 3d_viseme
+    viseme_source: rhubarb
+    blendshape_profile: reallusion_viseme
+    fallback_mode: legacy_2d
+    allow_fallback: false

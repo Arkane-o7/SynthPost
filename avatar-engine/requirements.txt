@@ -1,2 +1,3 @@
 PyYAML>=6.0.1
 kokoro>=0.9.4
+playwright>=1.44.0

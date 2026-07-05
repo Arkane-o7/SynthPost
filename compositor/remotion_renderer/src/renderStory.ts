@@ -406,7 +406,7 @@ const timelineSegmentProps = async (
           ...staged,
           start,
           end,
-          fit: "cover" as const,
+          fit: visualRef.fit ?? ("cover" as const),
           sourceLabel: visualSourceLabel(
             visualRef.source_label,
             visualRef.source_name,
@@ -421,7 +421,28 @@ const timelineSegmentProps = async (
           mediaType: visualRef.media_type,
           contentRole: visualRef.content_role,
           candidateId: assetId,
-          attributionText: visualRef.attribution_text,
+          sectionId: visualRef.section_id ?? segment.section_id,
+          sectionType: visualRef.section_type,
+          visualRole: visualRef.visual_role,
+          sourceUrl: visualRef.source_url,
+          sourceDomain: visualRef.source_domain,
+          provider: visualRef.provider,
+          license: visualRef.license,
+          attributionText: visualRef.attribution_text ?? visualRef.attribution,
+          rightsCategory: visualRef.rights_category,
+          manualReviewFlag: Boolean(
+            visualRef.manual_review_flag ?? visualRef.needs_manual_review,
+          ),
+          fallbackStatus: visualRef.fallback_status,
+          fallbackReason: visualRef.fallback_reason,
+          warnings: Array.isArray(visualRef.warnings)
+            ? visualRef.warnings.map(String)
+            : undefined,
+          visualSkillType: visualRef.visual_skill_type ?? visualRef.skill_type,
+          visualSkill: visualRef.visual_skill,
+          skillPlaceholder: visualRef.skill_placeholder,
+          renderSafetyStatus: visualRef.render_safety_status,
+          motion: visualRef.motion,
           trimStart: Number.isFinite(trimStart) ? trimStart : undefined,
           trimEnd: Number.isFinite(trimEnd) ? trimEnd : undefined,
         }

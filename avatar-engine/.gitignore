@@ -24,3 +24,33 @@ blender/main*.blend
 
 # Accidental Finder duplicates.
 assets/characters/avatar_01/mouth_textures/untitled folder/
+
+# TalkingHead / web runtime generated artifacts
+web_avatar_runtime/node_modules/
+web_avatar_runtime/dist/
+.tmp/
+
+# Playwright browser state and captured videos
+test-results/
+playwright-report/
+
+# Avatar GLB/VRM assets and raw CC/Reallusion export dumps are large.
+# Keep small runtime metadata (for example assets/avatars/*/avatar.json) in Git,
+# but store binary avatars/textures externally or via LFS.
+assets/avatars/**/*.glb
+assets/avatars/**/*.vrm
+assets/avatars/**/*.fbx
+assets/avatars/**/textures/
+assets/avatars/**/source_project/
+assets/avatars/**/Anchor.json
+assets/avatars/Version*/
+assets/avatars/version*/
+assets/avatars/*(broken)/
+!assets/avatars/**/.gitkeep
+
+# Generated smoke / benchmark outputs
+*.json.bak
+smoke_report.json
+
+# Smoke and debug JSON artifacts (temp outputs, not source)
+smoke_report.json
