@@ -45,6 +45,11 @@ def validate_timeline(
             errors.append(f"{prefix}: unknown template {segment.template.template_id}")
             continue
         template = get_template(segment.template.template_id)
+        if not template.production_enabled:
+            reason = template.blacklist_reason or "template is not production enabled"
+            errors.append(
+                f"{prefix}: template {segment.template.template_id} is blacklisted for production: {reason}"
+            )
         if (
             template.anchor_visible is not None
             and segment.anchor.visible != template.anchor_visible

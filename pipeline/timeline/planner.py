@@ -52,25 +52,13 @@ def choose_template(
         return "fullscreen_anchor"
     if visual:
         if (
-            visual.content_role == ContentRole.document
-            or visual.media_type == MediaType.document
-        ):
-            return "document_callout"
-        if (
-            visual.media_type == MediaType.chart
-            or visual.content_role == ContentRole.data
-        ):
-            return "chart_explainer"
-        if (
-            visual.media_type == MediaType.map
-            or visual.content_role == ContentRole.location
-        ):
-            return "map_explainer"
-        if (
             visual.content_role == ContentRole.primary_footage
             and visual.media_type == MediaType.video
         ):
             return "fullscreen_news_visual"
+        # Non-quote explainer/card templates are currently blacklisted for
+        # production. Keep approved documents, charts, maps, and context media in
+        # the retained split broadcast shell until those cards are redesigned.
         return "split_anchor_visual"
     # Default to the retained broadcast anchor look. The newer card/explainer
     # templates should be explicit choices, not automatic replacements for the
@@ -165,7 +153,6 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 "split_anchor_visual",
                 "fullscreen_anchor",
                 "fallback_anchor",
-                "document_callout",
             },
             speaking=audio_mode != AudioMode.source,
             camera="front_close"

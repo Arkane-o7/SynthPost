@@ -18,9 +18,17 @@ class TemplateDefinition:
     required_fields: list[str] = field(default_factory=list)
     default_duration: float = 8.0
     compatible_aspect_ratios: list[str] = field(default_factory=lambda: ["16:9"])
-    fallback_template_id: str = "fallback_context_card"
+    fallback_template_id: str = "fallback_anchor"
     editor_preview_icon: str = "frame"
     validation_rules: list[str] = field(default_factory=list)
+    production_enabled: bool = True
+    blacklist_reason: str | None = None
+
+
+BLACKLISTED_CARD_REASON = (
+    "Blacklisted for production until the explainer/card graphics are redesigned "
+    "to meet the SynthPost broadcast polish bar. Quote card remains allowed."
+)
 
 
 TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
@@ -74,6 +82,7 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=False,
         visual_audio_policy="source_or_muted",
         required_fields=["visual.path", "overlays.attribution"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="video",
         validation_rules=[
             "source_audio_requires_audio_mode_source_or_mixed",
@@ -118,6 +127,7 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=None,
         visual_audio_policy="muted",
         required_fields=["overlays.quote_text", "overlays.attribution"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="quote",
         validation_rules=["quote_requires_claim", "quote_requires_attribution"],
     ),
@@ -132,8 +142,11 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="muted",
         required_fields=["visual.path", "overlays.document_source"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="document",
         validation_rules=["document_source_required"],
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "chart_explainer": TemplateDefinition(
         template_id="chart_explainer",
@@ -146,7 +159,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="narration_only",
         required_fields=["overlays.data"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="chart",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "map_explainer": TemplateDefinition(
         template_id="map_explainer",
@@ -159,7 +175,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="narration_only",
         required_fields=["overlays.data"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="map",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "timeline_explainer": TemplateDefinition(
         template_id="timeline_explainer",
@@ -172,7 +191,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="narration_only",
         required_fields=["overlays.data"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="timeline",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "comparison_card": TemplateDefinition(
         template_id="comparison_card",
@@ -185,7 +207,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="narration_only",
         required_fields=["overlays.data"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="compare",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "bullet_summary": TemplateDefinition(
         template_id="bullet_summary",
@@ -198,7 +223,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="narration_only",
         required_fields=["overlays.data"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="bullets",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "source_screenshot": TemplateDefinition(
         template_id="source_screenshot",
@@ -211,7 +239,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="muted",
         required_fields=["visual.path", "overlays.attribution"],
+        fallback_template_id="split_anchor_visual",
         editor_preview_icon="screenshot",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
     "fallback_context_card": TemplateDefinition(
         template_id="fallback_context_card",
@@ -224,7 +255,10 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
         anchor_speaking=True,
         visual_audio_policy="narration_only",
         required_fields=["script_text"],
+        fallback_template_id="fallback_anchor",
         editor_preview_icon="context",
+        production_enabled=False,
+        blacklist_reason=BLACKLISTED_CARD_REASON,
     ),
 }
 
@@ -235,8 +269,11 @@ def get_template(template_id: str) -> TemplateDefinition:
     return TEMPLATE_REGISTRY[template_id]
 
 
-def template_registry_json() -> list[dict[str, Any]]:
-    return [asdict(template) for template in TEMPLATE_REGISTRY.values()]
+def template_registry_json(production_only: bool = True) -> list[dict[str, Any]]:
+    templates = TEMPLATE_REGISTRY.values()
+    if production_only:
+        templates = [template for template in templates if template.production_enabled]
+    return [asdict(template) for template in templates]
 
 
 def template_compatible(template_id: str, media_type: str, content_role: str) -> bool:

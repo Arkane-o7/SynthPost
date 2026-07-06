@@ -16,10 +16,18 @@ from pipeline.discovery.discover import (
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.models import (
     ContentRole,
+    MediaType,
     RightsTier,
+    SegmentAnchor,
+    SegmentAudio,
+    SegmentOverlays,
+    SegmentTemplate,
+    SegmentVisual,
     SourceDefinition,
     SourceType,
     StoryWorkflowState,
+    TimelinePlan,
+    TimelineSegment,
     VisualCandidate,
 )
 from pipeline.research.extract import build_research_pack
@@ -31,6 +39,7 @@ from pipeline.timeline.planner import (
     choose_template,
     generate_timeline,
 )
+from pipeline.timeline.templates import TEMPLATE_REGISTRY, template_registry_json
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import approve_visual, stage_local_visual
 from pipeline.workflow import assert_transition, can_transition
@@ -93,6 +102,81 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
     def test_default_timeline_templates_preserve_retained_anchor_look(self) -> None:
         self.assertEqual(choose_template("intro", None, 0), "fullscreen_anchor")
         self.assertEqual(choose_template("context", None, 1), "fallback_anchor")
+
+    def test_non_quote_card_templates_are_blacklisted_for_production(self) -> None:
+        blacklisted = {
+            "document_callout",
+            "chart_explainer",
+            "map_explainer",
+            "timeline_explainer",
+            "comparison_card",
+            "bullet_summary",
+            "source_screenshot",
+            "fallback_context_card",
+        }
+        production_registry = template_registry_json()
+        production_ids = {template["template_id"] for template in production_registry}
+        all_ids = {
+            template["template_id"]
+            for template in template_registry_json(production_only=False)
+        }
+        self.assertIn("quote_card", production_ids)
+        self.assertTrue(blacklisted.issubset(all_ids))
+        self.assertTrue(blacklisted.isdisjoint(production_ids))
+        for template in production_registry:
+            self.assertNotIn(template["fallback_template_id"], blacklisted)
+        for template_id in blacklisted:
+            self.assertFalse(TEMPLATE_REGISTRY[template_id].production_enabled)
+            self.assertIn(
+                "Blacklisted", TEMPLATE_REGISTRY[template_id].blacklist_reason or ""
+            )
+
+    def test_planner_routes_documents_charts_and_maps_to_retained_split_shell(
+        self,
+    ) -> None:
+        for media_type, content_role in [
+            (MediaType.document, ContentRole.document),
+            (MediaType.chart, ContentRole.data),
+            (MediaType.map, ContentRole.location),
+        ]:
+            visual = VisualCandidate(
+                story_id="story_template_blacklist",
+                provider="unit",
+                media_type=media_type,
+                content_role=content_role,
+                rights_tier=RightsTier.green,
+                review_status="approved",
+            )
+            self.assertEqual(
+                choose_template("context", visual, 1), "split_anchor_visual"
+            )
+
+    def test_validation_rejects_blacklisted_card_templates(self) -> None:
+        plan = TimelinePlan(
+            story_id="story_blacklisted_template",
+            segments=[
+                TimelineSegment(
+                    segment_id="seg_001",
+                    section_id="context_1",
+                    start_time=0,
+                    end_time=4,
+                    duration=4,
+                    script_text="A blacklisted card should not pass production validation.",
+                    anchor=SegmentAnchor(visible=False, speaking=True),
+                    visual=SegmentVisual(
+                        media_type=MediaType.fallback,
+                        content_role=ContentRole.fallback,
+                    ),
+                    template=SegmentTemplate(template_id="fallback_context_card"),
+                    audio=SegmentAudio(),
+                    overlays=SegmentOverlays(),
+                )
+            ],
+        )
+
+        errors, _warnings = validate_timeline(plan, check_media_exists=False)
+
+        self.assertTrue(any("blacklisted for production" in error for error in errors))
 
     def test_avatar_duration_rescale_removes_pure_narration_timeline_gaps(self) -> None:
         manifest = {
