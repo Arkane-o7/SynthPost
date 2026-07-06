@@ -325,16 +325,7 @@ def stitch_episode(
     if not manifests:
         raise FileNotFoundError(f"No story manifests found for episode: {episode_id}")
 
-    intro = PROJECT_ROOT / "assets" / "brand" / "intro.mp4"
     outro = PROJECT_ROOT / "assets" / "brand" / "outro.mp4"
-    ensure_placeholder_clip(
-        intro,
-        "SYNTHPOST",
-        1.6,
-        width=profile.width,
-        height=profile.height,
-        fps=profile.fps,
-    )
     ensure_placeholder_clip(
         outro,
         "SYNTHPOST",
@@ -344,7 +335,7 @@ def stitch_episode(
         fps=profile.fps,
     )
 
-    source_clips = [intro]
+    source_clips = []
     for manifest_path in manifests:
         manifest = read_manifest(manifest_path)
         output = resolve_project_path(
