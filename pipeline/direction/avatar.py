@@ -208,7 +208,7 @@ def gesture_events_for(script: str, duration: float) -> list[dict[str, Any]]:
 def voice_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     settings: dict[str, Any] = {
         "engine": "kokoro",
-        "voice_id": os.environ.get("SYNTHPOST_AVATAR_VOICE_ID") or "af_bella",
+        "voice_id": os.environ.get("SYNTHPOST_AVATAR_VOICE_ID") or "af_heart",
         "speed": float(os.environ.get("SYNTHPOST_AVATAR_VOICE_SPEED") or "1.10"),
         "sample_rate": 24000,
         "lang_code": os.environ.get("SYNTHPOST_AVATAR_LANG_CODE") or "a",

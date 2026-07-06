@@ -5,7 +5,7 @@ tools:
 
 tts:
   engine: kokoro
-  voice: af_bella
+  voice: af_heart
   speed: 1.10
   sample_rate: 24000
   lang_code: a
