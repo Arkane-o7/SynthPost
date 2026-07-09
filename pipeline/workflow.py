@@ -29,6 +29,7 @@ VALID_TRANSITIONS: dict[StoryWorkflowState, set[StoryWorkflowState]] = {
         StoryWorkflowState.failed,
     },
     StoryWorkflowState.script_generating: {
+        StoryWorkflowState.research_ready,
         StoryWorkflowState.script_review,
         StoryWorkflowState.failed,
         StoryWorkflowState.cancelled,

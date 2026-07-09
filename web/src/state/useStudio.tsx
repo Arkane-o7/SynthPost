@@ -19,6 +19,7 @@ type StudioState = {
   selectedStoryId: string;
   error: string;
   loading: boolean;
+  lastJobEventTimestamp: number;
 };
 
 type StudioContextValue = StudioState & {
@@ -47,6 +48,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
     selectedStoryId: localStorage.getItem("synthpost.story") ?? "",
     error: "",
     loading: true,
+    lastJobEventTimestamp: Date.now(),
   });
 
   const patch = (partial: Partial<StudioState>) =>
@@ -85,11 +87,15 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
       const candidates = await api.listCandidates({
         episodeId: selectedEpisodeId || undefined,
       });
+      const persistedStoryId = localStorage.getItem("synthpost.story") ?? "";
+      const requestedStoryId = persistedStoryId || state.selectedStoryId;
       const selectedStoryId = candidates.some(
-        (candidate) => candidate.story_id === state.selectedStoryId,
+        (candidate) => candidate.story_id === requestedStoryId,
       )
-        ? state.selectedStoryId
-        : "";
+        ? requestedStoryId
+        : candidates.find(
+            (candidate) => candidate.selection_status === "selected",
+          )?.story_id || "";
 
       localStorage.setItem("synthpost.project", selectedProjectId);
       if (selectedEpisodeId)
@@ -123,12 +129,39 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   React.useEffect(() => {
-    const timer = window.setInterval(
-      () => void refreshJobs().catch(() => undefined),
-      2000,
-    );
-    return () => window.clearInterval(timer);
-  }, [refreshJobs]);
+    const eventSource = new EventSource("/api/jobs/events");
+    eventSource.addEventListener("jobs", (e) => {
+      try {
+        const jobs = JSON.parse(e.data) as RenderJob[];
+        setState((current) => {
+          let updatedTimestamp = current.lastJobEventTimestamp;
+          // Trigger a panel refresh if any job transitioned to completed/failed
+          const changed = jobs.some((newJob) => {
+            const oldJob = current.jobs.find((j) => j.job_id === newJob.job_id);
+            if (!oldJob) return false;
+            return (
+              oldJob.status !== newJob.status &&
+              (newJob.status === "completed" || newJob.status === "failed")
+            );
+          });
+          if (changed) {
+            updatedTimestamp = Date.now();
+          }
+          return { ...current, jobs, lastJobEventTimestamp: updatedTimestamp };
+        });
+      } catch (err) {
+        console.error("Failed to parse jobs event", err);
+      }
+    });
+
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+  React.useEffect(() => {
+    void refreshCandidates().catch(() => undefined);
+  }, [state.lastJobEventTimestamp, refreshCandidates]);
 
   const value: StudioContextValue = {
     ...state,

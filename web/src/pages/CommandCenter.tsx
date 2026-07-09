@@ -5,7 +5,7 @@ import { EpisodeHeader } from "../components/EpisodeHeader";
 import { WorkflowStepper } from "../components/WorkflowStepper";
 import { NextActionCard } from "../components/NextActionCard";
 import { EmptyState } from "../components/EmptyState";
-import { getActiveStage, type StageKey } from "../lib/workflowUtils";
+import { STAGES, getActiveStage, type StageKey } from "../lib/workflowUtils";
 
 import { StoryPanel } from "../workspace/StoryPanel";
 import { ResearchPanel } from "../workspace/ResearchPanel";
@@ -52,12 +52,45 @@ export const CommandCenter: React.FC<{
   const story = studio.candidates.find(
     (c) => c.story_id === studio.selectedStoryId,
   );
+  const activeStoryJobs = studio.jobs.filter(
+    (job) =>
+      job.story_id === studio.selectedStoryId &&
+      ["queued", "running"].includes(job.status),
+  );
+  const hasActiveResearchJob = activeStoryJobs.some(
+    (job) => job.job_type === "research",
+  );
+  const hasActiveScriptJob = activeStoryJobs.some(
+    (job) => job.job_type === "script_generate",
+  );
+  const nextActionDisabled =
+    (story?.workflow_state === "selected" && hasActiveResearchJob) ||
+    (story?.workflow_state === "research_ready" && hasActiveScriptJob);
+  const nextActionDisabledReason = hasActiveResearchJob
+    ? "Research is already queued/running for this story."
+    : hasActiveScriptJob
+      ? "Script generation is already queued/running for this story."
+      : undefined;
   const defaultStage = getActiveStage(story?.workflow_state);
   const [activeStage, setActiveStage] = React.useState<StageKey>(defaultStage);
 
-  // Sync active stage when workflow state changes
+  // Reset focus when the selected story changes.
   React.useEffect(() => {
     setActiveStage(getActiveStage(story?.workflow_state));
+  }, [story?.story_id]);
+
+  // Auto-advance when backend workflow moves forward. Do not snap the user
+  // backward to an older workflow-derived stage while they are already working
+  // in Render/Assembly.
+  React.useEffect(() => {
+    const nextStage = getActiveStage(story?.workflow_state);
+    setActiveStage((currentStage) => {
+      const currentIndex = STAGES.findIndex(
+        (stage) => stage.key === currentStage,
+      );
+      const nextIndex = STAGES.findIndex((stage) => stage.key === nextStage);
+      return nextIndex > currentIndex ? nextStage : currentStage;
+    });
   }, [story?.workflow_state]);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -223,6 +256,8 @@ export const CommandCenter: React.FC<{
       <NextActionCard
         workflowState={story.workflow_state}
         onNavigate={setActiveStage}
+        disabled={nextActionDisabled}
+        disabledReason={nextActionDisabledReason}
         onApiAction={(action) => {
           if (action === "startResearch") {
             void act(() => api.startResearch(studio.selectedStoryId));

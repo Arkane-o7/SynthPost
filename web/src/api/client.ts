@@ -172,10 +172,14 @@ export const api = {
   readResearch: (storyId: string) =>
     request<ResearchPack | null>(`/api/stories/${storyId}/research`),
 
-  generateScript: (storyId: string, provider?: string) =>
+  generateScript: (
+    storyId: string,
+    provider?: string,
+    target_duration_seconds = 600,
+  ) =>
     request<RenderJob>(`/api/stories/${storyId}/script/generate`, {
       method: "POST",
-      body: JSON.stringify({ provider }),
+      body: JSON.stringify({ provider, target_duration_seconds }),
     }),
   readScript: (storyId: string, approved = false) =>
     request<ScriptDocument | null>(
@@ -301,7 +305,9 @@ export const api = {
       body: JSON.stringify({
         render_profile,
         test_mode,
-        skip_avatar_render: true,
+        // Preview/test renders are intentionally fast and placeholder-safe.
+        // Production story renders should render/reuse the real avatar anchor.
+        skip_avatar_render: test_mode || render_profile === "preview",
       }),
     }),
   assembleEpisode: (
@@ -314,7 +320,23 @@ export const api = {
       body: JSON.stringify({ render_profile, test_mode }),
     }),
 
-  listJobs: () => request<RenderJob[]>("/api/jobs"),
+  listJobs: (
+    params: {
+      storyId?: string;
+      episodeId?: string;
+      jobType?: string;
+      limit?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.storyId) query.set("story_id", params.storyId);
+    if (params.episodeId) query.set("episode_id", params.episodeId);
+    if (params.jobType) query.set("job_type", params.jobType);
+    if (params.limit) query.set("limit", String(params.limit));
+    return request<RenderJob[]>(
+      `/api/jobs${query.toString() ? `?${query}` : ""}`,
+    );
+  },
   readJob: (jobId: string) => request<RenderJob>(`/api/jobs/${jobId}`),
   retryJob: (jobId: string) =>
     request<RenderJob>(`/api/jobs/${jobId}/retry`, { method: "POST" }),

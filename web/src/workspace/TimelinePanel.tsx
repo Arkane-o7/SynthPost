@@ -33,7 +33,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         .readTimeline(storyId)
         .then(setTimeline)
         .catch(() => setTimeline(null)),
-    [storyId],
+    [storyId, studio.lastJobEventTimestamp],
   );
   React.useEffect(() => {
     void load();

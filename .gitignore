@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 .env
+.env.local
+.env.*
+!.env.example
 .cache/
 
 # Generated episode and render artifacts

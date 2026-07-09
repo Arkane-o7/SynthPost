@@ -105,9 +105,6 @@ const resolveInput = async (value: string): Promise<string | null> => {
 };
 
 const createPlaceholderAnchor = async (destination: string): Promise<void> => {
-  if ((await exists(destination)) && !force) {
-    return;
-  }
   await fs.mkdir(path.dirname(destination), { recursive: true });
   const result = spawnSync(
     process.env.SYNTHPOST_FFMPEG || "ffmpeg",
@@ -119,11 +116,13 @@ const createPlaceholderAnchor = async (destination: string): Promise<void> => {
       "-f",
       "lavfi",
       "-i",
-      "testsrc2=s=1920x1080:r=24:d=12",
+      "color=c=#050A14:s=1920x1080:r=24:d=12",
       "-f",
       "lavfi",
       "-i",
-      "sine=frequency=440:sample_rate=48000:duration=12",
+      "anullsrc=r=48000:cl=stereo:d=12",
+      "-vf",
+      "drawbox=x=0:y=0:w=iw:h=ih:color=#071B33@0.92:t=fill,drawbox=x=120:y=120:w=1680:h=840:color=#0B1220@0.88:t=fill,drawbox=x=120:y=120:w=14:h=840:color=#D92D27@1:t=fill,drawbox=x=180:y=420:w=560:h=96:color=#18263A@1:t=fill,drawbox=x=180:y=555:w=900:h=52:color=#132033@1:t=fill,drawbox=x=180:y=640:w=1320:h=10:color=#284766@1:t=fill,drawbox=x=180:y=700:w=820:h=10:color=#1E70FF@0.85:t=fill",
       "-shortest",
       "-c:v",
       "libx264",

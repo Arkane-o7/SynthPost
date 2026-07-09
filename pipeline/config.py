@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import env as _env  # noqa: F401 - loads .env/.env.local at import time
 from .storage import PROJECT_ROOT, resolve_project_path
 
 

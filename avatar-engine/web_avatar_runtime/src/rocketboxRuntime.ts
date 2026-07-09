@@ -174,7 +174,7 @@ type CameraPreset = {
 
 const CAMERA_PRESETS: Record<string, CameraPreset> = {
   front_close: {
-    distanceFactor: 0.55,
+    distanceFactor: 0.58,
     heightFactor: 0.72,
     targetHeightFactor: 0.72,
   },

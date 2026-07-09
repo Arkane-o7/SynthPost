@@ -66,7 +66,7 @@ from avatar_engine.viseme_mapping import (
 # Longform CC4/GLB renders can spend significant time loading and capturing frames,
 # so allow callers to raise the timeout without editing code.
 BROWSER_TIMEOUT_PADDING_S = int(
-    os.environ.get("AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S", "90")
+    os.environ.get("AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S", "3600")
 )
 
 # Green-screen background colour used for chroma keying.
@@ -287,8 +287,8 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
                     "--autoplay-policy=no-user-gesture-required",
                     "--disable-web-security",
                     "--enable-webgl",
-                    "--use-gl=swiftshader",
-                    "--enable-unsafe-swiftshader",
+                    "--use-gl=angle",
+                    "--use-angle=metal",
                     "--ignore-gpu-blocklist",
                     "--no-sandbox",
                 ],

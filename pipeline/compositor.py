@@ -103,7 +103,13 @@ def render_story(
     if test_mode:
         print("[TEST_MODE] WARNING: Remotion composition is using TEST_MODE inputs.")
     print(f"[compositor] Running Remotion renderer: {' '.join(command)}")
-    subprocess.run(command, cwd=remotion_dir, check=True)
+    try:
+        subprocess.run(
+            command, cwd=remotion_dir, check=True, capture_output=True, text=True
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Remotion render failed with exit code {e.returncode}.\nSTDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}") from e
+
     if not output_path.exists():
         raise FileNotFoundError(
             f"Remotion did not create expected composition: {output_path}"

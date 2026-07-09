@@ -625,6 +625,34 @@ class Repository:
         self.upsert_job(job)
         return job
 
+    def active_job(
+        self,
+        job_type: str,
+        *,
+        story_id: str | None = None,
+        episode_id: str | None = None,
+        render_profile: str | None = None,
+    ) -> RenderJob | None:
+        filters = ["job_type = ?", "status IN ('queued', 'running')"]
+        params: list[Any] = [job_type]
+        if story_id is not None:
+            filters.append("story_id = ?")
+            params.append(story_id)
+        if episode_id is not None:
+            filters.append("episode_id = ?")
+            params.append(episode_id)
+        rows = rows_data(
+            self._many(
+                f"SELECT data FROM render_jobs WHERE {' AND '.join(filters)} ORDER BY created_at DESC LIMIT 20",
+                tuple(params),
+            )
+        )
+        for data in rows:
+            job = RenderJob.model_validate(data)
+            if render_profile is None or job.render_profile == render_profile:
+                return job
+        return None
+
     def upsert_job(self, job: RenderJob) -> None:
         job.updated_at = now_iso()
         data = job.model_dump(mode="json")
@@ -661,13 +689,33 @@ class Repository:
             raise NotFoundError(f"job not found: {job_id}")
         return RenderJob.model_validate(data)
 
-    def list_jobs(self, limit: int = 100) -> list[RenderJob]:
+    def list_jobs(
+        self,
+        limit: int = 100,
+        *,
+        story_id: str | None = None,
+        episode_id: str | None = None,
+        job_type: str | None = None,
+    ) -> list[RenderJob]:
+        filters: list[str] = []
+        params: list[Any] = []
+        if story_id is not None:
+            filters.append("story_id = ?")
+            params.append(story_id)
+        if episode_id is not None:
+            filters.append("episode_id = ?")
+            params.append(episode_id)
+        if job_type is not None:
+            filters.append("job_type = ?")
+            params.append(job_type)
+        where = f"WHERE {' AND '.join(filters)} " if filters else ""
+        params.append(limit)
         return [
             RenderJob.model_validate(data)
             for data in rows_data(
                 self._many(
-                    "SELECT data FROM render_jobs ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
+                    f"SELECT data FROM render_jobs {where}ORDER BY created_at DESC LIMIT ?",
+                    tuple(params),
                 )
             )
         ]

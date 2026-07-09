@@ -1,16 +1,16 @@
-import React from 'react';
-import { StudioProvider, useStudio } from './state/useStudio';
-import { AppShell } from './components/AppShell';
-import type { Page } from './components/LeftRail';
-import { CommandCenter } from './pages/CommandCenter';
-import { SourcesPage } from './pages/SourcesPage';
-import { StoryInboxPage } from './pages/StoryInboxPage';
-import { JobsPage } from './pages/JobsPage';
-import { SettingsPage } from './pages/SettingsPage';
-import './styles/studio.css';
+import React from "react";
+import { StudioProvider, useStudio } from "./state/useStudio";
+import { AppShell } from "./components/AppShell";
+import type { Page } from "./components/LeftRail";
+import { CommandCenter } from "./pages/CommandCenter";
+import { SourcesPage } from "./pages/SourcesPage";
+import { StoryInboxPage } from "./pages/StoryInboxPage";
+import { JobsPage } from "./pages/JobsPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import "./styles/studio.css";
 
 const Main: React.FC = () => {
-  const [page, setPage] = React.useState<Page>('command');
+  const [page, setPage] = React.useState<Page>("command");
   const studio = useStudio();
 
   return (
@@ -26,13 +26,15 @@ const Main: React.FC = () => {
         </div>
       ) : (
         <>
-          {page === 'command' && (
-            <CommandCenter onNavigateToInbox={() => setPage('inbox')} />
+          {page === "command" && (
+            <CommandCenter onNavigateToInbox={() => setPage("inbox")} />
           )}
-          {page === 'sources' && <SourcesPage />}
-          {page === 'inbox' && <StoryInboxPage />}
-          {page === 'jobs' && <JobsPage />}
-          {page === 'settings' && <SettingsPage />}
+          {page === "sources" && <SourcesPage />}
+          {page === "inbox" && (
+            <StoryInboxPage onStorySelected={() => setPage("command")} />
+          )}
+          {page === "jobs" && <JobsPage />}
+          {page === "settings" && <SettingsPage />}
         </>
       )}
     </AppShell>

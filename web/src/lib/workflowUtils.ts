@@ -24,37 +24,54 @@ export type StepStatus =
 /** Ordered list of backend workflow_state values. */
 const STATE_ORDER = [
   "selected",
+  "researching",
   "research_ready",
+  "script_generating",
   "script_review",
   "script_approved",
+  "visuals_searching",
   "visuals_review",
+  "timeline_draft",
   "timeline_review",
   "timeline_approved",
+  "rendering_avatar",
   "rendering_composition",
   "assembling",
   "completed",
+  "failed",
+  "cancelled",
 ];
 
 /** Which stepper-step index (0-based) corresponds to each workflow_state. */
 const STATE_TO_STEP: Record<string, number> = {
   selected: 0,
-  research_ready: 1,
+  researching: 1,
+  research_ready: 2,
+  script_generating: 2,
   script_review: 2,
   script_approved: 3,
+  visuals_searching: 3,
   visuals_review: 3,
+  timeline_draft: 4,
   timeline_review: 4,
   timeline_approved: 5,
+  rendering_avatar: 6,
   rendering_composition: 6,
   assembling: 7,
   completed: 7,
+  failed: 0,
+  cancelled: 0,
 };
 
 /** Is this state a "needs review" state? */
 const REVIEW_STATES = new Set([
+  "research_ready",
   "script_review",
   "visuals_review",
   "timeline_review",
 ]);
+
+const BLOCKED_STATES = new Set(["failed", "cancelled"]);
 
 /**
  * Derive the status of every stepper step from the current workflow_state.
@@ -68,7 +85,9 @@ export function getStepStatuses(
 
   for (let i = 0; i < STAGES.length; i++) {
     const stage = STAGES[i];
-    if (isComplete) {
+    if (workflowState && BLOCKED_STATES.has(workflowState)) {
+      result[stage.key] = i === stateIdx ? "blocked" : "not_started";
+    } else if (isComplete) {
       result[stage.key] = "completed";
     } else if (i < stateIdx) {
       result[stage.key] = "completed";
@@ -118,6 +137,15 @@ export function getNextAction(workflowState?: string): NextAction {
         stageKey: "research",
         apiAction: "startResearch",
       };
+    case "researching":
+      return {
+        title: "Research is running",
+        description:
+          "The worker is extracting claims, evidence, and entities. Watch Active Jobs on the right rail.",
+        ctaLabel: "Open Research",
+        ctaType: "navigate",
+        stageKey: "research",
+      };
     case "research_ready":
       return {
         title: "Generate or write a script",
@@ -127,6 +155,15 @@ export function getNextAction(workflowState?: string): NextAction {
         ctaType: "api",
         stageKey: "script",
         apiAction: "generateScript",
+      };
+    case "script_generating":
+      return {
+        title: "Script generation is running",
+        description:
+          "SynthPost is waiting for the structured script generator. If Ollama is offline, open Script and write manually or retry after starting Ollama.",
+        ctaLabel: "Open Script",
+        ctaType: "navigate",
+        stageKey: "script",
       };
     case "script_review":
       return {
@@ -146,14 +183,32 @@ export function getNextAction(workflowState?: string): NextAction {
         ctaType: "navigate",
         stageKey: "visuals",
       };
-    case "visuals_review":
+    case "visuals_searching":
       return {
-        title: "Review visual rights and approve",
+        title: "Visual search is running",
         description:
-          "Some visuals need rights review. Check attribution and rights tier, then approve or reject each visual.",
-        ctaLabel: "Review Visuals",
+          "The worker is scanning/staging visuals. Watch Active Jobs, then review rights when candidates appear.",
+        ctaLabel: "Open Visuals",
         ctaType: "navigate",
         stageKey: "visuals",
+      };
+    case "visuals_review":
+      return {
+        title: "Review visuals or continue with fallback",
+        description:
+          "Review any staged media and rights tiers. If no local visuals are available, continue to Timeline and SynthPost will use approved fallback anchor visuals.",
+        ctaLabel: "Open Visuals",
+        ctaType: "navigate",
+        stageKey: "visuals",
+      };
+    case "timeline_draft":
+      return {
+        title: "Validate the timeline draft",
+        description:
+          "A draft timeline exists. Validate segment timing/template choices, then approve the timeline.",
+        ctaLabel: "Open Timeline",
+        ctaType: "navigate",
+        stageKey: "timeline",
       };
     case "timeline_review":
       return {
@@ -172,6 +227,15 @@ export function getNextAction(workflowState?: string): NextAction {
         ctaLabel: "Open Preview",
         ctaType: "navigate",
         stageKey: "preview",
+      };
+    case "rendering_avatar":
+      return {
+        title: "Avatar render is running",
+        description:
+          "The avatar engine is rendering the anchor. This can take several minutes in production mode.",
+        ctaLabel: "Open Render Controls",
+        ctaType: "navigate",
+        stageKey: "render",
       };
     case "rendering_composition":
       return {
@@ -199,6 +263,24 @@ export function getNextAction(workflowState?: string): NextAction {
         ctaLabel: "View Output",
         ctaType: "navigate",
         stageKey: "assemble",
+      };
+    case "failed":
+      return {
+        title: "Workflow failed",
+        description:
+          "A pipeline job failed. Check the right rail or Jobs page, then retry the failed step or switch stories.",
+        ctaLabel: "Open Story",
+        ctaType: "navigate",
+        stageKey: "story",
+      };
+    case "cancelled":
+      return {
+        title: "Workflow cancelled",
+        description:
+          "This story workflow was cancelled. Select another story or restart from the Story Inbox.",
+        ctaLabel: "Go to Story Inbox",
+        ctaType: "navigate",
+        stageKey: "story",
       };
     default:
       return {

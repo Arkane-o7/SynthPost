@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +34,7 @@ def read_manifest(path: str | Path) -> dict[str, Any]:
 def write_manifest(path: str | Path, data: dict[str, Any]) -> None:
     manifest_path = resolve_project_path(path)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+    temp_path = manifest_path.with_name(f".{manifest_path.name}.{uuid.uuid4().hex}.tmp")
     with temp_path.open("w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2, ensure_ascii=True)
         handle.write("\n")

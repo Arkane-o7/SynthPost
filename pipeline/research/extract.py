@@ -60,6 +60,39 @@ def sha256_text(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+BOILERPLATE_PATTERNS = [
+    r"\bsubscribe\b",
+    r"\bsign in\b",
+    r"\bskip to\b",
+    r"\baccessibility help\b",
+    r"\bsearch close\b",
+    r"\bunlock this article\b",
+    r"\bcomplete digital access\b",
+    r"\bcancel anytime\b",
+    r"\btrial\b",
+    r"\bpremium digital\b",
+    r"\bstandard digital\b",
+    r"\bnewsletters\b",
+]
+
+
+def boilerplate_hits(text: str) -> int:
+    value = text.lower()
+    return sum(1 for pattern in BOILERPLATE_PATTERNS if re.search(pattern, value))
+
+
+def clean_extracted_text(text: str) -> str:
+    sentences = sentence_split(text)
+    if not sentences:
+        return text.strip()
+    cleaned = [
+        sentence
+        for sentence in sentences
+        if boilerplate_hits(sentence) == 0 and len(sentence.split()) >= 6
+    ]
+    return " ".join(cleaned).strip() or text.strip()
+
+
 def fetch_url_text(url: str, *, timeout: float = 16.0) -> tuple[str, str, list[str]]:
     request = Request(
         url, headers={"User-Agent": "SynthPostStudio/2.0 local editorial tool"}
@@ -92,7 +125,7 @@ def extract_numbers(text: str) -> list[str]:
                 flags=re.I,
             )
         )
-    )[:30]
+    )
 
 
 def extract_dates(text: str) -> list[str]:
@@ -104,7 +137,7 @@ def extract_dates(text: str) -> list[str]:
     values: set[str] = set()
     for pattern in patterns:
         values.update(re.findall(pattern, text, flags=re.I))
-    return sorted(values)[:30]
+    return sorted(values)
 
 
 def extract_entities(text: str) -> tuple[list[str], list[str], list[str]]:
@@ -129,7 +162,7 @@ def extract_entities(text: str) -> tuple[list[str], list[str], list[str]]:
     clean = [
         item for item in candidates if item.split()[0] not in stop and len(item) > 3
     ]
-    people = sorted(set(item for item in clean if len(item.split()) >= 2))[:20]
+    people = sorted(set(item for item in clean if len(item.split()) >= 2))
     org_keywords = (
         "Agency",
         "Commission",
@@ -145,9 +178,7 @@ def extract_entities(text: str) -> tuple[list[str], list[str], list[str]]:
         "Council",
         "Government",
     )
-    organizations = sorted(set(item for item in clean if item.endswith(org_keywords)))[
-        :20
-    ]
+    organizations = sorted(set(item for item in clean if item.endswith(org_keywords)))
     locations = sorted(
         set(
             item
@@ -169,7 +200,7 @@ def extract_entities(text: str) -> tuple[list[str], list[str], list[str]]:
                 "Tokyo",
             }
         )
-    )[:20]
+    )
     return people, organizations, locations
 
 
@@ -183,7 +214,16 @@ def source_document_from_candidate(candidate) -> SourceDocument:
         try:
             title, text, warnings = fetch_url_text(candidate.canonical_url)
             title = title or candidate.title
-            if len(text) < 300:
+            raw_text = text
+            text = clean_extracted_text(raw_text)
+            if candidate.summary and (
+                len(text) < 300 or boilerplate_hits(raw_text) >= 3
+            ):
+                text = f"{candidate.title}. {candidate.summary}".strip()
+                warnings.append(
+                    "article extraction looked paywalled/boilerplate-heavy; using feed title and summary"
+                )
+            elif len(text) < 300:
                 warnings.append(
                     "extracted text is short; article may be paywalled, script-heavy, or blocked"
                 )
@@ -223,7 +263,7 @@ def build_research_pack(repository, story_id: str) -> ResearchPack:
     sentences = sentence_split(document.content_text)
     evidence: list[EvidenceItem] = []
     claims: list[Claim] = []
-    for index, sentence in enumerate(sentences[:12], start=1):
+    for index, sentence in enumerate(sentences, start=1):
         evidence_item = EvidenceItem(
             evidence_id=f"ev_{index:03d}",
             document_id=document.document_id,

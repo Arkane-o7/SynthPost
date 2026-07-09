@@ -4,6 +4,7 @@ import { MiniJobCard } from "./InlineJobCard";
 import { relativeTime } from "../lib/formatters";
 import { api } from "../api/client";
 import type {
+  RenderJob,
   ScriptDocument,
   TimelinePlan,
   VisualCandidate,
@@ -12,14 +13,24 @@ import type {
 export const RightRail: React.FC = () => {
   const studio = useStudio();
 
-  const activeJobs = studio.jobs.filter((j) =>
-    ["queued", "running"].includes(j.status),
-  );
-  const recentJobs = studio.jobs.slice(0, 5);
-
   const story = studio.candidates.find(
     (c) => c.story_id === studio.selectedStoryId,
   );
+  const currentEpisodeId = story?.episode_id ?? studio.selectedEpisodeId;
+  const isCurrentContextJob = (job: RenderJob) => {
+    if (studio.selectedStoryId) {
+      if (job.story_id) return job.story_id === studio.selectedStoryId;
+      if (job.episode_id) return job.episode_id === currentEpisodeId;
+      return false;
+    }
+    if (currentEpisodeId) return job.episode_id === currentEpisodeId;
+    return true;
+  };
+  const contextJobs = studio.jobs.filter(isCurrentContextJob);
+  const activeJobs = contextJobs.filter((j) =>
+    ["queued", "running"].includes(j.status),
+  );
+  const recentJobs = contextJobs.slice(0, 5);
   const [script, setScript] = React.useState<ScriptDocument | null>(null);
   const [visuals, setVisuals] = React.useState<VisualCandidate[]>([]);
   const [timeline, setTimeline] = React.useState<TimelinePlan | null>(null);
@@ -68,12 +79,7 @@ export const RightRail: React.FC = () => {
         visual.rights_tier === "yellow" &&
         visual.review_status !== "manual_approved",
     );
-    if (
-      visuals.length === 0 &&
-      ["script_approved", "visuals_review"].includes(story.workflow_state ?? "")
-    ) {
-      blockers.push("No visuals staged for this story");
-    } else if (unapprovedVisuals.length > 0) {
+    if (unapprovedVisuals.length > 0) {
       blockers.push(
         `${unapprovedVisuals.length} visual${unapprovedVisuals.length === 1 ? "" : "s"} awaiting approval`,
       );
@@ -117,7 +123,31 @@ export const RightRail: React.FC = () => {
       blockers.push("No timeline found for this story");
     }
   }
-  const failedJobs = studio.jobs.filter((j) => j.status === "failed");
+  const failedJobs = contextJobs.filter((job) => {
+    if (job.status !== "failed") return false;
+    const failureTime =
+      job.updated_at ?? job.completed_at ?? job.created_at ?? "";
+    const recovered = contextJobs.some((other) => {
+      if (other.status !== "completed") return false;
+      const otherTime =
+        other.updated_at ?? other.completed_at ?? other.created_at ?? "";
+      if (otherTime <= failureTime) return false;
+      if (other.job_type === job.job_type) {
+        return job.story_id ? other.story_id === job.story_id : true;
+      }
+      if (job.job_type === "render_avatar") {
+        return (
+          (other.job_type === "render_story" &&
+            other.story_id === job.story_id) ||
+          (other.job_type === "assemble_episode" &&
+            story?.episode_id &&
+            other.episode_id === story.episode_id)
+        );
+      }
+      return false;
+    });
+    return !recovered;
+  });
   for (const fj of failedJobs.slice(0, 2)) {
     blockers.push(
       `Failed job: ${fj.job_type} — ${fj.error ?? "unknown error"}`,

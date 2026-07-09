@@ -1,23 +1,25 @@
-import React from 'react';
-import { api } from '../api/client';
-import { useStudio } from '../state/useStudio';
-import { StatusBadge } from '../components/StatusBadge';
-import { EmptyState } from '../components/EmptyState';
-import { scorePercent, relativeTime } from '../lib/formatters';
+import React from "react";
+import { api } from "../api/client";
+import { useStudio } from "../state/useStudio";
+import { StatusBadge } from "../components/StatusBadge";
+import { EmptyState } from "../components/EmptyState";
+import { scorePercent, relativeTime } from "../lib/formatters";
 
-type InboxTab = 'candidates' | 'custom';
+type InboxTab = "candidates" | "custom";
 
-export const StoryInboxPage: React.FC = () => {
+export const StoryInboxPage: React.FC<{
+  onStorySelected?: () => void;
+}> = ({ onStorySelected }) => {
   const studio = useStudio();
-  const [tab, setTab] = React.useState<InboxTab>('candidates');
-  const [search, setSearch] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState('');
+  const [tab, setTab] = React.useState<InboxTab>("candidates");
+  const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
   // Custom story form state
-  const [topic, setTopic] = React.useState('');
-  const [customUrl, setCustomUrl] = React.useState('');
-  const [manualBody, setManualBody] = React.useState('');
+  const [topic, setTopic] = React.useState("");
+  const [customUrl, setCustomUrl] = React.useState("");
+  const [manualBody, setManualBody] = React.useState("");
 
   const candidates = studio.candidates.filter((c) => {
     if (search && !c.title.toLowerCase().includes(search.toLowerCase()))
@@ -27,20 +29,38 @@ export const StoryInboxPage: React.FC = () => {
   });
 
   const suggestedCount = studio.candidates.filter(
-    (c) => c.selection_status === 'suggested',
+    (c) => c.selection_status === "suggested",
   ).length;
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
-      studio.setError('');
+      studio.setError("");
       setBusy(true);
       await fn();
       await studio.refreshAll();
+      return true;
     } catch (err) {
       studio.setError(err instanceof Error ? err.message : String(err));
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+
+  const selectForEpisode = async (
+    candidate: (typeof studio.candidates)[number],
+  ) => {
+    const ok = await act(async () => {
+      const selected =
+        candidate.selection_status === "selected" && candidate.story_id
+          ? candidate
+          : await api.selectCandidate(
+              candidate.candidate_id,
+              studio.selectedEpisodeId,
+            );
+      studio.setSelectedStoryId(selected.story_id ?? "");
+    });
+    if (ok) onStorySelected?.();
   };
 
   return (
@@ -57,7 +77,7 @@ export const StoryInboxPage: React.FC = () => {
             act(() => api.startDiscovery(studio.selectedEpisodeId || undefined))
           }
         >
-          {busy ? 'Refreshing…' : 'Refresh Discovery'}
+          {busy ? "Refreshing…" : "Refresh Discovery"}
         </button>
       </div>
 
@@ -82,21 +102,21 @@ export const StoryInboxPage: React.FC = () => {
       {/* Tabs */}
       <div className="tab-bar">
         <button
-          className={`tab-btn ${tab === 'candidates' ? 'tab-active' : ''}`}
-          onClick={() => setTab('candidates')}
+          className={`tab-btn ${tab === "candidates" ? "tab-active" : ""}`}
+          onClick={() => setTab("candidates")}
         >
           Candidates ({suggestedCount})
         </button>
         <button
-          className={`tab-btn ${tab === 'custom' ? 'tab-active' : ''}`}
-          onClick={() => setTab('custom')}
+          className={`tab-btn ${tab === "custom" ? "tab-active" : ""}`}
+          onClick={() => setTab("custom")}
         >
           Add Custom
         </button>
       </div>
 
       {/* Candidates tab */}
-      {tab === 'candidates' && (
+      {tab === "candidates" && (
         <div className="stack">
           {candidates.length === 0 ? (
             <EmptyState
@@ -107,22 +127,24 @@ export const StoryInboxPage: React.FC = () => {
           ) : (
             candidates.map((c) => {
               const pct = scorePercent(c.final_score);
-              const isSelected = c.selection_status === 'selected';
-              const isRejected = c.selection_status === 'rejected';
+              const isSelected = c.selection_status === "selected";
+              const isActive =
+                isSelected && c.story_id === studio.selectedStoryId;
+              const isRejected = c.selection_status === "rejected";
 
               return (
                 <div
                   key={c.candidate_id}
-                  className={`story-card ${isSelected ? 'story-selected' : ''} ${isRejected ? 'story-rejected' : ''}`}
+                  className={`story-card ${isActive ? "story-selected" : ""} ${isRejected ? "story-rejected" : ""}`}
                 >
                   {/* Score circle */}
                   <div
                     className={`score-circle ${
                       pct >= 80
-                        ? 'score-high'
+                        ? "score-high"
                         : pct >= 60
-                          ? 'score-mid'
-                          : 'score-low'
+                          ? "score-mid"
+                          : "score-low"
                     }`}
                   >
                     {pct}
@@ -132,19 +154,21 @@ export const StoryInboxPage: React.FC = () => {
                   <div className="stack" style={{ gap: 8 }}>
                     <strong style={{ fontSize: 16 }}>{c.title}</strong>
                     <div className="text-muted" style={{ fontSize: 12 }}>
-                      {c.source_name} · {c.category} ·{' '}
+                      {c.source_name} · {c.category} ·{" "}
                       {relativeTime(c.published_at)}
                     </div>
                     {c.summary && (
                       <p className="text-muted" style={{ fontSize: 13 }}>
                         {c.summary.length > 200
-                          ? c.summary.slice(0, 200) + '…'
+                          ? c.summary.slice(0, 200) + "…"
                           : c.summary}
                       </p>
                     )}
                     <div className="row-tight">
                       {c.score_reasons.slice(0, 5).map((r) => (
-                        <StatusBadge key={r} tone="blue">{r}</StatusBadge>
+                        <StatusBadge key={r} tone="blue">
+                          {r}
+                        </StatusBadge>
                       ))}
                     </div>
                     <div className="row-tight">
@@ -153,20 +177,20 @@ export const StoryInboxPage: React.FC = () => {
                         disabled={busy || !studio.selectedEpisodeId}
                         title={
                           !studio.selectedEpisodeId
-                            ? 'Select an episode in the sidebar first'
-                            : ''
+                            ? "Select an episode in the sidebar first"
+                            : isActive
+                              ? "This story is currently open in the Command Center"
+                              : isSelected
+                                ? "Switch the Command Center to this selected story"
+                                : "Select this story for the current episode"
                         }
-                        onClick={() =>
-                          act(async () => {
-                            const sel = await api.selectCandidate(
-                              c.candidate_id,
-                              studio.selectedEpisodeId,
-                            );
-                            studio.setSelectedStoryId(sel.story_id ?? '');
-                          })
-                        }
+                        onClick={() => selectForEpisode(c)}
                       >
-                        Select for Episode
+                        {isActive
+                          ? "Current in Command Center"
+                          : isSelected
+                            ? "Switch to this Story"
+                            : "Select for Episode"}
                       </button>
                       <button
                         className="btn-danger"
@@ -174,7 +198,7 @@ export const StoryInboxPage: React.FC = () => {
                         onClick={() =>
                           act(() =>
                             api.rejectCandidate(c.candidate_id, [
-                              'editor rejected',
+                              "editor rejected",
                             ]),
                           )
                         }
@@ -186,8 +210,10 @@ export const StoryInboxPage: React.FC = () => {
 
                   {/* Status badge */}
                   <div>
-                    <StatusBadge status={c.selection_status}>
-                      {c.selection_status}
+                    <StatusBadge
+                      status={isActive ? "selected" : c.selection_status}
+                    >
+                      {isActive ? "current" : c.selection_status}
                     </StatusBadge>
                   </div>
                 </div>
@@ -198,8 +224,8 @@ export const StoryInboxPage: React.FC = () => {
       )}
 
       {/* Custom tab */}
-      {tab === 'custom' && (
-        <div className="grid grid-3" style={{ alignItems: 'start' }}>
+      {tab === "custom" && (
+        <div className="grid grid-3" style={{ alignItems: "start" }}>
           {/* Custom topic */}
           <div className="card stack">
             <h2>Custom Topic</h2>
@@ -221,7 +247,7 @@ export const StoryInboxPage: React.FC = () => {
                     episode_id: studio.selectedEpisodeId || undefined,
                     title: topic.trim(),
                   });
-                  setTopic('');
+                  setTopic("");
                 })
               }
             >
@@ -250,7 +276,7 @@ export const StoryInboxPage: React.FC = () => {
                     episode_id: studio.selectedEpisodeId || undefined,
                     url: customUrl.trim(),
                   });
-                  setCustomUrl('');
+                  setCustomUrl("");
                 })
               }
             >
@@ -282,11 +308,11 @@ export const StoryInboxPage: React.FC = () => {
                 act(async () => {
                   await api.addManualStory({
                     episode_id: studio.selectedEpisodeId || undefined,
-                    title: topic || 'Manual story',
+                    title: topic || "Manual story",
                     body: manualBody,
                   });
-                  setManualBody('');
-                  setTopic('');
+                  setManualBody("");
+                  setTopic("");
                 })
               }
             >

@@ -16,7 +16,7 @@ export const ResearchPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       .readResearch(storyId)
       .then(setPack)
       .catch(() => setPack(null));
-  }, [storyId]);
+  }, [storyId, studio.lastJobEventTimestamp]);
 
   const act = async (fn: () => Promise<unknown>) => {
     try {

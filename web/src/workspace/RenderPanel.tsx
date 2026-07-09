@@ -1,5 +1,5 @@
 import React from "react";
-import { api } from "../api/client";
+import { api, artifactUrl } from "../api/client";
 import { useStudio } from "../state/useStudio";
 import { InlineJobCard } from "../components/InlineJobCard";
 
@@ -7,7 +7,44 @@ export const RenderPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const studio = useStudio();
   const [busy, setBusy] = React.useState(false);
 
-  const storyJobs = studio.jobs.filter((j) => j.story_id === storyId);
+  const storyJobs = studio.jobs.filter(
+    (j) =>
+      j.story_id === storyId &&
+      ["render_avatar", "render_story"].includes(j.job_type),
+  );
+  const story = studio.candidates.find(
+    (candidate) => candidate.story_id === storyId,
+  );
+  const episodeId = story?.episode_id ?? studio.selectedEpisodeId;
+  const storyOutputPath = episodeId
+    ? `episodes/${episodeId}/stories/${storyId}/composited.mp4`
+    : null;
+  const testStoryOutputPath = episodeId
+    ? `episodes/${episodeId}/stories/${storyId}/composited_TEST_MODE.mp4`
+    : null;
+  const hasProductionStoryOutput = storyJobs.some(
+    (job) =>
+      job.job_type === "render_story" &&
+      job.status === "completed" &&
+      job.render_profile === "production",
+  );
+  const hasTestStoryOutput = storyJobs.some(
+    (job) =>
+      job.job_type === "render_story" &&
+      job.status === "completed" &&
+      job.render_profile === "preview",
+  );
+
+  const activeJob = (jobType: string, profile: string) =>
+    storyJobs.find(
+      (job) =>
+        job.job_type === jobType &&
+        job.render_profile === profile &&
+        ["queued", "running"].includes(job.status),
+    );
+
+  const activeAvatarProduction = activeJob("render_avatar", "production");
+  const activeStoryProduction = activeJob("render_story", "production");
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -29,33 +66,6 @@ export const RenderPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
     >
       {/* Render controls */}
       <div className="stack-lg">
-        {/* Test mode */}
-        <div className="render-mode-card">
-          <h3>Test Mode</h3>
-          <p className="text-muted" style={{ fontSize: 13, marginBottom: 12 }}>
-            Test renders use the preview profile and produce artifacts in the
-            test directory. Safe to run repeatedly.
-          </p>
-          <div className="row">
-            <button
-              disabled={busy}
-              onClick={() =>
-                act(() => api.renderAvatar(storyId, "preview", true))
-              }
-            >
-              Render Avatar (test)
-            </button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                act(() => api.renderStory(storyId, "preview", true))
-              }
-            >
-              Render Story (test)
-            </button>
-          </div>
-        </div>
-
         {/* Production */}
         <div
           className="render-mode-card"
@@ -71,21 +81,25 @@ export const RenderPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           </div>
           <div className="row">
             <button
-              disabled={busy}
+              disabled={busy || Boolean(activeAvatarProduction)}
               onClick={() =>
                 act(() => api.renderAvatar(storyId, "production", false))
               }
             >
-              Render Avatar (production)
+              {activeAvatarProduction
+                ? "Avatar Production Running…"
+                : "Render Avatar (production)"}
             </button>
             <button
               className="btn-primary"
-              disabled={busy}
+              disabled={busy || Boolean(activeStoryProduction)}
               onClick={() =>
                 act(() => api.renderStory(storyId, "production", false))
               }
             >
-              Render Story (production)
+              {activeStoryProduction
+                ? "Story Production Running…"
+                : "Render Story (production)"}
             </button>
           </div>
           <p className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
@@ -93,6 +107,22 @@ export const RenderPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             scripts, timeline, or visual rights are not approved.
           </p>
         </div>
+
+        {hasProductionStoryOutput && storyOutputPath && (
+          <div className="card stack">
+            <h2>Production Story Output</h2>
+            <div className="font-mono text-muted" style={{ fontSize: 12 }}>
+              {storyOutputPath}
+            </div>
+            <video
+              controls
+              src={artifactUrl(storyOutputPath)}
+              style={{ width: "100%", borderRadius: "var(--radius-md)" }}
+            />
+          </div>
+        )}
+
+
       </div>
 
       {/* Related jobs */}

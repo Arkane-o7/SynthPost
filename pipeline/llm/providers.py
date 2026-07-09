@@ -7,6 +7,15 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.request import Request, urlopen
 
+from pipeline import env as _env  # noqa: F401 - loads .env/.env.local at import time
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
+
 
 class LLMProvider(Protocol):
     name: str
@@ -17,44 +26,108 @@ class LLMProvider(Protocol):
 
 
 @dataclass
-class OllamaProvider:
-    base_url: str = os.environ.get(
-        "SYNTHPOST_OLLAMA_BASE_URL", "http://127.0.0.1:11434"
-    )
-    model: str = os.environ.get("SYNTHPOST_OLLAMA_MODEL", "llama3.1:8b")
-    timeout: float = float(os.environ.get("SYNTHPOST_OLLAMA_TIMEOUT", "90"))
-    temperature: float = float(os.environ.get("SYNTHPOST_OLLAMA_TEMPERATURE", "0.2"))
-    context_size: int | None = (
-        int(os.environ["SYNTHPOST_OLLAMA_CONTEXT_SIZE"])
-        if os.environ.get("SYNTHPOST_OLLAMA_CONTEXT_SIZE")
-        else None
-    )
-    name: str = "ollama"
+class GeminiProvider:
+    model: str = os.environ.get("SYNTHPOST_GEMINI_MODEL", "gemini-3.5-flash")
+    temperature: float = float(os.environ.get("SYNTHPOST_GEMINI_TEMPERATURE", "0.2"))
+    name: str = "gemini"
+    last_model: str | None = None
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]:
-        payload: dict[str, Any] = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json",
-            "options": {
-                "temperature": self.temperature if temperature is None else temperature
-            },
+        if genai is None:
+            raise ImportError("google-genai package is required to use GeminiProvider")
+
+        api_key = os.environ.get("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY environment variable is missing")
+
+        client = genai.Client(api_key=api_key)
+
+        # Enforce JSON output. The generation prompt already includes the schema string.
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            temperature=self.temperature if temperature is None else temperature,
+            response_schema=schema,
+        )
+
+        self.last_model = self.model
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=config,
+        )
+
+        text = response.text or ""
+        return parse_json_object(text)
+
+
+@dataclass
+class GroqProvider:
+    model: str = os.environ.get("SYNTHPOST_GROQ_MODEL", "openai/gpt-oss-120b")
+    temperature: float = float(os.environ.get("SYNTHPOST_GROQ_TEMPERATURE", "0.2"))
+    name: str = "groq"
+    last_model: str | None = None
+
+    def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
+    ) -> dict[str, Any]:
+        api_key = os.environ.get("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable is missing")
+
+        self.last_model = self.model
+        temp = self.temperature if temperature is None else temperature
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
         }
-        if self.context_size:
-            payload["options"]["num_ctx"] = self.context_size
-        request = Request(
-            self.base_url.rstrip("/") + "/api/generate",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+
+        data = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": f"You are a helpful assistant. Output ONLY valid JSON matching this schema:\n{json.dumps(schema)}",
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            "temperature": temp,
+            "response_format": {"type": "json_object"},
+        }
+
+        req = Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=json.dumps(data).encode("utf-8"),
+            headers=headers,
             method="POST",
         )
-        with urlopen(request, timeout=self.timeout) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        text = data.get("response", "")
-        return parse_json_object(text)
+
+        with urlopen(req) as response:
+            result = json.loads(response.read().decode("utf-8"))
+
+        content = result["choices"][0]["message"]["content"]
+        return parse_json_object(content)
+
+
+@dataclass
+class FallbackProvider:
+    primary: LLMProvider
+    fallback: LLMProvider
+    name: str = "fallback"
+
+    def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
+    ) -> dict[str, Any]:
+        try:
+            return self.primary.generate_json(prompt, schema, temperature=temperature)
+        except Exception as e:
+            print(f"[FallbackProvider] Primary {self.primary.name} failed: {e}. Falling back to {self.fallback.name}...")
+            return self.fallback.generate_json(prompt, schema, temperature=temperature)
 
 
 @dataclass
@@ -68,7 +141,7 @@ class MockProvider:
         if "section-based news script" in prompt.lower():
             return {
                 "headline": "Editor-reviewed SynthPost briefing",
-                "dek": "A grounded local mock script generated from the research pack.",
+                "dek": "A grounded mock script generated from the research pack.",
                 "category": "news",
                 "sections": [
                     {
@@ -102,10 +175,15 @@ class MockProvider:
 
 
 def configured_provider() -> LLMProvider:
-    provider = os.environ.get("SYNTHPOST_LLM_PROVIDER", "ollama").strip().lower()
+    provider = os.environ.get("SYNTHPOST_LLM_PROVIDER", "groq_with_fallback").strip().lower()
     if provider == "mock":
         return MockProvider()
-    return OllamaProvider()
+    elif provider == "gemini":
+        return GeminiProvider()
+    elif provider == "groq":
+        return GroqProvider()
+    
+    return FallbackProvider(GroqProvider(), GeminiProvider())
 
 
 def parse_json_object(text: str) -> dict[str, Any]:

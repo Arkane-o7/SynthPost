@@ -5,7 +5,10 @@ import re
 from typing import Any
 
 from pipeline import config
-from pipeline.llm.providers import configured_provider, structured_generate
+from pipeline.llm.providers import (
+    configured_provider,
+    structured_generate,
+)
 from pipeline.models import (
     ApprovalStatus,
     ScriptDocument,
@@ -26,6 +29,38 @@ SECTION_ORDER = [
     "conclusion",
     "outro",
 ]
+
+
+def target_word_count(duration_seconds: int) -> int:
+    return round(duration_seconds * config.words_per_minute() / 60.0)
+
+
+def duration_tolerance_seconds(duration_seconds: int) -> float:
+    # Long-form narration estimates are approximate: TTS voice, punctuation, and
+    # model phrasing can move runtime substantially. Keep this strict enough to
+    # reject short default drafts, but flexible enough for local TTS/rendering.
+    return max(8.0, duration_seconds * 0.20)
+
+
+def section_word_targets(duration_seconds: int) -> dict[str, int]:
+    total = target_word_count(duration_seconds)
+    weights = {
+        "cold_open": 0.06,
+        "intro": 0.08,
+        "context": 0.16,
+        "key_developments": 0.18,
+        "why_it_matters": 0.13,
+        "stakes": 0.13,
+        "uncertainty": 0.11,
+        "conclusion": 0.10,
+        "outro": 0.05,
+    }
+    targets = {
+        section: max(35, round(total * weight)) for section, weight in weights.items()
+    }
+    delta = total - sum(targets.values())
+    targets["key_developments"] += delta
+    return targets
 
 
 def estimate_duration(text: str) -> float:
@@ -188,21 +223,81 @@ def script_from_llm_json(
 
 
 def generation_prompt(
-    pack: dict[str, Any], *, target_duration_seconds: int = 90
+    pack: dict[str, Any], *, target_duration_seconds: int = 600
 ) -> str:
+    words = target_word_count(target_duration_seconds)
+    tolerance = duration_tolerance_seconds(target_duration_seconds)
+    min_seconds = round(target_duration_seconds - tolerance)
+    max_seconds = round(target_duration_seconds + tolerance)
+    min_words = target_word_count(min_seconds)
+    max_words = target_word_count(max_seconds)
+    section_targets = section_word_targets(target_duration_seconds)
+    section_target_text = "\n".join(
+        f"- {section}: about {count} words"
+        for section, count in section_targets.items()
+    )
     return f"""
 You are SynthPost Studio's local newsroom writer. Create a grounded section-based news script.
 Use only the supplied research pack. Do not fabricate quotes, statistics, names, dates, or attribution.
 Return only JSON matching this schema: {json.dumps(script_schema())}
 
 Target duration: {target_duration_seconds} seconds.
+Estimated narration target: about {words} spoken words.
+Accepted duration window: {min_seconds}-{max_seconds} seconds, approximately {min_words}-{max_words} words.
+Do not return a short default script. Match the requested runtime by expanding or tightening the section text while staying grounded in the research pack.
+Write full paragraph narration, not bullet summaries. For long runtimes, add sourced background, careful chronology, implications, caveats, and transitions.
+Approximate section word targets:
+{section_target_text}
 Required tone: clear spoken delivery, no clickbait, separate facts from uncertainty.
 Required section types to use when appropriate: {", ".join(SECTION_ORDER)}.
 Every factual section must include claim_ids from the pack.
 
 Research pack JSON:
-{json.dumps(pack, ensure_ascii=True)[:24000]}
+{json.dumps(pack, ensure_ascii=True)}
 """.strip()
+
+
+def enforce_target_duration(
+    script: ScriptDocument, target_duration_seconds: int
+) -> ScriptDocument:
+    actual = float(script.estimated_duration_seconds)
+    tolerance = duration_tolerance_seconds(target_duration_seconds)
+    lower = target_duration_seconds - tolerance
+    upper = target_duration_seconds + tolerance
+    if lower <= actual <= upper:
+        return script
+    delta_seconds = target_duration_seconds - actual
+    delta_words = round(abs(delta_seconds) * config.words_per_minute() / 60.0)
+    direction = "short" if actual < lower else "long"
+    adjustment = "add" if actual < lower else "remove"
+    msg = (
+        f"Generated script is too {direction}: estimated {round(actual)}s, "
+        f"target {target_duration_seconds}s, accepted window "
+        f"{round(lower)}-{round(upper)}s. {adjustment.capitalize()} about "
+        f"{delta_words} spoken words while preserving grounded claim_ids."
+    )
+    if not config.env_bool("SYNTHPOST_STRICT_DURATION", True):
+        script.warnings.append(msg)
+        return script
+    raise ValueError(msg)
+
+
+def _generate_with_provider(
+    provider,
+    prompt: str,
+    schema: dict[str, Any],
+    validator,
+    *,
+    max_retries: int = 2,
+) -> tuple[ScriptDocument, list[dict[str, Any]], Any, list[str]]:
+    value, attempts = structured_generate(
+        provider,
+        prompt,
+        schema,
+        validator,
+        max_retries=max_retries,
+    )
+    return value, attempts, provider, []
 
 
 def generate_script(
@@ -210,7 +305,7 @@ def generate_script(
     story_id: str,
     *,
     provider_name: str | None = None,
-    target_duration_seconds: int = 90,
+    target_duration_seconds: int = 600,
 ) -> ScriptDocument:
     pack = repository.latest_research_pack(story_id)
     if not pack:
@@ -220,19 +315,30 @@ def generate_script(
         from pipeline.llm.providers import MockProvider
 
         provider = MockProvider()
+
     candidate = repository.candidate_for_story(story_id)
-    if candidate.workflow_state == StoryWorkflowState.research_ready:
+    if candidate.workflow_state in {
+        StoryWorkflowState.research_ready,
+        StoryWorkflowState.script_review,
+    }:
         repository.transition_story(story_id, StoryWorkflowState.script_generating)
-    value, attempts = structured_generate(
+    value, attempts, selected_provider, fallback_errors = _generate_with_provider(
         provider,
         generation_prompt(pack, target_duration_seconds=target_duration_seconds),
         script_schema(),
-        lambda raw: script_from_llm_json(story_id, raw, pack),
-        max_retries=2,
+        lambda raw: enforce_target_duration(
+            script_from_llm_json(story_id, raw, pack), target_duration_seconds
+        ),
+        max_retries=3,
     )
-    value.warnings.extend(
-        [f"llm_provider={provider.name}", f"structured_attempts={len(attempts)}"]
-    )
+    generation_warnings = [
+        f"llm_provider={selected_provider.name}",
+        f"structured_attempts={len(attempts)}",
+    ]
+    model = getattr(selected_provider, "last_model", None)
+    if model:
+        generation_warnings.append(f"llm_model={model}")
+    value.warnings.extend(generation_warnings)
     script = repository.save_script(value)
     try:
         repository.transition_story(story_id, StoryWorkflowState.script_review)
@@ -307,8 +413,12 @@ def validate_grounding(script: ScriptDocument, pack: dict[str, Any]) -> list[str
         for claim in pack.get("claims", [])
         if claim.get("supported") and set(claim.get("evidence_ids", [])) <= evidence_ids
     }
+    sections_that_do_not_need_claim_links = {"cold_open", "outro"}
     for section in script.sections:
-        if not section.claim_ids:
+        if (
+            not section.claim_ids
+            and section.section_type not in sections_that_do_not_need_claim_links
+        ):
             warnings.append(f"{section.section_id}: no linked claim_ids")
         for claim_id in section.claim_ids:
             if claim_id not in claim_ids:

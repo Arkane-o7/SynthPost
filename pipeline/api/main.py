@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pipeline import config
 from pipeline.db.repository import NotFoundError, Repository, get_repository
@@ -29,6 +29,7 @@ from pipeline.models import (
     SourceDefinition,
     SourceType,
     StorySelectionStatus,
+    StoryWorkflowState,
     TimelinePlan,
     TimelineStatus,
 )
@@ -151,7 +152,7 @@ class ManualScript(BaseModel):
 
 class GenerateScriptRequest(BaseModel):
     provider: str | None = None
-    target_duration_seconds: int = 90
+    target_duration_seconds: int = Field(default=600, ge=60, le=900)
 
 
 class VisualStageRequest(BaseModel):
@@ -461,6 +462,12 @@ def start_script_generation(
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
+        candidate = repository.candidate_for_story(story_id)
+        if candidate.workflow_state in {
+            StoryWorkflowState.research_ready,
+            StoryWorkflowState.script_review,
+        }:
+            repository.transition_story(story_id, StoryWorkflowState.script_generating)
         job = repository.create_job(
             "script_generate",
             episode_id=episode.episode_id,
@@ -501,7 +508,21 @@ def save_script(story_id: str, payload: ManualScript) -> dict[str, Any]:
 def api_approve_script(story_id: str) -> dict[str, Any]:
     repository = repo()
     try:
-        return approve_script(repository, story_id).model_dump(mode="json")
+        script = approve_script(repository, story_id)
+        # Auto-trigger visual search after script approval so the pipeline
+        # doesn't stall waiting for the user to manually click "Search".
+        try:
+            existing_jobs = repository.list_jobs(story_id=story_id)
+            if not any(j.job_type == "visual_search" for j in existing_jobs):
+                episode = repository.episode_for_story(story_id)
+                repository.create_job(
+                    "visual_search",
+                    episode_id=episode.episode_id,
+                    story_id=story_id,
+                )
+        except Exception as e:
+            print(f"[api] Warning: Failed to auto-queue visual search for {story_id}: {e}")
+        return script.model_dump(mode="json")
     finally:
         repository.close()
 
@@ -726,7 +747,14 @@ def api_render_avatar(story_id: str, payload: RenderRequest) -> dict[str, Any]:
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        job = repository.create_job(
+        candidate = repository.candidate_for_story(story_id)
+        if candidate.workflow_state == StoryWorkflowState.timeline_approved:
+            repository.transition_story(story_id, StoryWorkflowState.rendering_avatar)
+        job = repository.active_job(
+            "render_avatar",
+            story_id=story_id,
+            render_profile=payload.render_profile,
+        ) or repository.create_job(
             "render_avatar",
             episode_id=episode.episode_id,
             story_id=story_id,
@@ -743,7 +771,20 @@ def api_render_story(story_id: str, payload: RenderRequest) -> dict[str, Any]:
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        job = repository.create_job(
+        candidate = repository.candidate_for_story(story_id)
+        if candidate.workflow_state == StoryWorkflowState.timeline_approved:
+            repository.transition_story(
+                story_id, StoryWorkflowState.rendering_composition
+            )
+        elif candidate.workflow_state == StoryWorkflowState.rendering_avatar:
+            repository.transition_story(
+                story_id, StoryWorkflowState.rendering_composition
+            )
+        job = repository.active_job(
+            "render_story",
+            story_id=story_id,
+            render_profile=payload.render_profile,
+        ) or repository.create_job(
             "render_story",
             episode_id=episode.episode_id,
             story_id=story_id,
@@ -759,7 +800,21 @@ def api_render_story(story_id: str, payload: RenderRequest) -> dict[str, Any]:
 def api_assemble_episode(episode_id: str, payload: RenderRequest) -> dict[str, Any]:
     repository = repo()
     try:
-        job = repository.create_job(
+        episode = repository.get_episode(episode_id)
+        for story_id in episode.story_ids:
+            try:
+                candidate = repository.candidate_for_story(story_id)
+                if candidate.workflow_state == StoryWorkflowState.rendering_composition:
+                    repository.transition_story(story_id, StoryWorkflowState.assembling)
+            except Exception:
+                # Assembly should still be queueable for an episode even if one
+                # historical story record cannot be advanced cleanly.
+                pass
+        job = repository.active_job(
+            "assemble_episode",
+            episode_id=episode_id,
+            render_profile=payload.render_profile,
+        ) or repository.create_job(
             "assemble_episode",
             episode_id=episode_id,
             render_profile=payload.render_profile,
@@ -771,10 +826,23 @@ def api_assemble_episode(episode_id: str, payload: RenderRequest) -> dict[str, A
 
 
 @app.get("/api/jobs")
-def list_jobs() -> list[dict[str, Any]]:
+def list_jobs(
+    story_id: str | None = None,
+    episode_id: str | None = None,
+    job_type: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
     repository = repo()
     try:
-        return [job.model_dump(mode="json") for job in repository.list_jobs()]
+        return [
+            job.model_dump(mode="json")
+            for job in repository.list_jobs(
+                max(1, min(limit, 500)),
+                story_id=story_id,
+                episode_id=episode_id,
+                job_type=job_type,
+            )
+        ]
     finally:
         repository.close()
 

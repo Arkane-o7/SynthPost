@@ -1,5 +1,5 @@
 import React from "react";
-import { api } from "../api/client";
+import { api, artifactUrl } from "../api/client";
 import { useStudio } from "../state/useStudio";
 import { StatusBadge } from "../components/StatusBadge";
 import { InlineJobCard } from "../components/InlineJobCard";
@@ -13,8 +13,26 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   );
 
   const episodeJobs = studio.jobs.filter(
-    (j) => j.episode_id === studio.selectedEpisodeId,
+    (j) =>
+      j.episode_id === studio.selectedEpisodeId &&
+      j.job_type === "assemble_episode",
   );
+
+  const activeAssemblyJob = (profile: string) =>
+    episodeJobs.find(
+      (job) =>
+        job.render_profile === profile &&
+        ["queued", "running"].includes(job.status),
+    );
+
+  const activePreviewAssembly = activeAssemblyJob("preview");
+  const activeProductionAssembly = activeAssemblyJob("production");
+  const latestPreviewOutput = episodeJobs.find(
+    (job) =>
+      job.status === "completed" &&
+      job.render_profile === "preview" &&
+      job.output_paths?.final_output_path,
+  )?.output_paths.final_output_path;
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -62,18 +80,28 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
 
         <div className="row">
           <button
-            disabled={busy || !studio.selectedEpisodeId}
+            disabled={
+              busy ||
+              !studio.selectedEpisodeId ||
+              Boolean(activePreviewAssembly)
+            }
             onClick={() =>
               act(() =>
                 api.assembleEpisode(studio.selectedEpisodeId, "preview", true),
               )
             }
           >
-            {busy ? "Assembling…" : "Assemble Test Episode"}
+            {activePreviewAssembly
+              ? "Assembling Test…"
+              : "Assemble Test Episode"}
           </button>
           <button
             className="btn-primary btn-lg"
-            disabled={busy || !studio.selectedEpisodeId}
+            disabled={
+              busy ||
+              !studio.selectedEpisodeId ||
+              Boolean(activeProductionAssembly)
+            }
             onClick={() =>
               act(() =>
                 api.assembleEpisode(
@@ -84,13 +112,15 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               )
             }
           >
-            {busy ? "Assembling…" : "Assemble Production Episode"}
+            {activeProductionAssembly
+              ? "Assembling Production…"
+              : "Assemble Production Episode"}
           </button>
         </div>
 
         {episode?.final_output_path && (
           <div>
-            <h3>Output</h3>
+            <h3>Production Output</h3>
             <div
               className="font-mono"
               style={{
@@ -104,6 +134,43 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             >
               {episode.final_output_path}
             </div>
+            <video
+              controls
+              src={artifactUrl(episode.final_output_path)}
+              style={{
+                width: "100%",
+                borderRadius: "var(--radius-md)",
+                marginTop: 12,
+              }}
+            />
+          </div>
+        )}
+
+        {latestPreviewOutput && (
+          <div>
+            <h3>Latest Test Output</h3>
+            <div
+              className="font-mono"
+              style={{
+                padding: "10px 14px",
+                background: "var(--surface-inset)",
+                borderRadius: "var(--radius-sm)",
+                fontSize: 12,
+                marginTop: 4,
+                wordBreak: "break-all",
+              }}
+            >
+              {latestPreviewOutput}
+            </div>
+            <video
+              controls
+              src={artifactUrl(latestPreviewOutput)}
+              style={{
+                width: "100%",
+                borderRadius: "var(--radius-md)",
+                marginTop: 12,
+              }}
+            />
           </div>
         )}
       </div>

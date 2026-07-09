@@ -23,25 +23,68 @@ from pipeline.models import (
 from pipeline.timeline.validation import validate_timeline
 
 
+def _is_approved_visual(visual: VisualCandidate) -> bool:
+    """Return True if the visual passes rights/review gates for timeline use."""
+    if visual.review_status not in {
+        ReviewStatus.approved,
+        ReviewStatus.manual_approved,
+    }:
+        return False
+    if visual.rights_tier == RightsTier.red:
+        return False
+    if (
+        visual.rights_tier == RightsTier.yellow
+        and visual.review_status != ReviewStatus.manual_approved
+    ):
+        return False
+    return True
+
+
 def approved_visuals_by_section(
     visuals: list[VisualCandidate],
 ) -> dict[str, VisualCandidate]:
     result: dict[str, VisualCandidate] = {}
     for visual in visuals:
-        if visual.review_status not in {
-            ReviewStatus.approved,
-            ReviewStatus.manual_approved,
-        }:
-            continue
-        if visual.rights_tier == RightsTier.red:
-            continue
-        if (
-            visual.rights_tier == RightsTier.yellow
-            and visual.review_status != ReviewStatus.manual_approved
-        ):
+        if not _is_approved_visual(visual):
             continue
         for section_id in visual.section_ids:
             result.setdefault(section_id, visual)
+    return result
+
+
+def distribute_unassigned_visuals(
+    visuals: list[VisualCandidate],
+    section_ids: list[str],
+    already_assigned: dict[str, VisualCandidate],
+) -> dict[str, VisualCandidate]:
+    """Distribute approved visuals that have no section_ids across unserved sections.
+
+    When visuals are uploaded or staged via the UI/drop-folder without explicit
+    section_id bindings, they end up with ``section_ids == []``.  Without this
+    distribution step the timeline planner sees ``visual=None`` for every segment
+    and falls back to ``fallback_anchor``.
+
+    Visuals are distributed round-robin (by relevance score, descending) to
+    sections that don't already have a visual from explicit assignment.
+    """
+    result = dict(already_assigned)
+    unassigned = [
+        visual
+        for visual in visuals
+        if _is_approved_visual(visual) and not visual.section_ids
+    ]
+    if not unassigned:
+        return result
+    # Prefer higher-quality / more-relevant visuals first
+    unassigned.sort(
+        key=lambda v: (v.relevance_score + v.visual_quality_score), reverse=True
+    )
+    open_sections = [sid for sid in section_ids if sid not in result]
+    if not open_sections:
+        return result
+    for idx, section_id in enumerate(open_sections):
+        visual = unassigned[idx % len(unassigned)]
+        result[section_id] = visual
     return result
 
 
@@ -132,6 +175,10 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         raise ValueError(f"No script exists for story: {story_id}")
     visuals = repository.list_visuals(story_id)
     by_section = approved_visuals_by_section(visuals)
+    # Auto-distribute approved visuals that were staged without explicit
+    # section_id bindings (common for UI uploads and drop-folder scans).
+    all_section_ids = [section.section_id for section in script.sections]
+    by_section = distribute_unassigned_visuals(visuals, all_section_ids, by_section)
     start = 0.0
     segments: list[TimelineSegment] = []
     for index, section in enumerate(script.sections):

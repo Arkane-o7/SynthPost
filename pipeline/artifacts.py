@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
-from pipeline.storage import episode_dir, project_relative, story_dir, write_manifest
+from pipeline.storage import episode_dir, project_relative, story_dir
 
 
 def episode_manifest_path(episode_id: str) -> Path:
@@ -49,7 +50,7 @@ def visuals_candidates_path(episode_id: str, story_id: str) -> Path:
 
 def write_json(path: Path, data: Any) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
+    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     temp.write_text(
         json.dumps(data, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
     )

@@ -1,26 +1,32 @@
-import React from 'react';
-import { api, artifactUrl } from '../api/client';
-import { useStudio } from '../state/useStudio';
-import { StatusBadge } from '../components/StatusBadge';
-import { EmptyState } from '../components/EmptyState';
-import type { VisualCandidate } from '../contracts';
+import React from "react";
+import { api, artifactUrl } from "../api/client";
+import { useStudio } from "../state/useStudio";
+import { StatusBadge } from "../components/StatusBadge";
+import { EmptyState } from "../components/EmptyState";
+import type { VisualCandidate } from "../contracts";
 
 export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const studio = useStudio();
   const [visuals, setVisuals] = React.useState<VisualCandidate[]>([]);
-  const [path, setPath] = React.useState('');
+  const [path, setPath] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const load = React.useCallback(
-    () => api.listVisuals(storyId).then(setVisuals).catch(() => setVisuals([])),
-    [storyId],
+    () =>
+      api
+        .listVisuals(storyId)
+        .then(setVisuals)
+        .catch(() => setVisuals([])),
+    [storyId, studio.lastJobEventTimestamp],
   );
-  React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    void load();
+  }, [load]);
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
-      studio.setError('');
+      studio.setError("");
       setBusy(true);
       await fn();
       await load();
@@ -63,9 +69,9 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               act(async () => {
                 await api.stageLocalVisual(storyId, {
                   path,
-                  rights_tier: 'yellow',
+                  rights_tier: "yellow",
                 });
-                setPath('');
+                setPath("");
               })
             }
           >
@@ -94,8 +100,8 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       {visuals.length === 0 ? (
         <EmptyState
           icon="🖼"
-          title="No visuals added yet"
-          description="Visuals are images, videos, and documents that appear alongside the anchor in the final render. Search the local drop folder or upload files."
+          title="No local visuals staged"
+          description="Search the local drop folder or upload files when you have rights-cleared media. If none are available, SynthPost can continue with approved fallback anchor visuals in the timeline step."
         />
       ) : (
         <div className="grid grid-3">
@@ -106,17 +112,14 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             >
               <div className="visual-thumb">
                 {v.thumbnail_path ? (
-                  <img
-                    src={artifactUrl(v.thumbnail_path)}
-                    alt={v.title}
-                  />
+                  <img src={artifactUrl(v.thumbnail_path)} alt={v.title} />
                 ) : (
                   <span style={{ fontSize: 24, opacity: 0.3 }}>
-                    {v.media_type === 'image'
-                      ? '🖼'
-                      : v.media_type === 'video'
-                        ? '🎬'
-                        : '📄'}
+                    {v.media_type === "image"
+                      ? "🖼"
+                      : v.media_type === "video"
+                        ? "🎬"
+                        : "📄"}
                   </span>
                 )}
               </div>
@@ -125,7 +128,15 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                   {v.title}
                 </strong>
                 <div className="row-tight">
-                  <StatusBadge tone={v.rights_tier === 'green' ? 'green' : v.rights_tier === 'red' ? 'red' : 'amber'}>
+                  <StatusBadge
+                    tone={
+                      v.rights_tier === "green"
+                        ? "green"
+                        : v.rights_tier === "red"
+                          ? "red"
+                          : "amber"
+                    }
+                  >
                     {v.rights_tier}
                   </StatusBadge>
                   <StatusBadge status={v.review_status}>
@@ -137,12 +148,12 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 </div>
 
                 {/* Rights warnings */}
-                {v.rights_tier === 'yellow' && (
+                {v.rights_tier === "yellow" && (
                   <div className="rights-warning warn-amber">
                     ⚠ Manual review recommended
                   </div>
                 )}
-                {v.rights_tier === 'red' && (
+                {v.rights_tier === "red" && (
                   <div className="rights-warning warn-red">
                     ⛔ Rights concern — review before use
                   </div>
@@ -150,7 +161,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
 
                 {/* Attribution */}
                 <input
-                  defaultValue={v.attribution_text ?? ''}
+                  defaultValue={v.attribution_text ?? ""}
                   placeholder="Attribution text…"
                   style={{ fontSize: 12 }}
                   onBlur={(e) =>
@@ -166,7 +177,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 <div className="row-tight">
                   <button
                     className="btn-success"
-                    style={{ fontSize: 12, padding: '5px 10px' }}
+                    style={{ fontSize: 12, padding: "5px 10px" }}
                     onClick={() =>
                       act(() =>
                         api.manualApproveVisual(
@@ -180,7 +191,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                   </button>
                   <button
                     className="btn-danger"
-                    style={{ fontSize: 12, padding: '5px 10px' }}
+                    style={{ fontSize: 12, padding: "5px 10px" }}
                     onClick={() => act(() => api.rejectVisual(v.asset_id))}
                   >
                     Reject

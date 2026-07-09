@@ -780,13 +780,43 @@ def require_browser_avatar_assets(job: dict[str, Any], engine_dir: Path) -> None
         )
 
 
+def _trim_process_output(value: str | None, *, limit: int = 6000) -> str:
+    if not value:
+        return ""
+    value = value.strip()
+    if len(value) <= limit:
+        return value
+    return value[-limit:]
+
+
 def run_avatar_subprocess(
     command: list[str], *, engine_dir: Path, renderer: str
 ) -> None:
     print(f"[direction] Running Avatar-Engine: {' '.join(command)}")
-    subprocess.run(
-        command, cwd=engine_dir, env=avatar_subprocess_env(renderer), check=True
+    result = subprocess.run(
+        command,
+        cwd=engine_dir,
+        env=avatar_subprocess_env(renderer),
+        capture_output=True,
+        text=True,
     )
+    stdout = _trim_process_output(result.stdout)
+    stderr = _trim_process_output(result.stderr)
+    if stdout:
+        print(stdout)
+    if stderr:
+        print(stderr)
+    if result.returncode != 0:
+        details = [
+            "Avatar-Engine command failed",
+            f"exit_code={result.returncode}",
+            f"command={' '.join(command)}",
+        ]
+        if stdout:
+            details.append(f"stdout:\n{stdout}")
+        if stderr:
+            details.append(f"stderr:\n{stderr}")
+        raise RuntimeError("\n".join(details))
 
 
 def prepare_browser_avatar_inputs(

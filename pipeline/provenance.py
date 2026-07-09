@@ -4,12 +4,19 @@ import hashlib
 import json
 import shlex
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .render_profiles import resolve_profile
-from .storage import PROJECT_ROOT, project_relative, read_manifest, resolve_project_path, write_manifest
+from .storage import (
+    PROJECT_ROOT,
+    project_relative,
+    read_manifest,
+    resolve_project_path,
+    write_manifest,
+)
 
 
 def now_iso() -> str:
@@ -62,7 +69,9 @@ def ffprobe_summary(path: str | Path) -> dict[str, Any]:
         return {}
     summary: dict[str, Any] = {}
     try:
-        summary["duration_seconds"] = round(float(data.get("format", {}).get("duration")), 3)
+        summary["duration_seconds"] = round(
+            float(data.get("format", {}).get("duration")), 3
+        )
     except (TypeError, ValueError):
         pass
     if data.get("format", {}).get("size"):
@@ -78,7 +87,9 @@ def ffprobe_summary(path: str | Path) -> dict[str, Any]:
             summary["avg_frame_rate"] = stream.get("avg_frame_rate")
         elif stream.get("codec_type") == "audio":
             summary["audio_codec"] = stream.get("codec_name")
-    return {key: value for key, value in summary.items() if value not in (None, "", [], {})}
+    return {
+        key: value for key, value in summary.items() if value not in (None, "", [], {})
+    }
 
 
 def artifact_record(
@@ -116,24 +127,42 @@ def artifact_record(
     if model:
         record["model"] = model
     if command:
-        record["command"] = shlex.join(command) if isinstance(command, list) else command
+        record["command"] = (
+            shlex.join(command) if isinstance(command, list) else command
+        )
     if flags:
-        record["flags"] = {key: value for key, value in flags.items() if value is not None}
+        record["flags"] = {
+            key: value for key, value in flags.items() if value is not None
+        }
     if metadata:
-        record.update({key: value for key, value in metadata.items() if value not in (None, "", [], {})})
+        record.update(
+            {
+                key: value
+                for key, value in metadata.items()
+                if value not in (None, "", [], {})
+            }
+        )
     digest = file_sha256(resolved)
     if digest:
         record["sha256"] = digest
     media = ffprobe_summary(resolved)
     if media:
         record["media"] = media
-    return {key: value for key, value in record.items() if value not in (None, "", [], {})}
+    return {
+        key: value for key, value in record.items() if value not in (None, "", [], {})
+    }
 
 
-def record_story_artifact(story_json_path: str | Path, key: str, record: dict[str, Any]) -> dict[str, Any]:
+def record_story_artifact(
+    story_json_path: str | Path, key: str, record: dict[str, Any]
+) -> dict[str, Any]:
     manifest = read_manifest(story_json_path)
-    provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
-    artifacts = provenance.get("artifacts") if isinstance(provenance.get("artifacts"), dict) else {}
+    raw_provenance = manifest.get("provenance")
+    provenance: dict[str, Any] = (
+        raw_provenance if isinstance(raw_provenance, dict) else {}
+    )
+    raw_artifacts = provenance.get("artifacts")
+    artifacts: dict[str, Any] = raw_artifacts if isinstance(raw_artifacts, dict) else {}
     artifacts[key] = record
     provenance["artifacts"] = artifacts
     provenance["updated_at"] = now_iso()
@@ -152,13 +181,17 @@ def read_episode_manifest(episode_id: str) -> dict[str, Any]:
         return {"episode_id": episode_id, "provenance": {"artifacts": {}}}
     with path.open("r", encoding="utf-8") as handle:
         data = json.load(handle)
-    return data if isinstance(data, dict) else {"episode_id": episode_id, "provenance": {"artifacts": {}}}
+    return (
+        data
+        if isinstance(data, dict)
+        else {"episode_id": episode_id, "provenance": {"artifacts": {}}}
+    )
 
 
 def write_episode_manifest(episode_id: str, data: dict[str, Any]) -> Path:
     path = episode_manifest_path(episode_id)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
+    temp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
     with temp.open("w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2, ensure_ascii=True)
         handle.write("\n")
@@ -166,13 +199,23 @@ def write_episode_manifest(episode_id: str, data: dict[str, Any]) -> Path:
     return path
 
 
-def record_episode_artifact(episode_id: str, key: str, record: dict[str, Any], *, runtime: dict[str, Any] | None = None) -> dict[str, Any]:
+def record_episode_artifact(
+    episode_id: str,
+    key: str,
+    record: dict[str, Any],
+    *,
+    runtime: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     manifest = read_episode_manifest(episode_id)
     manifest["episode_id"] = episode_id
     if runtime:
         manifest["runtime"] = runtime
-    provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
-    artifacts = provenance.get("artifacts") if isinstance(provenance.get("artifacts"), dict) else {}
+    raw_provenance = manifest.get("provenance")
+    provenance: dict[str, Any] = (
+        raw_provenance if isinstance(raw_provenance, dict) else {}
+    )
+    raw_artifacts = provenance.get("artifacts")
+    artifacts: dict[str, Any] = raw_artifacts if isinstance(raw_artifacts, dict) else {}
     artifacts[key] = record
     provenance["artifacts"] = artifacts
     provenance["updated_at"] = now_iso()

@@ -81,7 +81,7 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
         ctx.job.story_id,
         provider_name=ctx.job.payload.get("provider"),
         target_duration_seconds=int(
-            ctx.job.payload.get("target_duration_seconds") or 90
+            ctx.job.payload.get("target_duration_seconds") or 600
         ),
     )
     ctx.progress(100, "script ready for review")
@@ -132,6 +132,12 @@ def handle_render_avatar(ctx: JobContext) -> dict[str, str]:
         test_mode=test_mode,
         render_profile=render_profile,
     )
+    if ctx.job.render_profile == "production":
+        candidate = ctx.repository.candidate_for_story(ctx.job.story_id)
+        if candidate.workflow_state == StoryWorkflowState.rendering_avatar:
+            ctx.repository.transition_story(
+                ctx.job.story_id, StoryWorkflowState.rendering_composition
+            )
     ctx.progress(100, "avatar render completed")
     return {
         "story_manifest": project_relative(manifest_path),
@@ -175,6 +181,12 @@ def handle_render_story(ctx: JobContext) -> dict[str, str]:
             os.environ.pop("SYNTHPOST_ALLOW_PLACEHOLDER_ANCHOR", None)
         else:
             os.environ["SYNTHPOST_ALLOW_PLACEHOLDER_ANCHOR"] = previous
+    if ctx.job.render_profile == "production":
+        candidate = ctx.repository.candidate_for_story(ctx.job.story_id)
+        if candidate.workflow_state == StoryWorkflowState.rendering_composition:
+            ctx.repository.transition_story(
+                ctx.job.story_id, StoryWorkflowState.assembling
+            )
     ctx.progress(100, "story render completed")
     return {"story_manifest": project_relative(manifest_path)}
 
@@ -184,17 +196,28 @@ def handle_assemble_episode(ctx: JobContext) -> dict[str, str]:
         raise ValueError("assembly job requires episode_id")
     payload = ctx.job.payload
     ctx.progress(20, "normalizing and stitching story clips")
+    test_mode = bool(payload.get("test_mode", False))
     output = stitch_episode(
         ctx.job.episode_id,
         force=bool(payload.get("force", False)),
-        test_mode=bool(payload.get("test_mode", False)),
+        test_mode=test_mode,
         render_profile=payload.get("render_profile") or ctx.job.render_profile,
     )
-    episode = ctx.repository.get_episode(ctx.job.episode_id)
-    episode.final_output_path = project_relative(output)
-    episode.status = EpisodeStatus.completed
-    episode.updated_at = now_iso()
-    ctx.repository.upsert_episode(episode)
+    if not test_mode:
+        episode = ctx.repository.get_episode(ctx.job.episode_id)
+        episode.final_output_path = project_relative(output)
+        episode.status = EpisodeStatus.completed
+        episode.updated_at = now_iso()
+        ctx.repository.upsert_episode(episode)
+        for story_id in episode.story_ids:
+            try:
+                candidate = ctx.repository.candidate_for_story(story_id)
+                if candidate.workflow_state == StoryWorkflowState.assembling:
+                    ctx.repository.transition_story(
+                        story_id, StoryWorkflowState.completed
+                    )
+            except Exception:
+                pass
     ctx.progress(100, "episode assembly completed")
     return {"final_output_path": project_relative(output)}
 
@@ -234,6 +257,15 @@ def run_one(repository: Repository) -> bool:
         repository.upsert_job(job)
         ctx.log("completed")
     except Exception as exc:
+        if job.job_type == "script_generate" and job.story_id:
+            try:
+                candidate = repository.candidate_for_story(job.story_id)
+                if candidate.workflow_state == StoryWorkflowState.script_generating:
+                    repository.transition_story(
+                        job.story_id, StoryWorkflowState.research_ready
+                    )
+            except Exception:
+                pass
         job.status = JobStatus.failed
         job.error = str(exc)
         job.traceback = traceback_module.format_exc()

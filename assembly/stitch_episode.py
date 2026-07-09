@@ -337,10 +337,18 @@ def stitch_episode(
 
     source_clips = []
     for manifest_path in manifests:
+        # story.json is rebuilt by both preview and production actions, so its
+        # composition.output_path may point at TEST_MODE even when production
+        # assembly is requested. Pick the canonical clip for the assembly mode
+        # first, and only fall back to the manifest path for legacy artifacts.
+        canonical_output = manifest_path.with_name(
+            "composited_TEST_MODE.mp4" if test_mode else "composited.mp4"
+        )
         manifest = read_manifest(manifest_path)
-        output = resolve_project_path(
+        manifest_output = resolve_project_path(
             manifest.get("composition", {}).get("output_path", "")
         )
+        output = canonical_output if canonical_output.exists() else manifest_output
         if not output.exists():
             raise FileNotFoundError(f"Composited story clip missing: {output}")
         source_clips.append(output)
