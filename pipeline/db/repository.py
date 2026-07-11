@@ -253,6 +253,28 @@ class Repository:
 
     # Candidates / selected stories --------------------------------------
     def upsert_candidate(self, candidate: StoryCandidate) -> None:
+        existing_row = self._one(
+            "SELECT data FROM story_candidates WHERE candidate_id = ?",
+            (candidate.candidate_id,),
+        )
+        existing_data = row_data(existing_row)
+        if (
+            existing_data is not None
+            and candidate.selection_status == StorySelectionStatus.suggested
+        ):
+            existing = StoryCandidate.model_validate(existing_data)
+            if existing.selection_status != StorySelectionStatus.suggested:
+                candidate = candidate.model_copy(
+                    update={
+                        "episode_id": existing.episode_id,
+                        "story_id": existing.story_id,
+                        "selection_status": existing.selection_status,
+                        "workflow_state": existing.workflow_state,
+                        "rejection_reasons": existing.rejection_reasons,
+                        "manual_body": existing.manual_body,
+                        "discovered_at": existing.discovered_at,
+                    }
+                )
         data = candidate.model_dump(mode="json")
         with self.connection:
             self.connection.execute(
@@ -521,6 +543,9 @@ class Repository:
                 INSERT INTO visual_candidates(asset_id, story_id, provider, media_type, rights_tier, review_status, data, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(asset_id) DO UPDATE SET
+                  story_id=excluded.story_id,
+                  provider=excluded.provider,
+                  media_type=excluded.media_type,
                   rights_tier=excluded.rights_tier,
                   review_status=excluded.review_status,
                   data=excluded.data

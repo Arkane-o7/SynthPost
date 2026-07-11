@@ -347,12 +347,14 @@ class VisualCandidate(StrictModel):
     source_url: str | None = None
     source_domain: str | None = None
     download_path: str | None = None
+    quarantine_path: str | None = None
     thumbnail_path: str | None = None
     media_type: MediaType
     mime_type: str | None = None
     width: int | None = None
     height: int | None = None
     duration_seconds: float | None = None
+    has_audio: bool | None = None
     title: str = ""
     description: str = ""
     creator: str | None = None
@@ -370,6 +372,29 @@ class VisualCandidate(StrictModel):
     manual_review_flag: bool = True
     review_status: ReviewStatus = ReviewStatus.suggested
     warnings: list[str] = Field(default_factory=list)
+    source_class: str = "unknown"
+    source_identity: str | None = None
+    source_channel_id: str | None = None
+    source_channel_name: str | None = None
+    source_verified: bool = False
+    source_metadata: dict[str, Any] = Field(default_factory=dict)
+    content_cleanliness_status: Literal[
+        "not_scanned", "needs_review", "passed", "rejected"
+    ] = "not_scanned"
+    contains_third_party_logo: bool = False
+    detected_brands: list[str] = Field(default_factory=list)
+    contains_lower_third: bool = False
+    contains_ticker: bool = False
+    contains_presenter: bool = False
+    ocr_findings: list[dict[str, Any]] = Field(default_factory=list)
+    scan_timestamps: list[float] = Field(default_factory=list)
+    analysis_frame_paths: list[str] = Field(default_factory=list)
+    contact_sheet_path: str | None = None
+    clean_broll_score: float = 0.0
+    content_analysis_version: str | None = None
+    content_analysis_provider: str | None = None
+    content_analysis_evidence: list[str] = Field(default_factory=list)
+    approval_blockers: list[str] = Field(default_factory=list)
     trim_start: float | None = None
     trim_end: float | None = None
     motion: dict[str, Any] = Field(default_factory=dict)
@@ -408,7 +433,12 @@ class SegmentVisual(StrictModel):
     audio_mode: Literal["muted", "original", "mixed"] = "muted"
     trim_start: float | None = None
     trim_end: float | None = None
+    has_audio: bool | None = None
     attribution_text: str | None = None
+    content_cleanliness_status: Literal[
+        "not_scanned", "needs_review", "passed", "rejected"
+    ] = "not_scanned"
+    approval_blockers: list[str] = Field(default_factory=list)
 
 
 class SegmentTemplate(StrictModel):

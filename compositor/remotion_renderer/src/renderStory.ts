@@ -405,8 +405,15 @@ const timelineSegmentProps = async (
           ...staged,
           start,
           end,
-          fit: visualRef.fit ?? ("cover" as const),
+          fit:
+            visualRef.fit ??
+            (String(visualRef.source ?? visualRef.provider) ===
+            "generated_visual_card"
+              ? ("contain" as const)
+              : ("cover" as const)),
           sourceLabel: visualSourceLabel(
+            visualRef.attribution_text,
+            visualRef.attribution,
             visualRef.source_label,
             visualRef.source_name,
             visualRef.source,
@@ -416,6 +423,10 @@ const timelineSegmentProps = async (
           audio:
             visualRef.audio_mode === "original" ||
             visualRef.audio_mode === "mixed",
+          hasAudio:
+            visualRef.has_audio === undefined || visualRef.has_audio === null
+              ? undefined
+              : Boolean(visualRef.has_audio),
           volume: visualRef.audio_mode === "mixed" ? 0.45 : 1,
           mediaType: visualRef.media_type,
           contentRole: visualRef.content_role,
@@ -557,6 +568,8 @@ const main = async () => {
       end: Number(visual.end ?? direction.estimated_duration_seconds ?? 30),
       fit: visual.fit ?? "cover",
       sourceLabel: visualSourceLabel(
+        visual.attribution_text,
+        visual.attribution,
         visual.sourceLabel,
         visual.source_label,
         visual.source_name,
@@ -568,6 +581,10 @@ const main = async () => {
         visual.audio === undefined && visual.play_audio === undefined
           ? undefined
           : Boolean(visual.audio ?? visual.play_audio),
+      hasAudio:
+        visual.has_audio === undefined || visual.has_audio === null
+          ? undefined
+          : Boolean(visual.has_audio),
       volume: Number.isFinite(Number(visual.volume))
         ? Number(visual.volume)
         : undefined,

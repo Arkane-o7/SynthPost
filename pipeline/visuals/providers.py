@@ -1,14 +1,22 @@
 from __future__ import annotations
 
-import html
+import hashlib
+import ipaddress
+import json
 import mimetypes
 import os
+import re
+import socket
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pipeline import config
+from pipeline.llm.providers import configured_provider, structured_generate
 from pipeline.models import (
     ContentRole,
     MediaType,
@@ -18,60 +26,188 @@ from pipeline.models import (
     VisualCandidate,
 )
 from pipeline.provenance import ffprobe_summary
+from pipeline.search.searxng_client import (
+    SearXNGError,
+    SearXNGResult,
+    configured as searxng_configured,
+    search as searxng_search,
+)
 from pipeline.storage import (
-    PROJECT_ROOT,
     project_relative,
     resolve_project_path,
     story_dir,
+)
+from pipeline.visuals.content_analysis import (
+    SourceAssessment,
+    analyze_media_cleanliness,
+    assess_video_source,
+    probe_video_source,
 )
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
 DOCUMENT_EXTENSIONS = {".pdf"}
+REMOTE_IMAGE_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+SPLIT_VISUAL_ASPECT_RATIO = 1300 / 860
+FULLSCREEN_VISUAL_ASPECT_RATIO = 16 / 9
 
 
-def _wrap_svg_text(text: str, *, max_chars: int = 48, max_lines: int = 4) -> list[str]:
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        candidate = f"{current} {word}".strip()
-        if len(candidate) > max_chars and current:
-            lines.append(current)
-            current = word
-            if len(lines) >= max_lines:
-                break
-        else:
-            current = candidate
-    if current and len(lines) < max_lines:
-        lines.append(current)
-    return lines
+@dataclass(frozen=True)
+class VisualQueryPlan:
+    section_id: str | None
+    image_query: str
+    video_query: str
+    video_priority: bool
+    rationale: str
 
 
-def _visual_card_svg(*, section_label: str, headline: str, summary: str) -> str:
-    headline_lines = _wrap_svg_text(headline.upper(), max_chars=36, max_lines=3)
-    summary_lines = _wrap_svg_text(summary, max_chars=62, max_lines=5)
-    headline_tspans = "".join(
-        f'<tspan x="132" dy="{0 if index == 0 else 72}">{html.escape(line)}</tspan>'
-        for index, line in enumerate(headline_lines)
+def _assert_public_http_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("remote media URL must use http(s)")
+    try:
+        addresses = {
+            item[4][0]
+            for item in socket.getaddrinfo(
+                parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+            )
+        }
+    except socket.gaierror as exc:
+        raise ValueError(f"could not resolve remote media host: {parsed.hostname}") from exc
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
+        if not ip.is_global:
+            raise ValueError("remote media URL resolved to a private or local address")
+
+
+class _PublicOnlyRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _assert_public_http_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _download_remote_image(url: str, destination_stem: Path) -> Path:
+    _assert_public_http_url(url)
+    request = Request(
+        url,
+        headers={
+            "Accept": "image/jpeg,image/png,image/webp,image/gif;q=0.8",
+            "User-Agent": "SynthPostStudio/2.0 local editorial tool",
+        },
     )
-    summary_tspans = "".join(
-        f'<tspan x="132" dy="{0 if index == 0 else 42}">{html.escape(line)}</tspan>'
-        for index, line in enumerate(summary_lines)
+    timeout = config.env_float("SYNTHPOST_VISUAL_DOWNLOAD_TIMEOUT", 30.0)
+    max_bytes = int(
+        config.env("SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES", "104857600")
+        or "104857600"
     )
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
-  <rect width="1920" height="1080" fill="#050A14"/>
-  <rect x="96" y="96" width="1728" height="888" rx="28" fill="#08111F" stroke="#17385F" stroke-width="2"/>
-  <rect x="96" y="96" width="18" height="888" fill="#D92D27"/>
-  <circle cx="1700" cy="214" r="88" fill="#0E2A4A" opacity="0.75"/>
-  <circle cx="1748" cy="164" r="42" fill="#1E70FF" opacity="0.75"/>
-  <text x="132" y="184" fill="#8FA7C6" font-family="Arial, Helvetica, sans-serif" font-size="34" letter-spacing="8">SYNTHPOST</text>
-  <text x="132" y="268" fill="#FFFFFF" font-family="Georgia, 'Times New Roman', serif" font-size="72" font-weight="700">{headline_tspans}</text>
-  <text x="132" y="602" fill="#C8D3E3" font-family="Arial, Helvetica, sans-serif" font-size="36">{summary_tspans}</text>
-  <rect x="132" y="860" width="520" height="4" fill="#1E70FF"/>
-  <text x="132" y="930" fill="#7F93AD" font-family="Arial, Helvetica, sans-serif" font-size="30" letter-spacing="3">{html.escape(section_label.upper())}</text>
-  <text x="1668" y="930" text-anchor="end" fill="#415A78" font-family="Arial, Helvetica, sans-serif" font-size="26">LOCAL GENERATED VISUAL</text>
-</svg>"""
+    opener = build_opener(_PublicOnlyRedirectHandler())
+    with opener.open(request, timeout=timeout) as response:
+        _assert_public_http_url(response.geturl())
+        content_type = response.headers.get_content_type().lower()
+        suffix = REMOTE_IMAGE_TYPES.get(content_type)
+        if not suffix:
+            raise ValueError(f"remote result is not a supported image ({content_type})")
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) > max_bytes:
+            raise ValueError("remote image exceeds SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES")
+        destination = destination_stem.with_suffix(suffix)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        with destination.open("wb") as handle:
+            while True:
+                chunk = response.read(1024 * 256)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    handle.close()
+                    destination.unlink(missing_ok=True)
+                    raise ValueError(
+                        "remote image exceeds SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES"
+                    )
+                handle.write(chunk)
+    if destination.stat().st_size == 0:
+        destination.unlink(missing_ok=True)
+        raise ValueError("remote image was empty")
+    return destination
+
+
+def _download_remote_video(url: str, destination_stem: Path) -> Path:
+    _assert_public_http_url(url)
+    binary = config.env("SYNTHPOST_YT_DLP", "yt-dlp") or "yt-dlp"
+    resolved_binary = shutil.which(binary)
+    if not resolved_binary:
+        raise ValueError("yt-dlp is not installed or SYNTHPOST_YT_DLP is invalid")
+    destination_stem.parent.mkdir(parents=True, exist_ok=True)
+    max_bytes = int(
+        config.env("SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES", "104857600")
+        or "104857600"
+    )
+    max_duration = int(
+        config.env("SYNTHPOST_SEARXNG_VIDEO_MAX_DURATION", "900") or "900"
+    )
+    clip_seconds = max(
+        5,
+        int(config.env("SYNTHPOST_SEARXNG_VIDEO_CLIP_SECONDS", "45") or "45"),
+    )
+    min_width = int(config.env("SYNTHPOST_VISUAL_MIN_WIDTH", "1920") or "1920")
+    min_height = int(config.env("SYNTHPOST_VISUAL_MIN_HEIGHT", "1080") or "1080")
+    min_ratio, max_ratio = _broadcast_aspect_range()
+    format_selector = (
+        f"bv*[width>={min_width}][height>={min_height}]"
+        f"[aspect_ratio>={min_ratio:.3f}][aspect_ratio<={max_ratio:.3f}]+ba/"
+        f"b[width>={min_width}][height>={min_height}]"
+        f"[aspect_ratio>={min_ratio:.3f}][aspect_ratio<={max_ratio:.3f}]"
+    )
+    output_template = str(destination_stem) + ".%(ext)s"
+    command = [
+        resolved_binary,
+        "--no-playlist",
+        "--no-progress",
+        "--js-runtimes",
+        "node",
+        "--restrict-filenames",
+        "--max-filesize",
+        str(max_bytes),
+        "--match-filter",
+        f"duration <= {max_duration}",
+        "--download-sections",
+        f"*0-{clip_seconds}",
+        "--force-keyframes-at-cuts",
+        "--format-sort",
+        "res:1080,ext:mp4:m4a",
+        "-f",
+        format_selector,
+        "--merge-output-format",
+        "mp4",
+        "-o",
+        output_template,
+        url,
+    ]
+    completed = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=config.env_float("SYNTHPOST_SEARXNG_VIDEO_TIMEOUT", 300.0),
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip().splitlines()
+        raise ValueError(detail[-1] if detail else "yt-dlp failed")
+    candidates = sorted(destination_stem.parent.glob(destination_stem.name + ".*"))
+    candidates = [
+        path
+        for path in candidates
+        if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS
+    ]
+    if not candidates:
+        raise ValueError("yt-dlp completed without a supported video file")
+    return candidates[0]
 
 
 def media_type_for(path: Path) -> MediaType:
@@ -90,6 +226,52 @@ def media_metadata(path: Path) -> dict:
     return {}
 
 
+def _broadcast_aspect_range() -> tuple[float, float]:
+    tolerance = max(
+        0.05,
+        config.env_float("SYNTHPOST_VISUAL_ASPECT_TOLERANCE", 0.20),
+    )
+    return (
+        SPLIT_VISUAL_ASPECT_RATIO - tolerance,
+        FULLSCREEN_VISUAL_ASPECT_RATIO + tolerance,
+    )
+
+
+def broadcast_media_fit(
+    width: int | None, height: int | None
+) -> tuple[bool, str, float]:
+    """Check whether media can fill the two landscape news layouts cleanly."""
+
+    if not width or not height:
+        return False, "media dimensions could not be verified", 0.0
+    min_width = int(config.env("SYNTHPOST_VISUAL_MIN_WIDTH", "1920") or "1920")
+    min_height = int(config.env("SYNTHPOST_VISUAL_MIN_HEIGHT", "1080") or "1080")
+    ratio = width / height
+    min_ratio, max_ratio = _broadcast_aspect_range()
+    if ratio < min_ratio or ratio > max_ratio:
+        return (
+            False,
+            f"aspect ratio {ratio:.3f} is outside landscape range "
+            f"{min_ratio:.3f}-{max_ratio:.3f}",
+            0.0,
+        )
+    if width < min_width or height < min_height:
+        return (
+            False,
+            f"resolution {width}x{height} is below {min_width}x{min_height}",
+            0.0,
+        )
+    nearest_delta = min(
+        abs(ratio - SPLIT_VISUAL_ASPECT_RATIO),
+        abs(ratio - FULLSCREEN_VISUAL_ASPECT_RATIO),
+    )
+    tolerance = config.env_float("SYNTHPOST_VISUAL_ASPECT_TOLERANCE", 0.20)
+    aspect_score = max(0.0, 1.0 - nearest_delta / max(tolerance, 0.05))
+    resolution_score = min(1.0, (width * height) / (1920 * 1080))
+    quality_score = round(0.55 + 0.25 * aspect_score + 0.20 * resolution_score, 3)
+    return True, f"broadcast-fit {width}x{height} at {ratio:.3f}:1", quality_score
+
+
 def visual_media_dir(episode_id: str, story_id: str) -> Path:
     return story_dir(episode_id, story_id) / "visuals" / "media"
 
@@ -103,6 +285,13 @@ def safe_filename(name: str) -> str:
     suffix = Path(name).suffix.lower() or ".bin"
     clean = "".join(char for char in stem if char.isalnum() or char in {"_", "-", "."})
     return f"{clean}{suffix}"
+
+
+def _local_asset_id(story_id: str, source: Path) -> str:
+    digest = hashlib.sha1(
+        f"{story_id}\n{source.resolve().as_posix()}".encode("utf-8")
+    ).hexdigest()
+    return f"visual_{digest[:20]}"
 
 
 def create_thumbnail(path: Path, destination: Path) -> Path | None:
@@ -129,6 +318,8 @@ def create_thumbnail(path: Path, destination: Path) -> Path | None:
             "1",
             "-q:v",
             "3",
+            "-update",
+            "1",
             str(thumb),
         ]
         try:
@@ -165,17 +356,13 @@ def stage_local_visual(
         destination,
         visual_thumbnail_dir(episode.episode_id, story_id) / destination.stem,
     )
-    # When no explicit section_ids are provided, try to auto-assign from the
-    # approved script so the timeline planner can map this visual to segments.
-    effective_section_ids = section_ids or []
-    if not effective_section_ids:
-        try:
-            script = repository.latest_script(story_id, approved=True)
-            if script and script.sections:
-                effective_section_ids = [s.section_id for s in script.sections]
-        except Exception:
-            pass
+    # Generic drop-folder media is not evidence for every section. Keep it
+    # unassigned unless the editor or source integration supplies an explicit
+    # section mapping; approved unassigned media can still be distributed by
+    # the timeline planner without contaminating all section search results.
+    effective_section_ids = list(section_ids or [])
     visual = VisualCandidate(
+        asset_id=_local_asset_id(story_id, source),
         story_id=story_id,
         section_ids=effective_section_ids,
         provider="local_upload",
@@ -188,6 +375,7 @@ def stage_local_visual(
         width=metadata.get("width"),
         height=metadata.get("height"),
         duration_seconds=metadata.get("duration_seconds"),
+        has_audio=(bool(metadata.get("audio_codec")) if media_type == MediaType.video else False),
         title=title or source.stem.replace("_", " ").title(),
         description="User-provided local media staged for editorial review.",
         creator="user_provided",
@@ -211,6 +399,11 @@ def stage_local_visual(
         if rights_tier == RightsTier.yellow
         else [],
         motion={"preset": "push_in", "intensity": 0.22},
+        source_class=(
+            "unknown" if usage_basis == "local_drop_folder" else "user_owned"
+        ),
+        source_identity=f"user-provided ({source.name})",
+        source_verified=usage_basis != "local_drop_folder",
     )
     repository.upsert_visual(visual)
     candidate = repository.candidate_for_story(story_id)
@@ -236,15 +429,21 @@ def _advance_to_visuals_review(repository, story_id: str) -> None:
 
 
 def generate_script_visual_cards(repository, story_id: str) -> list[VisualCandidate]:
+    """Create semantic anchor-only fallbacks, never synthetic image cards.
+
+    The legacy implementation wrote a headline-and-paragraph SVG for every
+    section. When the broadcast shell rendered that SVG as normal media it
+    duplicated the headline, narration, attribution, and lower third. Fallbacks
+    are now data-only signals that tell the planner to keep the presenter on
+    screen until an editor approves real media.
+    """
     if not config.env_bool("SYNTHPOST_GENERATE_FALLBACK_VISUALS", True):
         return []
     existing = [
         visual
         for visual in repository.list_visuals(story_id)
-        if visual.provider == "generated_visual_card"
+        if visual.provider in {"generated_visual_card", "synthpost_anchor_fallback"}
     ]
-    if existing:
-        return existing
 
     script = repository.latest_script(
         story_id, approved=True
@@ -252,51 +451,53 @@ def generate_script_visual_cards(repository, story_id: str) -> list[VisualCandid
     if not script:
         return []
 
-    episode = repository.episode_for_story(story_id)
-    media_root = visual_media_dir(episode.episode_id, story_id)
-    media_root.mkdir(parents=True, exist_ok=True)
+    by_section = {
+        section_id: visual
+        for visual in existing
+        for section_id in visual.section_ids
+    }
     visuals: list[VisualCandidate] = []
-    for index, section in enumerate(script.sections, start=1):
+    for section in script.sections:
         if not section.text.strip():
             continue
-        file_name = f"generated_{index:02d}_{section.section_type}.svg"
-        path = media_root / file_name
-        path.write_text(
-            _visual_card_svg(
-                section_label=section.section_type.replace("_", " "),
-                headline=script.headline,
-                summary=section.text.strip(),
-            )
-        )
-        visual = VisualCandidate(
-            story_id=story_id,
+        current = by_section.get(section.section_id)
+        payload = dict(
             section_ids=[section.section_id],
-            provider="generated_visual_card",
-            source_url=project_relative(path),
+            provider="synthpost_anchor_fallback",
+            source_url=None,
             source_domain="synthpost.local",
-            download_path=project_relative(path),
-            thumbnail_path=project_relative(path),
-            media_type=MediaType.image,
-            mime_type="image/svg+xml",
-            width=1920,
-            height=1080,
-            title=f"{section.section_type.replace('_', ' ').title()} Visual Card",
-            description="Automatically generated SynthPost editorial card for this script section.",
+            download_path=None,
+            thumbnail_path=None,
+            media_type=MediaType.fallback,
+            mime_type=None,
+            width=None,
+            height=None,
+            title=f"{section.section_type.replace('_', ' ').title()} — Anchor-only fallback",
+            description=(
+                "Automatic safe fallback: keep the presenter on screen without "
+                "generating or displaying synthetic imagery."
+            ),
             creator="SynthPost Studio",
-            relevance_score=0.55,
-            visual_quality_score=0.55,
+            relevance_score=0.0,
+            visual_quality_score=1.0,
             source_authority=1.0,
-            content_role=ContentRole.context,
+            content_role=ContentRole.fallback,
             rights_tier=RightsTier.green,
             rights_confidence=1.0,
-            usage_basis="synthpost_generated_editorial_graphic",
-            license="generated_by_synthpost_local_project",
+            usage_basis="synthpost_anchor_only_fallback",
+            license="not_applicable",
             attribution_required=False,
-            attribution_text="SynthPost generated visual",
+            attribution_text="",
             manual_review_flag=False,
             review_status=ReviewStatus.approved,
-            warnings=[],
-            motion={"preset": "slow_push", "intensity": 0.16},
+            warnings=["Presenter-only fallback; no generated image is rendered."],
+            motion={},
+            has_audio=False,
+        )
+        visual = (
+            current.model_copy(update=payload)
+            if current
+            else VisualCandidate(story_id=story_id, **payload)
         )
         repository.upsert_visual(visual)
         visuals.append(visual)
@@ -304,7 +505,11 @@ def generate_script_visual_cards(repository, story_id: str) -> list[VisualCandid
 
 
 def search_local_drop_folder(
-    repository, story_id: str, *, section_ids: list[str] | None = None
+    repository,
+    story_id: str,
+    *,
+    section_ids: list[str] | None = None,
+    generate_fallback: bool = True,
 ) -> list[VisualCandidate]:
     drop = resolve_project_path(
         os.environ.get("SYNTHPOST_MEDIA_DROP_DIR", "media_drop")
@@ -328,10 +533,779 @@ def search_local_drop_folder(
                     usage_basis="local_drop_folder",
                 )
             )
-    if not visuals:
+    if not visuals and generate_fallback:
         visuals = generate_script_visual_cards(repository, story_id)
     _advance_to_visuals_review(repository, story_id)
     return visuals
+
+
+def _visual_search_queries(repository, story_id: str) -> list[tuple[str | None, str]]:
+    """Build a deterministic per-section fallback when AI planning is disabled."""
+
+    script = repository.latest_script(
+        story_id, approved=True
+    ) or repository.latest_script(story_id)
+    candidate = repository.candidate_for_story(story_id)
+    queries: list[tuple[str | None, str]] = []
+    seen: set[str] = set()
+    if script:
+        for section in script.sections:
+            suggestions = [
+                value.strip()
+                for value in section.suggested_search_queries
+                if value.strip()
+            ]
+            if not suggestions:
+                label = section.section_type.replace("_", " ")
+                suggestions = [f"{script.headline} {label} news"]
+            query = suggestions[0]
+            normalized = " ".join(query.lower().split())
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            queries.append((section.section_id, query))
+    fallback = candidate.title.strip()
+    if not queries and fallback and " ".join(fallback.lower().split()) not in seen:
+        queries.append((None, f"{fallback} news"))
+    return queries
+
+
+_VIDEO_QUERY_MARKERS = {"clip", "footage", "video"}
+_NON_VIDEO_QUERY_TOKENS = {"chart", "diagram", "infographic", "map", "timeline"}
+
+
+def _video_query(seed: str, headline: str) -> str:
+    seed = re.sub(
+        r"\b(?:breaking news|news coverage|news report|news footage|explainer)\b",
+        " ",
+        seed,
+        flags=re.IGNORECASE,
+    )
+    tokens = [
+        token
+        for token in seed.split()
+        if token.lower().strip(".,:;()[]") not in _NON_VIDEO_QUERY_TOKENS
+    ]
+    query = " ".join(tokens).strip() or headline.strip()
+    if not re.search(r"\b(?:official|raw|b[- ]?roll|press)\b", query, re.IGNORECASE):
+        query = f"{query} official raw footage"
+    return query
+
+
+def _image_query(seed: str) -> str:
+    return " ".join(
+        token
+        for token in seed.split()
+        if token.lower().strip(".,:;()[]") not in _VIDEO_QUERY_MARKERS
+    ).strip()
+
+
+def _fallback_visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
+    script = repository.latest_script(
+        story_id, approved=True
+    ) or repository.latest_script(story_id)
+    section_by_id = (
+        {section.section_id: section for section in script.sections}
+        if script
+        else {}
+    )
+    plans: list[VisualQueryPlan] = []
+    for section_id, image_query in _visual_search_queries(repository, story_id):
+        section = section_by_id.get(section_id) if section_id else None
+        suggestions = (
+            [
+                query.strip()
+                for query in section.suggested_search_queries
+                if query.strip()
+            ]
+            if section
+            else []
+        )
+        video_seed = suggestions[1] if len(suggestions) > 1 else image_query
+        suggested_types = {
+            value.strip().lower()
+            for value in (section.suggested_visual_types if section else [])
+        }
+        section_type = section.section_type if section else ""
+        video_priority = "video" in suggested_types or section_type in {
+            "cold_open",
+            "key_developments",
+            "conclusion",
+        }
+        plans.append(
+            VisualQueryPlan(
+                section_id=section_id,
+                image_query=image_query,
+                video_query=_video_query(
+                    video_seed, script.headline if script else image_query
+                ),
+                video_priority=video_priority,
+                rationale=(
+                    "stored script query fallback; AI keyword planning disabled"
+                ),
+            )
+        )
+    return plans
+
+
+def _visual_query_schema() -> dict:
+    return {
+        "type": "object",
+        "required": ["queries"],
+        "properties": {
+            "queries": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": [
+                        "section_id",
+                        "image_query",
+                        "video_query",
+                        "video_priority",
+                        "rationale",
+                    ],
+                    "properties": {
+                        "section_id": {"type": "string"},
+                        "image_query": {"type": "string"},
+                        "video_query": {"type": "string"},
+                        "video_priority": {"type": "boolean"},
+                        "rationale": {"type": "string"},
+                    },
+                },
+            }
+        },
+    }
+
+
+def _validate_ai_visual_plan(
+    raw: dict,
+    *,
+    section_ids: set[str],
+    provider_name: str,
+    supported_years: set[str],
+) -> list[VisualQueryPlan]:
+    rows = raw.get("queries")
+    if not isinstance(rows, list):
+        raise ValueError("visual keyword plan must contain a queries array")
+    plans: list[VisualQueryPlan] = []
+    seen_sections: set[str] = set()
+    seen_queries: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("every visual keyword entry must be an object")
+        section_id = str(row.get("section_id") or "").strip()
+        if section_id not in section_ids or section_id in seen_sections:
+            raise ValueError(f"invalid or duplicate section_id: {section_id}")
+        image_query = _image_query(
+            " ".join(str(row.get("image_query") or "").split())
+        )
+        video_query = _video_query(
+            " ".join(str(row.get("video_query") or "").split()), image_query
+        )
+        if not image_query or image_query.lower() == video_query.lower():
+            raise ValueError(f"section {section_id} needs distinct image/video queries")
+        for query in (image_query, video_query):
+            word_count = len(query.split())
+            if word_count < 3 or word_count > 18:
+                raise ValueError(
+                    f"query for {section_id} must contain 3-18 words: {query!r}"
+                )
+            normalized = query.lower()
+            if normalized in seen_queries:
+                raise ValueError(f"duplicate visual search query: {query}")
+            invented_years = set(re.findall(r"\b(?:19|20)\d{2}\b", query)) - supported_years
+            if invented_years:
+                raise ValueError(
+                    f"query for {section_id} invented unsupported years: "
+                    f"{sorted(invented_years)}"
+                )
+            seen_queries.add(normalized)
+        seen_sections.add(section_id)
+        plans.append(
+            VisualQueryPlan(
+                section_id=section_id,
+                image_query=image_query,
+                video_query=video_query,
+                video_priority=bool(row.get("video_priority")),
+                rationale=(
+                    f"AI keyword planner ({provider_name}): "
+                    f"{str(row.get('rationale') or 'section-grounded query').strip()}"
+                ),
+            )
+        )
+    missing = section_ids - seen_sections
+    if missing:
+        raise ValueError(f"visual keyword plan omitted sections: {sorted(missing)}")
+    return plans
+
+
+def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
+    script = repository.latest_script(
+        story_id, approved=True
+    ) or repository.latest_script(story_id)
+    candidate = repository.candidate_for_story(story_id)
+    if not script:
+        return _fallback_visual_search_plan(repository, story_id)
+    if not config.env_bool("SYNTHPOST_AI_VISUAL_QUERY_PLANNING", True):
+        return _fallback_visual_search_plan(repository, story_id)
+
+    provider = configured_provider()
+    research_pack_loader = getattr(repository, "latest_research_pack", None)
+    research_pack = (
+        research_pack_loader(story_id) if research_pack_loader else None
+    ) or {}
+    claim_by_id = {
+        str(claim.get("claim_id")): str(claim.get("claim_text") or "")
+        for claim in research_pack.get("claims", [])
+        if claim.get("claim_id")
+    }
+    prompt_input = {
+        "topic": candidate.title,
+        "headline": script.headline,
+        "category": script.category,
+        "verified_dates": research_pack.get("dates", []),
+        "verified_people": research_pack.get("people", []),
+        "verified_organizations": research_pack.get("organizations", []),
+        "verified_locations": research_pack.get("locations", []),
+        "sections": [
+            {
+                "section_id": section.section_id,
+                "section_type": section.section_type,
+                "narration": section.text[:900],
+                "claim_ids": section.claim_ids,
+                "linked_claims": [
+                    claim_by_id[claim_id]
+                    for claim_id in section.claim_ids
+                    if claim_id in claim_by_id
+                ],
+                "visual_direction": section.suggested_visual_types,
+            }
+            for section in script.sections
+        ],
+    }
+    prompt = f"""
+You are SynthPost's visual search keyword planner.
+Turn the supplied news topic and section narration into search-engine keyword phrases for SearXNG.
+
+For every section return exactly one image_query and one distinct video_query.
+- Ground both queries in concrete verified names, organizations, objects, events, places, and dates present in the input.
+- image_query should seek an authentic editorial photo, diagram, map, document, or data visual appropriate to the section.
+- video_query should seek the original event/person/place from an official primary source and use "official video", "raw footage", "B-roll", or "press footage".
+- Never ask for "news coverage", "breaking news", "explainer", "news report", or a finished broadcaster package.
+- Prefer named primary sources such as the responsible ministry, agency, organization, event operator, or official press office.
+- Target horizontal broadcast media close to 16:9 or 3:2. Prefer 1920x1080 or larger and never request portrait/vertical media.
+- Prefer event-authentic footage over generic stock, CGI, explainers, thumbnails, presenter monologues, or speculative imagery.
+- Use concise keyword phrases of 3-18 words; do not write sentences or instructions.
+- Do not invent an event, appearance, location, date, or person that the input does not support.
+- Treat linked_claims and verified entities as factual grounding. Legacy search-query hints are intentionally excluded.
+- Set video_priority true only when motion materially improves the section.
+- Explain the concrete subject choice briefly in rationale.
+
+INPUT JSON:
+{json.dumps(prompt_input, ensure_ascii=True)}
+""".strip()
+    plans, _attempts = structured_generate(
+        provider,
+        prompt,
+        _visual_query_schema(),
+        lambda raw: _validate_ai_visual_plan(
+            raw,
+            section_ids={section.section_id for section in script.sections},
+            provider_name=provider.name,
+            supported_years=set(
+                re.findall(r"\b(?:19|20)\d{2}\b", json.dumps(prompt_input))
+            ),
+        ),
+        max_retries=2,
+    )
+    return plans
+
+
+def _visual_search_tasks(
+    plans: list[VisualQueryPlan], max_queries: int
+) -> list[tuple[VisualQueryPlan, str, str, MediaType]]:
+    """Allocate the exact SearXNG request budget across sections and media."""
+
+    primary: list[tuple[VisualQueryPlan, str, str, MediaType]] = []
+    secondary: list[tuple[VisualQueryPlan, str, str, MediaType]] = []
+    for plan in plans:
+        image_task = (plan, "images", plan.image_query, MediaType.image)
+        video_task = (plan, "videos", plan.video_query, MediaType.video)
+        if plan.video_priority:
+            primary.append(video_task)
+            secondary.append(image_task)
+        else:
+            primary.append(image_task)
+            secondary.append(video_task)
+    return (primary + secondary)[:max_queries]
+
+
+def _remote_asset_id(story_id: str, media_url: str) -> str:
+    digest = hashlib.sha1(f"{story_id}\n{media_url}".encode("utf-8")).hexdigest()
+    return f"visual_{digest[:20]}"
+
+
+def _relevance_score(result: SearXNGResult, rank: int) -> float:
+    rank_score = max(0.25, 0.88 - (rank * 0.07))
+    engine_score = result.score / (result.score + 1.0) if result.score > 0 else 0.0
+    return round(min(0.95, max(rank_score, engine_score)), 3)
+
+
+_VISUAL_QUERY_STOPWORDS = {
+    "and",
+    "for",
+    "from",
+    "how",
+    "india",
+    "news",
+    "the",
+    "with",
+    "clip",
+    "footage",
+    "image",
+    "landscape",
+    "photo",
+    "resolution",
+    "1080p",
+    "horizontal",
+    "video",
+}
+
+
+def _result_matches_query(result: SearXNGResult, query: str) -> bool:
+    query_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", query.lower())
+        if len(token) > 2 and token not in _VISUAL_QUERY_STOPWORDS
+    }
+    if not query_tokens:
+        return True
+    result_tokens = set(
+        re.findall(
+            r"[a-z0-9]+",
+            f"{result.title} {result.snippet} {result.url}".lower(),
+        )
+    )
+    overlap = query_tokens & result_tokens
+    required = 1 if len(query_tokens) <= 2 else 2
+    return len(overlap) >= required
+
+
+def _stage_searxng_result(
+    repository,
+    story_id: str,
+    section_id: str | None,
+    result: SearXNGResult,
+    media_type: MediaType,
+    rank: int,
+    *,
+    acquire_video: bool | None = None,
+) -> VisualCandidate | None:
+    episode = repository.episode_for_story(story_id)
+    media_root = visual_media_dir(episode.episode_id, story_id)
+    media_root.mkdir(parents=True, exist_ok=True)
+    source_domain = result.source_domain or urlparse(result.url).hostname
+    warnings = [
+        "SearXNG is a discovery source, not a license grant; verify ownership, "
+        "license, and editorial-use basis before approval"
+    ]
+    direct_media_url = result.image_url if media_type == MediaType.image else result.url
+    asset_basis = direct_media_url or result.thumbnail_url or result.url
+    asset_id = _remote_asset_id(story_id, asset_basis)
+    stem = media_root / asset_id
+    download_path: Path | None = None
+    quarantine_path: Path | None = None
+    thumbnail: Path | None = None
+    source_assessment = SourceAssessment(
+        identity=source_domain or result.engine,
+        metadata={"search_result_title": result.title, "source_url": result.url},
+    )
+    preflight_rejected = False
+
+    should_acquire_video = (
+        config.env_bool("SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS", False)
+        if acquire_video is None
+        else acquire_video
+    )
+    if media_type == MediaType.video and should_acquire_video:
+        try:
+            source_metadata = probe_video_source(result.url)
+            source_assessment = assess_video_source(
+                url=result.url,
+                title=result.title,
+                source_domain=source_domain,
+                metadata=source_metadata,
+            )
+            if source_assessment.source_class == "news_broadcaster":
+                preflight_rejected = True
+                warnings.extend(source_assessment.blockers)
+                warnings.append(
+                    "video rejected before download by source-identity policy"
+                )
+        except Exception as exc:
+            preflight_rejected = True
+            source_assessment.blockers.append(
+                f"source metadata preflight unavailable: {exc}"
+            )
+            warnings.append(source_assessment.blockers[-1])
+
+    if media_type == MediaType.image and result.image_url:
+        try:
+            download_path = _download_remote_image(result.image_url, stem)
+            thumbnail = create_thumbnail(
+                download_path,
+                visual_thumbnail_dir(episode.episode_id, story_id) / asset_id,
+            )
+        except Exception as exc:
+            warnings.append(f"image download failed: {exc}")
+    if media_type == MediaType.video and should_acquire_video and not preflight_rejected:
+        try:
+            download_path = _download_remote_video(result.url, stem)
+            thumbnail = create_thumbnail(
+                download_path,
+                visual_thumbnail_dir(episode.episode_id, story_id) / asset_id,
+            )
+        except Exception as exc:
+            warnings.append(f"video download failed: {exc}")
+    elif media_type == MediaType.video:
+        if not preflight_rejected:
+            warnings.append(
+                "video is a research lead only; enable "
+                "SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS or acquire a rights-cleared local copy"
+            )
+
+    metadata = media_metadata(download_path) if download_path else {}
+    visual_quality_score = 0.35
+    if download_path:
+        eligible, fit_reason, visual_quality_score = broadcast_media_fit(
+            metadata.get("width"), metadata.get("height")
+        )
+        if config.env_bool("SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True) and not eligible:
+            warnings.append(f"download rejected for broadcast layout: {fit_reason}")
+            download_path.unlink(missing_ok=True)
+            if thumbnail:
+                thumbnail.unlink(missing_ok=True)
+            download_path = None
+            thumbnail = None
+            metadata = {}
+            visual_quality_score = 0.15
+        elif eligible:
+            warnings.append(fit_reason)
+
+    analysis_data: dict[str, Any] = {
+        "source_class": source_assessment.source_class,
+        "source_identity": source_assessment.identity,
+        "source_channel_id": source_assessment.channel_id,
+        "source_channel_name": source_assessment.channel_name,
+        "source_verified": source_assessment.verified,
+        "source_metadata": source_assessment.metadata,
+        "content_cleanliness_status": (
+            "rejected" if preflight_rejected else "not_scanned"
+        ),
+        "detected_brands": source_assessment.detected_brands,
+        "contains_third_party_logo": bool(source_assessment.detected_brands),
+        "content_analysis_evidence": list(source_assessment.blockers),
+        "approval_blockers": list(source_assessment.blockers),
+    }
+    if download_path:
+        try:
+            analysis_data = analyze_media_cleanliness(
+                download_path,
+                story_dir(episode.episode_id, story_id)
+                / "visuals"
+                / "analysis"
+                / asset_id,
+                duration=metadata.get("duration_seconds"),
+                is_video=media_type == MediaType.video,
+                width=int(metadata.get("width") or 0),
+                height=int(metadata.get("height") or 0),
+                source=source_assessment,
+            )
+        except Exception as exc:
+            analysis_data.update(
+                {
+                    "content_cleanliness_status": "needs_review",
+                    "content_analysis_evidence": [
+                        f"content cleanliness scan failed: {exc}"
+                    ],
+                    "approval_blockers": [
+                        "content cleanliness scan did not complete"
+                    ],
+                }
+            )
+        if (
+            analysis_data["content_cleanliness_status"] != "passed"
+            or analysis_data.get("approval_blockers")
+        ):
+            quarantine_path = download_path
+            download_path = None
+            warnings.extend(analysis_data.get("approval_blockers", []))
+
+    if thumbnail is None and result.thumbnail_url:
+        try:
+            thumbnail = _download_remote_image(
+                result.thumbnail_url,
+                visual_thumbnail_dir(episode.episode_id, story_id) / asset_id,
+            )
+        except Exception as exc:
+            warnings.append(f"thumbnail download failed: {exc}")
+
+    media_path = download_path or quarantine_path
+    rejected = analysis_data["content_cleanliness_status"] == "rejected"
+    visual = VisualCandidate(
+        asset_id=asset_id,
+        story_id=story_id,
+        section_ids=[section_id] if section_id else [],
+        provider=f"searxng:{result.engine}",
+        source_url=result.url,
+        source_domain=source_domain,
+        download_path=project_relative(download_path) if download_path else None,
+        quarantine_path=(
+            project_relative(quarantine_path) if quarantine_path else None
+        ),
+        thumbnail_path=project_relative(thumbnail) if thumbnail else None,
+        media_type=media_type,
+        mime_type=(
+            mimetypes.guess_type(media_path.name)[0] if media_path else None
+        ),
+        width=metadata.get("width"),
+        height=metadata.get("height"),
+        duration_seconds=metadata.get("duration_seconds"),
+        has_audio=(
+            bool(metadata.get("audio_codec"))
+            if media_type == MediaType.video
+            else False
+        ),
+        title=result.title,
+        description=result.snippet,
+        creator=source_domain,
+        published_at=result.published_date,
+        relevance_score=_relevance_score(result, rank),
+        visual_quality_score=visual_quality_score,
+        source_authority=0.5,
+        content_role=(
+            ContentRole.primary_footage
+            if media_type == MediaType.video
+            else ContentRole.context
+        ),
+        rights_tier=RightsTier.red if rejected else RightsTier.yellow,
+        rights_confidence=0.0 if rejected else 0.25,
+        usage_basis="web_search_discovery_review_required",
+        license="unknown_requires_editor_verification",
+        attribution_required=True,
+        attribution_text=f"Source: {source_domain or result.engine}",
+        manual_review_flag=True,
+        review_status=ReviewStatus.blocked if rejected else ReviewStatus.suggested,
+        warnings=warnings,
+        motion={"preset": "slow_push", "intensity": 0.18},
+        **analysis_data,
+    )
+    if not download_path and not config.env_bool(
+        "SYNTHPOST_INCLUDE_VISUAL_LEADS", True
+    ):
+        if thumbnail:
+            thumbnail.unlink(missing_ok=True)
+        return None
+    repository.upsert_visual(visual)
+    return visual
+
+
+def search_searxng_visuals(repository, story_id: str) -> list[VisualCandidate]:
+    if not searxng_configured() or config.env_bool(
+        "SYNTHPOST_DISABLE_WEB_VISUALS", False
+    ):
+        return []
+    image_limit = max(
+        0,
+        int(
+            config.env("SYNTHPOST_SEARXNG_IMAGE_RESULTS_PER_QUERY", "3") or "3"
+        ),
+    )
+    video_limit = max(
+        0,
+        int(
+            config.env("SYNTHPOST_SEARXNG_VIDEO_RESULTS_PER_QUERY", "2") or "2"
+        ),
+    )
+    visuals: list[VisualCandidate] = []
+    seen_media: set[str] = set()
+    errors: list[str] = []
+    downloaded_videos = 0
+    video_download_limit = max(
+        0,
+        int(config.env("SYNTHPOST_SEARXNG_VIDEO_DOWNLOAD_LIMIT", "2") or "2"),
+    )
+    downloads_enabled = config.env_bool(
+        "SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS", False
+    )
+    max_queries = max(
+        1, int(config.env("SYNTHPOST_SEARXNG_VISUAL_MAX_QUERIES", "12") or "12")
+    )
+    tasks = _visual_search_tasks(
+        _visual_search_plan(repository, story_id), max_queries
+    )
+    for plan, category, query, media_type in tasks:
+        limit = image_limit if media_type == MediaType.image else video_limit
+        if limit <= 0:
+            continue
+        try:
+            search_limit = max(
+                limit * 4, limit
+            )
+            results = searxng_search(
+                query, categories=[category], limit=search_limit
+            )
+        except SearXNGError as exc:
+            errors.append(f"{category} search for {query!r}: {exc}")
+            continue
+        accepted = 0
+        staged = 0
+        for rank, result in enumerate(results):
+            if not _result_matches_query(result, query):
+                continue
+            media_url = (
+                result.image_url if media_type == MediaType.image else result.url
+            )
+            if not media_url or media_url in seen_media:
+                continue
+            seen_media.add(media_url)
+            visual = _stage_searxng_result(
+                repository,
+                story_id,
+                plan.section_id,
+                result,
+                media_type,
+                rank,
+                acquire_video=(
+                    downloads_enabled
+                    and plan.video_priority
+                    and downloaded_videos < video_download_limit
+                )
+                if media_type == MediaType.video
+                else None,
+            )
+            if visual is None:
+                continue
+            visuals.append(visual)
+            staged += 1
+            if media_type == MediaType.video and visual.download_path:
+                downloaded_videos += 1
+            if media_type == MediaType.image and not visual.download_path:
+                if staged >= max(limit * 2, 6):
+                    break
+                continue
+            if (
+                media_type == MediaType.video
+                and downloads_enabled
+                and plan.video_priority
+                and not visual.download_path
+                and downloaded_videos < video_download_limit
+            ):
+                if staged >= max(limit * 2, 3):
+                    break
+                continue
+            accepted += 1
+            if accepted >= limit:
+                break
+    if errors and not visuals:
+        raise SearXNGError("; ".join(errors[:3]))
+    return visuals
+
+
+def search_visuals(repository, story_id: str) -> list[VisualCandidate]:
+    """Search local media first, then SearXNG, with generated cards as fallback."""
+
+    visuals = search_local_drop_folder(
+        repository, story_id, generate_fallback=False
+    )
+    try:
+        visuals.extend(search_searxng_visuals(repository, story_id))
+    except SearXNGError:
+        # Local media can keep a story moving, but when SearXNG is the only
+        # configured source its outage must be visible as a failed job rather
+        # than masquerading as a successful generated-card search.
+        if not visuals:
+            raise
+    # Always provide a rights-safe, local option for every script section. Web
+    # discovery can be irrelevant or unusable until an editor clears rights;
+    # one arbitrary file in the drop folder must not suppress all fallbacks.
+    visuals.extend(generate_script_visual_cards(repository, story_id))
+    _advance_to_visuals_review(repository, story_id)
+    return visuals
+
+
+def analyze_visual(repository, asset_id: str) -> VisualCandidate:
+    visual = repository.get_visual(asset_id)
+    media_value = visual.download_path or visual.quarantine_path
+    if not media_value:
+        raise ValueError("visual has no local media available for content analysis")
+    media_path = resolve_project_path(media_value)
+    if not media_path.is_file():
+        raise ValueError(f"visual analysis media is missing: {media_value}")
+    episode = repository.episode_for_story(visual.story_id)
+    metadata = media_metadata(media_path)
+    source_assessment = SourceAssessment(
+        source_class=visual.source_class,
+        identity=visual.source_identity
+        or visual.source_channel_name
+        or visual.source_domain
+        or visual.provider,
+        channel_id=visual.source_channel_id,
+        channel_name=visual.source_channel_name,
+        verified=visual.source_verified,
+        detected_brands=list(visual.detected_brands),
+        metadata=dict(visual.source_metadata),
+    )
+    if visual.media_type == MediaType.video:
+        try:
+            source_metadata = probe_video_source(visual.source_url or "")
+            source_assessment = assess_video_source(
+                url=visual.source_url or "",
+                title=visual.title,
+                source_domain=visual.source_domain,
+                metadata=source_metadata,
+            )
+        except Exception as exc:
+            source_assessment.blockers.append(
+                f"source metadata preflight unavailable: {exc}"
+            )
+    analysis_data = analyze_media_cleanliness(
+        media_path,
+        story_dir(episode.episode_id, visual.story_id)
+        / "visuals"
+        / "analysis"
+        / visual.asset_id,
+        duration=metadata.get("duration_seconds") or visual.duration_seconds,
+        is_video=visual.media_type == MediaType.video,
+        width=int(metadata.get("width") or visual.width or 0),
+        height=int(metadata.get("height") or visual.height or 0),
+        source=source_assessment,
+    )
+    for key, value in analysis_data.items():
+        setattr(visual, key, value)
+    visual.width = metadata.get("width") or visual.width
+    visual.height = metadata.get("height") or visual.height
+    visual.duration_seconds = metadata.get("duration_seconds") or visual.duration_seconds
+    if (
+        analysis_data["content_cleanliness_status"] == "passed"
+        and not analysis_data.get("approval_blockers")
+    ):
+        if visual.download_path is None and visual.quarantine_path:
+            visual.download_path = visual.quarantine_path
+            visual.quarantine_path = None
+    else:
+        if visual.download_path:
+            visual.quarantine_path = visual.download_path
+            visual.download_path = None
+    if analysis_data["content_cleanliness_status"] == "rejected":
+        visual.rights_tier = RightsTier.red
+        visual.rights_confidence = 0.0
+        visual.review_status = ReviewStatus.blocked
+    visual.warnings = list(
+        dict.fromkeys(visual.warnings + analysis_data.get("approval_blockers", []))
+    )
+    repository.upsert_visual(visual)
+    return visual
 
 
 def approve_visual(
@@ -342,6 +1316,34 @@ def approve_visual(
     attribution_text: str | None = None,
 ) -> VisualCandidate:
     visual = repository.get_visual(asset_id)
+    if visual.content_cleanliness_status != "passed":
+        detail = (
+            "; ".join(visual.approval_blockers[:3])
+            or visual.content_cleanliness_status
+        )
+        raise ValueError(f"visual content-cleanliness gate has not passed: {detail}")
+    if visual.approval_blockers:
+        raise ValueError(
+            "visual has unresolved approval blockers: "
+            + "; ".join(visual.approval_blockers[:3])
+        )
+    if not visual.download_path:
+        raise ValueError(
+            "visual is a research lead without local media; download or stage a "
+            "rights-cleared file before approval"
+        )
+    if not resolve_project_path(visual.download_path).is_file():
+        raise ValueError(f"visual media file is missing: {visual.download_path}")
+    if visual.media_type in {MediaType.image, MediaType.video} and config.env_bool(
+        "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
+    ):
+        eligible, fit_reason, _score = broadcast_media_fit(
+            visual.width, visual.height
+        )
+        if not eligible:
+            raise ValueError(
+                f"visual is not suitable for broadcast layouts: {fit_reason}"
+            )
     if visual.rights_tier == RightsTier.red:
         raise ValueError("red-tier assets cannot be approved")
     if visual.rights_tier == RightsTier.yellow and not manual:

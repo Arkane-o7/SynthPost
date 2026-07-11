@@ -56,7 +56,12 @@ export const RightRail: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [studio.selectedStoryId, studio.jobs.length]);
+  }, [
+    studio.selectedStoryId,
+    story?.workflow_state,
+    studio.jobs.length,
+    studio.lastJobEventTimestamp,
+  ]);
 
   const blockers: string[] = [];
   if (story) {
@@ -71,13 +76,21 @@ export const RightRail: React.FC = () => {
 
     const unapprovedVisuals = visuals.filter(
       (visual) =>
-        !["approved", "manual_approved"].includes(visual.review_status),
+        !["approved", "manual_approved", "rejected", "blocked"].includes(
+          visual.review_status,
+        ),
     );
-    const redVisuals = visuals.filter((visual) => visual.rights_tier === "red");
+    const redVisuals = visuals.filter(
+      (visual) =>
+        visual.rights_tier === "red" &&
+        !["rejected", "blocked"].includes(visual.review_status),
+    );
     const yellowVisuals = visuals.filter(
       (visual) =>
         visual.rights_tier === "yellow" &&
-        visual.review_status !== "manual_approved",
+        !["manual_approved", "rejected", "blocked"].includes(
+          visual.review_status,
+        ),
     );
     if (unapprovedVisuals.length > 0) {
       blockers.push(

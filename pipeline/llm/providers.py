@@ -26,6 +26,52 @@ class LLMProvider(Protocol):
 
 
 @dataclass
+class OllamaProvider:
+    base_url: str = os.environ.get(
+        "SYNTHPOST_OLLAMA_BASE_URL", "http://127.0.0.1:11434"
+    )
+    model: str = os.environ.get("SYNTHPOST_OLLAMA_MODEL", "gemma4:26b")
+    timeout: float = float(os.environ.get("SYNTHPOST_OLLAMA_TIMEOUT", "300"))
+    temperature: float = float(os.environ.get("SYNTHPOST_OLLAMA_TEMPERATURE", "0.2"))
+    context_size: int | None = (
+        int(os.environ["SYNTHPOST_OLLAMA_CONTEXT_SIZE"])
+        if os.environ.get("SYNTHPOST_OLLAMA_CONTEXT_SIZE")
+        else None
+    )
+    name: str = "ollama"
+    last_model: str | None = None
+
+    def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
+    ) -> dict[str, Any]:
+        options: dict[str, Any] = {
+            "temperature": self.temperature if temperature is None else temperature
+        }
+        if self.context_size:
+            options["num_ctx"] = self.context_size
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "format": schema,
+            "options": options,
+        }
+        self.last_model = self.model
+        request = Request(
+            self.base_url.rstrip("/") + "/api/generate",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request, timeout=self.timeout) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        # Reasoning-capable Ollama models such as Qwen 3.5 may place a
+        # schema-constrained result in `thinking` and leave `response` empty.
+        text = data.get("response") or data.get("thinking") or ""
+        return parse_json_object(str(text))
+
+
+@dataclass
 class GeminiProvider:
     model: str = os.environ.get("SYNTHPOST_GEMINI_MODEL", "gemini-3.5-flash")
     temperature: float = float(os.environ.get("SYNTHPOST_GEMINI_TEMPERATURE", "0.2"))
@@ -138,6 +184,60 @@ class MockProvider:
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]:
         # Deterministic structured response for tests and offline demos.
+        if "editorial-cleanliness classifier" in prompt.lower():
+            marker = "EVIDENCE JSON:\n"
+            evidence = json.loads(prompt.split(marker, 1)[1])
+            blockers = evidence.get("deterministic_blockers", [])
+            return {
+                "decision": "reject" if blockers else "pass",
+                "clean_broll_score": 0.0 if blockers else 0.9,
+                "contains_presenter_package": False,
+                "reasons": blockers or ["no deterministic broadcast packaging detected"],
+            }
+        if "long-form section expansion" in prompt.lower():
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            target = int(payload.get("target_words") or 100)
+            base = str(payload.get("base_outline_text") or "Grounded briefing.")
+            words = base.split() or ["Grounded", "briefing"]
+            expanded_words = [words[index % len(words)] for index in range(target)]
+            claims = payload.get("base_claim_ids") or [
+                claim.get("claim_id")
+                for claim in payload.get("research", {}).get("claims", [])
+                if claim.get("claim_id")
+            ][:1]
+            topic = str(payload.get("headline") or "SynthPost briefing")
+            return {
+                "text": " ".join(expanded_words),
+                "claim_ids": claims,
+                "suggested_visual_types": ["image", "video"],
+                "suggested_search_queries": [
+                    f"{topic} official editorial photo",
+                    f"{topic} official raw footage",
+                ],
+                "suggested_template_ids": ["split_anchor_visual"],
+            }
+        if "visual search keyword planner" in prompt.lower():
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            topic_words = " ".join(str(payload.get("topic") or "news").split()[:6])
+            return {
+                "queries": [
+                    {
+                        "section_id": section["section_id"],
+                        "image_query": (
+                            f"{topic_words} {section['section_type']} editorial photo"
+                        ),
+                        "video_query": (
+                            f"{topic_words} {section['section_type']} news footage"
+                        ),
+                        "video_priority": section["section_type"]
+                        in {"cold_open", "key_developments", "conclusion"},
+                        "rationale": "deterministic offline visual-search plan",
+                    }
+                    for section in payload.get("sections", [])
+                ]
+            }
         if "section-based news script" in prompt.lower():
             return {
                 "headline": "Editor-reviewed SynthPost briefing",
@@ -178,12 +278,15 @@ def configured_provider() -> LLMProvider:
     provider = os.environ.get("SYNTHPOST_LLM_PROVIDER", "groq_with_fallback").strip().lower()
     if provider == "mock":
         return MockProvider()
-    elif provider == "gemini":
+    if provider == "ollama":
+        return OllamaProvider()
+    if provider == "gemini":
         return GeminiProvider()
-    elif provider == "groq":
+    if provider == "groq":
         return GroqProvider()
-    
-    return FallbackProvider(GroqProvider(), GeminiProvider())
+    if provider in {"groq_with_fallback", "fallback"}:
+        return FallbackProvider(GroqProvider(), GeminiProvider())
+    raise ValueError(f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}")
 
 
 def parse_json_object(text: str) -> dict[str, Any]:

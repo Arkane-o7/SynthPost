@@ -21,6 +21,10 @@ from pipeline.storage import (
 WIDTH = 1920
 HEIGHT = 1080
 FPS = 24
+NORMALIZATION_VERSION = "audio_v3"
+FINAL_AUDIO_FILTER = (
+    "alimiter=limit=0.65:attack=5:release=50:level=false,aresample=48000"
+)
 
 
 def run(command: list[str]) -> None:
@@ -120,7 +124,14 @@ def normalize_clip(
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=#050A14,"
         "setsar=1"
     )
-    audio_filter = "loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000"
+    # AAC encoding can overshoot a one-pass loudnorm true-peak target on highly
+    # dynamic brand clips. Keep program loudness at -16 LUFS and add a
+    # conservative sample limiter so the encoded master remains below -1.5 dBTP.
+    audio_filter = (
+        "loudnorm=I=-16:TP=-2.5:LRA=11,"
+        "alimiter=limit=0.70:attack=5:release=50:level=false,"
+        "aresample=48000"
+    )
     try:
         is_short_brand_placeholder = (
             input_path.parent == (PROJECT_ROOT / "assets" / "brand")
@@ -242,6 +253,8 @@ def concat_clips(
         "libx264",
         "-pix_fmt",
         "yuv420p",
+        "-af",
+        FINAL_AUDIO_FILTER,
         "-c:a",
         "aac",
         "-ar",
@@ -274,7 +287,10 @@ def concat_clips_filter(
     for clip in clips:
         command.extend(["-i", str(clip)])
     streams = "".join(f"[{index}:v:0][{index}:a:0]" for index in range(len(clips)))
-    filter_complex = f"{streams}concat=n={len(clips)}:v=1:a=1[v][a]"
+    filter_complex = (
+        f"{streams}concat=n={len(clips)}:v=1:a=1[v][concat_a];"
+        f"[concat_a]{FINAL_AUDIO_FILTER}[a]"
+    )
     command.extend(
         [
             "-filter_complex",
@@ -304,8 +320,23 @@ def concat_clips_filter(
 
 
 def story_manifests(episode_id: str) -> list[Path]:
-    stories_root = episode_dir(episode_id) / "stories"
-    return sorted(stories_root.glob("*/story.json"))
+    episode_root = episode_dir(episode_id)
+    episode_path = episode_root / "episode.json"
+    if not episode_path.exists():
+        return sorted((episode_root / "stories").glob("*/story.json"))
+
+    episode_data = read_manifest(episode_path)
+    story_ids = episode_data.get("story_ids", [])
+    manifests = [
+        episode_root / "stories" / story_id / "story.json" for story_id in story_ids
+    ]
+    missing = [path.parent.name for path in manifests if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "Story manifests missing for episode "
+            f"{episode_id}: {', '.join(missing)}"
+        )
+    return manifests
 
 
 def stitch_episode(
@@ -358,7 +389,10 @@ def stitch_episode(
     work_dir.mkdir(parents=True, exist_ok=True)
     normalized: list[Path] = []
     for index, clip in enumerate(source_clips):
-        out = work_dir / f"{index:03d}_{clip.stem}_{profile.name}_normalized.mp4"
+        out = work_dir / (
+            f"{index:03d}_{clip.stem}_{profile.name}_"
+            f"{NORMALIZATION_VERSION}_normalized.mp4"
+        )
         if force or not out.exists() or clip.stat().st_mtime > out.stat().st_mtime:
             normalize_clip(
                 clip, out, width=profile.width, height=profile.height, fps=profile.fps

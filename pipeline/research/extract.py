@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import re
 from html.parser import HTMLParser
-from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from pipeline import config
+from pipeline.discovery.discover import canonicalize_url
 from pipeline.models import (
     Claim,
     EvidenceItem,
@@ -13,7 +14,11 @@ from pipeline.models import (
     SourceDocument,
     StoryWorkflowState,
 )
-from pipeline.workflow import can_transition
+from pipeline.news.discovery import discover_news
+from pipeline.search.searxng_client import (
+    SearXNGError,
+    configured as searxng_configured,
+)
 
 
 class ReadableHTMLParser(HTMLParser):
@@ -256,39 +261,136 @@ def source_document_from_candidate(candidate) -> SourceDocument:
     )
 
 
+def source_document_from_search_result(story_id: str, article: dict) -> SourceDocument:
+    """Fetch one SearXNG news lead while preserving a useful snippet fallback."""
+
+    url = canonicalize_url(article.get("url"))
+    title = str(article.get("title") or url or "Related coverage")
+    snippet = str(article.get("snippet") or "").strip()
+    warnings: list[str] = []
+    extraction_status = "extracted"
+    try:
+        fetched_title, raw_text, fetch_warnings = fetch_url_text(url or "")
+        title = fetched_title or title
+        text = clean_extracted_text(raw_text)
+        warnings.extend(fetch_warnings)
+        if len(text) < 300 or boilerplate_hits(raw_text) >= 3:
+            text = f"{title}. {snippet}".strip()
+            extraction_status = "snippet_fallback"
+            warnings.append(
+                "related article extraction was short or boilerplate-heavy; using SearXNG snippet"
+            )
+    except Exception as exc:
+        text = f"{title}. {snippet}".strip()
+        extraction_status = "snippet_fallback" if text else "failed"
+        warnings.append(f"related article fetch failed: {exc}")
+    return SourceDocument(
+        story_id=story_id,
+        url=url,
+        title=title,
+        publisher=article.get("source"),
+        published_at=article.get("published_at"),
+        content_text=text,
+        content_hash=sha256_text(text),
+        document_type="related_news_article",
+        primary_source=False,
+        extraction_status=extraction_status,
+        warnings=warnings,
+    )
+
+
 def build_research_pack(repository, story_id: str) -> ResearchPack:
     candidate = repository.candidate_for_story(story_id)
-    document = source_document_from_candidate(candidate)
-    repository.upsert_source_document(document)
-    sentences = sentence_split(document.content_text)
+    lead_document = source_document_from_candidate(candidate)
+    documents = [lead_document]
+    search_warnings: list[str] = []
+    if searxng_configured() and candidate.title:
+        try:
+            coverage = discover_news(candidate)
+            articles = [
+                article for angle in coverage.angles for article in angle.articles
+            ]
+            seen_urls = {
+                canonicalize_url(lead_document.url) if lead_document.url else None
+            }
+            max_documents = max(
+                1,
+                int(
+                    config.env("SYNTHPOST_RESEARCH_MAX_DOCUMENTS", "6") or "6"
+                ),
+            )
+            for article in articles:
+                canonical_url = canonicalize_url(article.get("url"))
+                if not canonical_url or canonical_url in seen_urls:
+                    continue
+                seen_urls.add(canonical_url)
+                documents.append(source_document_from_search_result(story_id, article))
+                if len(documents) >= max_documents:
+                    break
+        except SearXNGError as exc:
+            search_warnings.append(f"SearXNG news research unavailable: {exc}")
+        except Exception as exc:
+            search_warnings.append(f"SearXNG news research failed: {exc}")
+
+    for document in documents:
+        repository.upsert_source_document(document)
+
     evidence: list[EvidenceItem] = []
     claims: list[Claim] = []
-    for index, sentence in enumerate(sentences, start=1):
-        evidence_item = EvidenceItem(
-            evidence_id=f"ev_{index:03d}",
-            document_id=document.document_id,
-            excerpt=sentence[:500],
-            location=f"sentence:{index}",
-            url=document.url,
+    seen_claims: set[str] = set()
+    claim_index = 0
+    max_claims_per_document = max(
+        1,
+        int(config.env("SYNTHPOST_RESEARCH_CLAIMS_PER_DOCUMENT", "8") or "8"),
+    )
+    for document in documents:
+        for sentence_index, sentence in enumerate(
+            sentence_split(document.content_text)[:max_claims_per_document], start=1
+        ):
+            normalized = re.sub(r"\W+", " ", sentence.lower()).strip()
+            if normalized in seen_claims:
+                continue
+            seen_claims.add(normalized)
+            claim_index += 1
+            evidence_item = EvidenceItem(
+                evidence_id=f"ev_{claim_index:03d}",
+                document_id=document.document_id,
+                excerpt=sentence[:500],
+                location=f"sentence:{sentence_index}",
+                url=document.url,
+            )
+            extracted = document.extraction_status == "extracted"
+            claim = Claim(
+                claim_id=f"claim_{claim_index:03d}",
+                claim_text=sentence,
+                evidence_ids=[evidence_item.evidence_id],
+                confidence=0.72 if extracted else 0.48,
+                claim_type="fact",
+                supported=bool(sentence),
+                notes=f"Extracted deterministically from {document.title}.",
+            )
+            evidence.append(evidence_item)
+            claims.append(claim)
+
+    combined_text = "\n\n".join(document.content_text for document in documents)
+    people, organizations, locations = extract_entities(combined_text)
+    numbers = extract_numbers(combined_text)
+    dates = extract_dates(combined_text)
+    lead_sentences = sentence_split(lead_document.content_text)
+    summary_sentences = lead_sentences[:4] or [candidate.summary or candidate.title]
+    uncertainties = list(search_warnings)
+    for document in documents:
+        uncertainties.extend(
+            f"{document.title}: {warning}" for warning in document.warnings
         )
-        claim = Claim(
-            claim_id=f"claim_{index:03d}",
-            claim_text=sentence,
-            evidence_ids=[evidence_item.evidence_id],
-            confidence=0.72 if document.extraction_status == "extracted" else 0.45,
-            claim_type="fact",
-            supported=bool(sentence),
-            notes="Extracted deterministically from source document.",
-        )
-        evidence.append(evidence_item)
-        claims.append(claim)
-    people, organizations, locations = extract_entities(document.content_text)
-    numbers = extract_numbers(document.content_text)
-    dates = extract_dates(document.content_text)
-    summary_sentences = sentences[:4] or [candidate.summary or candidate.title]
+    source_note = (
+        f" Reviewed {len(documents)} source documents."
+        if len(documents) > 1
+        else ""
+    )
     pack = ResearchPack(
         story_id=story_id,
-        documents=[document],
+        documents=documents,
         evidence=evidence,
         claims=claims,
         people=people,
@@ -297,8 +399,8 @@ def build_research_pack(repository, story_id: str) -> ResearchPack:
         numbers=numbers,
         dates=dates,
         contradictions=[],
-        uncertainties=document.warnings,
-        research_summary=" ".join(summary_sentences)[:1200],
+        uncertainties=uncertainties,
+        research_summary=(" ".join(summary_sentences) + source_note)[:1200],
     )
     repository.upsert_research_pack(pack)
     if candidate.workflow_state in {

@@ -11,6 +11,7 @@ export type TimedVisual = PublicMedia & {
   fit?: "cover" | "contain";
   sourceLabel?: string;
   audio?: boolean;
+  hasAudio?: boolean;
   volume?: number;
   mediaType?:
     | "video"

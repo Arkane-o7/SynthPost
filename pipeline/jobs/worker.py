@@ -25,7 +25,7 @@ from pipeline.research.extract import build_research_pack
 from pipeline.scripts.generation import generate_script
 from pipeline.storage import PROJECT_ROOT, project_relative, story_manifest_path
 from pipeline.timeline.planner import generate_timeline
-from pipeline.visuals.providers import search_local_drop_folder
+from pipeline.visuals.providers import search_visuals
 
 
 class JobContext:
@@ -91,9 +91,13 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
 def handle_visual_search(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("visual search job requires story_id")
-    ctx.progress(10, "scanning local media drop folder")
-    visuals = search_local_drop_folder(ctx.repository, ctx.job.story_id)
-    ctx.progress(100, f"found {len(visuals)} local visual candidates")
+    ctx.progress(10, "using AI to plan image/video keywords")
+    visuals = search_visuals(ctx.repository, ctx.job.story_id)
+    downloadable = sum(1 for visual in visuals if visual.download_path)
+    ctx.progress(
+        100,
+        f"found {len(visuals)} visual candidates ({downloadable} render-ready files)",
+    )
     return {"visual_count": str(len(visuals))}
 
 
@@ -207,6 +211,9 @@ def handle_assemble_episode(ctx: JobContext) -> dict[str, str]:
         episode = ctx.repository.get_episode(ctx.job.episode_id)
         episode.final_output_path = project_relative(output)
         episode.status = EpisodeStatus.completed
+        episode.render_profile = str(
+            payload.get("render_profile") or ctx.job.render_profile or "production"
+        )
         episode.updated_at = now_iso()
         ctx.repository.upsert_episode(episode)
         for story_id in episode.story_ids:

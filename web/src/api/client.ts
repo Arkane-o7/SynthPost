@@ -235,6 +235,10 @@ export const api = {
     request<VisualCandidate>(`/api/visuals/${assetId}/approve`, {
       method: "POST",
     }),
+  analyzeVisual: (assetId: string) =>
+    request<VisualCandidate>(`/api/visuals/${assetId}/analyze`, {
+      method: "POST",
+    }),
   manualApproveVisual: (assetId: string, attribution_text?: string) =>
     request<VisualCandidate>(`/api/visuals/${assetId}/manual-approve`, {
       method: "POST",

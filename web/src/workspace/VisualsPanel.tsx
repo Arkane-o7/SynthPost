@@ -11,12 +11,26 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const [path, setPath] = React.useState("");
   const [file, setFile] = React.useState<File | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [attributions, setAttributions] = React.useState<Record<string, string>>(
+    {},
+  );
 
   const load = React.useCallback(
     () =>
       api
         .listVisuals(storyId)
-        .then(setVisuals)
+        .then((items) => {
+          setVisuals(items);
+          setAttributions((current) => {
+            const next = { ...current };
+            for (const item of items) {
+              if (!(item.asset_id in next)) {
+                next[item.asset_id] = item.attribution_text ?? "";
+              }
+            }
+            return next;
+          });
+        })
         .catch(() => setVisuals([])),
     [storyId, studio.lastJobEventTimestamp],
   );
@@ -53,7 +67,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               })
             }
           >
-            Search Local Drop Folder
+            Search Local + Web Visuals
           </button>
         </div>
         <div className="row">
@@ -101,7 +115,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         <EmptyState
           icon="🖼"
           title="No local visuals staged"
-          description="Search the local drop folder or upload files when you have rights-cleared media. If none are available, SynthPost can continue with approved fallback anchor visuals in the timeline step."
+          description="Search the local drop folder and your configured SearXNG instance, or upload rights-cleared media. Web results remain review leads until a local file and valid usage basis are confirmed."
         />
       ) : (
         <div className="grid grid-3">
@@ -111,7 +125,14 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               className={`visual-card rights-${v.rights_tier}`}
             >
               <div className="visual-thumb">
-                {v.thumbnail_path ? (
+                {v.content_role === "fallback" ? (
+                  <div style={{ textAlign: "center", padding: 16 }}>
+                    <div style={{ fontSize: 30 }}>🎙️</div>
+                    <div className="text-muted" style={{ fontSize: 11 }}>
+                      Presenter-only fallback
+                    </div>
+                  </div>
+                ) : v.thumbnail_path ? (
                   <img src={artifactUrl(v.thumbnail_path)} alt={v.title} />
                 ) : (
                   <span style={{ fontSize: 24, opacity: 0.3 }}>
@@ -142,10 +163,103 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                   <StatusBadge status={v.review_status}>
                     {v.review_status}
                   </StatusBadge>
+                  <StatusBadge
+                    tone={
+                      v.content_cleanliness_status === "passed"
+                        ? "green"
+                        : v.content_cleanliness_status === "rejected"
+                          ? "red"
+                          : "amber"
+                    }
+                  >
+                    {v.content_cleanliness_status.replace("_", " ")}
+                  </StatusBadge>
                 </div>
                 <div className="text-muted" style={{ fontSize: 12 }}>
                   {v.provider} · {v.content_role}
                 </div>
+                <div className="text-muted" style={{ fontSize: 11 }}>
+                  {v.width && v.height ? `${v.width}×${v.height} · ` : ""}
+                  source: {v.source_identity || v.source_domain || "unknown"}
+                  {v.source_verified ? " · verified registry entry" : ""}
+                </div>
+                {v.source_url && (
+                  <a
+                    href={v.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: 12 }}
+                  >
+                    Open source page ↗
+                  </a>
+                )}
+
+                {!v.download_path &&
+                  !v.quarantine_path &&
+                  v.content_role !== "fallback" && (
+                  <div className="rights-warning warn-amber">
+                    Research lead only — no local render file
+                  </div>
+                )}
+                {v.quarantine_path && (
+                  <div className="rights-warning warn-red">
+                    Quarantined — local file is blocked from the timeline
+                  </div>
+                )}
+
+                {v.contact_sheet_path && (
+                  <img
+                    src={artifactUrl(v.contact_sheet_path)}
+                    alt={`Analysis contact sheet for ${v.title}`}
+                    style={{
+                      width: "100%",
+                      borderRadius: 6,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                    }}
+                  />
+                )}
+
+                {v.content_role !== "fallback" && (
+                  <details style={{ fontSize: 11 }}>
+                    <summary style={{ cursor: "pointer", fontWeight: 600 }}>
+                      Source & content evidence
+                    </summary>
+                    <div className="stack" style={{ marginTop: 8, gap: 5 }}>
+                      <div>Source class: {v.source_class}</div>
+                      {v.source_channel_name && (
+                        <div>Channel: {v.source_channel_name}</div>
+                      )}
+                      <div>
+                        Clean B-roll score: {Math.round(v.clean_broll_score * 100)}%
+                      </div>
+                      <div>Frames scanned: {v.scan_timestamps.length}</div>
+                      <div>
+                        Detected brands: {v.detected_brands.join(", ") || "none"}
+                      </div>
+                      <div>
+                        Flags: {[
+                          v.contains_third_party_logo && "third-party logo",
+                          v.contains_lower_third && "lower-third",
+                          v.contains_ticker && "ticker",
+                          v.contains_presenter && "presenter package",
+                        ]
+                          .filter(Boolean)
+                          .join(", ") || "none"}
+                      </div>
+                      {v.content_analysis_evidence.map((item) => (
+                        <div key={`evidence-${item}`}>• {item}</div>
+                      ))}
+                      {v.approval_blockers.map((item) => (
+                        <div
+                          key={`blocker-${item}`}
+                          style={{ color: "#ff8f87" }}
+                        >
+                          ⛔ {item}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
 
                 {/* Rights warnings */}
                 {v.rights_tier === "yellow" && (
@@ -158,36 +272,76 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                     ⛔ Rights concern — review before use
                   </div>
                 )}
+                {v.warnings.map((warning) => (
+                  <div
+                    key={warning}
+                    className="text-muted"
+                    style={{ fontSize: 11, lineHeight: 1.4 }}
+                  >
+                    {warning}
+                  </div>
+                ))}
 
                 {/* Attribution */}
-                <input
-                  defaultValue={v.attribution_text ?? ""}
-                  placeholder="Attribution text…"
-                  style={{ fontSize: 12 }}
-                  onBlur={(e) =>
-                    void api
-                      .updateVisual(v.asset_id, {
-                        attribution_text: e.target.value,
-                      })
-                      .then(load)
-                  }
-                />
+                {v.content_role !== "fallback" && (
+                  <input
+                    value={attributions[v.asset_id] ?? v.attribution_text ?? ""}
+                    placeholder="Attribution text…"
+                    style={{ fontSize: 12 }}
+                    onChange={(e) =>
+                      setAttributions((current) => ({
+                        ...current,
+                        [v.asset_id]: e.target.value,
+                      }))
+                    }
+                    onBlur={(e) =>
+                      void api
+                        .updateVisual(v.asset_id, {
+                          attribution_text: e.target.value,
+                        })
+                        .then(load)
+                    }
+                  />
+                )}
 
                 {/* Actions */}
                 <div className="row-tight">
                   <button
+                    style={{ fontSize: 12, padding: "5px 10px" }}
+                    disabled={
+                      busy ||
+                      (!v.download_path && !v.quarantine_path) ||
+                      v.content_role === "fallback"
+                    }
+                    onClick={() => act(() => api.analyzeVisual(v.asset_id))}
+                  >
+                    Analyze
+                  </button>
+                  <button
                     className="btn-success"
                     style={{ fontSize: 12, padding: "5px 10px" }}
+                    disabled={
+                      !v.download_path ||
+                      v.content_role === "fallback" ||
+                      v.content_cleanliness_status !== "passed" ||
+                      v.approval_blockers.length > 0
+                    }
                     onClick={() =>
                       act(() =>
                         api.manualApproveVisual(
                           v.asset_id,
-                          v.attribution_text ?? undefined,
+                          attributions[v.asset_id] ??
+                            v.attribution_text ??
+                            undefined,
                         ),
                       )
                     }
                   >
-                    ✓ Approve
+                    {v.content_role === "fallback"
+                      ? "Automatic"
+                      : v.download_path
+                        ? "✓ Approve"
+                        : "Lead only"}
                   </button>
                   <button
                     className="btn-danger"

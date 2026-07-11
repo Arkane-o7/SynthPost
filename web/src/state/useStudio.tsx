@@ -129,7 +129,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   React.useEffect(() => {
-    const eventSource = new EventSource("/api/jobs/events");
+    const eventSource = new EventSource("/api/job-events");
     eventSource.addEventListener("jobs", (e) => {
       try {
         const jobs = JSON.parse(e.data) as RenderJob[];
@@ -162,6 +162,14 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
   React.useEffect(() => {
     void refreshCandidates().catch(() => undefined);
   }, [state.lastJobEventTimestamp, refreshCandidates]);
+
+  React.useEffect(() => {
+    if (!state.selectedProjectId) return;
+    void api
+      .listEpisodes(state.selectedProjectId)
+      .then((episodes) => patch({ episodes }))
+      .catch(() => undefined);
+  }, [state.lastJobEventTimestamp, state.selectedProjectId]);
 
   const value: StudioContextValue = {
     ...state,

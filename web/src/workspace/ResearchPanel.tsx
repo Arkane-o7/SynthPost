@@ -67,6 +67,27 @@ export const ResearchPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             </div>
           )}
         </div>
+        <div className="stack" style={{ gap: 6 }}>
+          <h3>Sources</h3>
+          {pack.documents.map((document) =>
+            document.url ? (
+              <a
+                key={document.document_id}
+                href={document.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: 12, lineHeight: 1.4 }}
+              >
+                {document.publisher ? `${document.publisher}: ` : ''}
+                {document.title} ↗
+              </a>
+            ) : (
+              <div key={document.document_id} className="text-muted" style={{ fontSize: 12 }}>
+                {document.title} (local/editor-provided)
+              </div>
+            ),
+          )}
+        </div>
         <button
           disabled={loading}
           onClick={() =>

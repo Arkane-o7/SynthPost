@@ -71,6 +71,15 @@ export const PreviewPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         <button disabled={isRendering} onClick={() => act(loadManifest)}>
           Build Renderer Manifest
         </button>
+        <button
+          className="btn-primary"
+          disabled={isRendering}
+          onClick={() =>
+            act(() => api.renderStory(storyId, "preview", true))
+          }
+        >
+          {isRendering ? "Rendering Preview…" : "Render Preview"}
+        </button>
 
         {composition?.output_path && (
           <div className="font-mono text-muted" style={{ fontSize: 12 }}>

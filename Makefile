@@ -1,4 +1,8 @@
-.PHONY: setup dev backend worker web test typecheck smoke render-demo
+.PHONY: setup dev backend worker web test typecheck smoke render-demo searxng-up searxng-down
+
+DOCKER ?= $(shell command -v docker 2>/dev/null || { test -x /Applications/Docker.app/Contents/Resources/bin/docker && echo /Applications/Docker.app/Contents/Resources/bin/docker; } || echo docker)
+DOCKER_CONTEXT ?=
+DOCKER_CONTEXT_ARG = $(if $(DOCKER_CONTEXT),--context $(DOCKER_CONTEXT),)
 
 setup:
 	python3 -m pip install -r requirements.txt
@@ -13,6 +17,12 @@ worker:
 
 web:
 	npm --prefix web run dev -- --host 127.0.0.1 --port 5173
+
+searxng-up:
+	$(DOCKER) $(DOCKER_CONTEXT_ARG) compose -f docker-compose.searxng.yml up -d
+
+searxng-down:
+	$(DOCKER) $(DOCKER_CONTEXT_ARG) compose -f docker-compose.searxng.yml down
 
 dev:
 	python3 -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 & python3 -m pipeline.jobs.worker & npm --prefix web run dev -- --host 127.0.0.1 --port 5173

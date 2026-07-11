@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from pipeline import config
 from pipeline.models import (
     ApprovalStatus,
     AudioMode,
@@ -20,7 +23,194 @@ from pipeline.models import (
     TimelineStatus,
     VisualCandidate,
 )
+from pipeline.provenance import ffprobe_summary
 from pipeline.timeline.validation import validate_timeline
+from pipeline.visuals.providers import broadcast_media_fit
+
+
+@dataclass(frozen=True)
+class TemplateDecision:
+    template_id: str
+    scores: dict[str, float]
+    reasons: list[str]
+
+
+ANCHOR_BEATS = {
+    "cold_open",
+    "intro",
+    "hook",
+    "opening",
+    "transition",
+    "uncertainty",
+    "caveat",
+    "conclusion",
+    "outro",
+    "takeaway",
+}
+VISUAL_BEATS = {
+    "key_developments",
+    "development",
+    "evidence",
+    "what_happened",
+    "demonstration",
+}
+SPLIT_BEATS = {
+    "context",
+    "explanation",
+    "analysis",
+    "why_it_matters",
+    "impact",
+}
+
+
+def _is_fallback_visual(visual: VisualCandidate | None) -> bool:
+    return bool(
+        visual
+        and (
+            visual.content_role == ContentRole.fallback
+            or visual.media_type == MediaType.fallback
+            or visual.provider
+            in {"generated_visual_card", "synthpost_anchor_fallback"}
+        )
+    )
+
+
+def visual_has_audio(visual: VisualCandidate | None) -> bool:
+    if visual is None or visual.media_type != MediaType.video:
+        return False
+    if visual.has_audio is not None:
+        return visual.has_audio
+    if visual.download_path:
+        return bool(ffprobe_summary(visual.download_path).get("audio_codec"))
+    return False
+
+
+def choose_audio_mode(
+    template_id: str, visual: VisualCandidate | None
+) -> AudioMode:
+    """Use source audio only for fullscreen video that actually contains it."""
+
+    if (
+        template_id == "fullscreen_news_visual"
+        and visual is not None
+        and visual.media_type == MediaType.video
+        and visual_has_audio(visual)
+    ):
+        return AudioMode.source
+    return AudioMode.narration
+
+
+def select_template(
+    section_type: str,
+    visual: VisualCandidate | None,
+    index: int,
+    *,
+    total_sections: int | None = None,
+    previous_templates: list[str] | tuple[str, ...] = (),
+    script_text: str = "",
+) -> TemplateDecision:
+    """Score production-safe layouts using editorial purpose and shot rhythm."""
+
+    section = section_type.strip().lower()
+    previous = list(previous_templates)
+    last = previous[-1] if previous else None
+    anchor_like = {"fullscreen_anchor", "fallback_anchor"}
+
+    if visual is None or _is_fallback_visual(visual):
+        intentional_anchor = section in ANCHOR_BEATS or index == 0
+        selected = "fullscreen_anchor" if intentional_anchor else "fallback_anchor"
+        reason = (
+            "editorial direct-address beat"
+            if intentional_anchor
+            else "no approved source visual; safe presenter fallback"
+        )
+        return TemplateDecision(selected, {selected: 100.0}, [reason])
+
+    scores = {
+        "split_anchor_visual": 60.0,
+        "fullscreen_news_visual": 48.0,
+        "fullscreen_anchor": 18.0,
+    }
+    reasons: dict[str, list[str]] = {template: [] for template in scores}
+
+    def boost(template: str, amount: float, reason: str) -> None:
+        scores[template] += amount
+        reasons[template].append(reason)
+
+    if section in ANCHOR_BEATS:
+        boost("fullscreen_anchor", 46, "section is a direct-address editorial beat")
+        boost("split_anchor_visual", -10, "anchor beat should not default to split")
+    if section in VISUAL_BEATS:
+        boost("fullscreen_news_visual", 36, "section advances the visual evidence")
+        boost("split_anchor_visual", 8, "supporting explanation remains useful")
+    if section in SPLIT_BEATS:
+        boost("split_anchor_visual", 36, "section benefits from presenter explanation")
+        boost("fullscreen_news_visual", 6, "approved media can still carry context")
+
+    if visual.media_type == MediaType.video:
+        boost("fullscreen_news_visual", 38, "approved motion footage deserves the frame")
+    if visual.content_role in {
+        ContentRole.primary_footage,
+        ContentRole.evidence,
+        ContentRole.atmosphere,
+    }:
+        boost("fullscreen_news_visual", 30, "visual role is strong enough to lead")
+    if visual.content_role in {
+        ContentRole.explanation,
+        ContentRole.location,
+        ContentRole.person,
+        ContentRole.document,
+        ContentRole.data,
+    }:
+        boost("split_anchor_visual", 20, "visual role benefits from presenter context")
+
+    quality = visual.relevance_score + visual.visual_quality_score
+    if quality >= 1.15:
+        boost("fullscreen_news_visual", 20, "visual quality and relevance clear hero threshold")
+    elif quality < 0.75:
+        boost("fullscreen_news_visual", -22, "visual is not strong enough for fullscreen")
+        boost("split_anchor_visual", 10, "weaker media is safer as supporting material")
+
+    if visual.width and visual.height:
+        aspect_ratio = visual.width / max(1, visual.height)
+        if aspect_ratio >= 1.45:
+            boost("fullscreen_news_visual", 16, "landscape framing suits fullscreen")
+        elif aspect_ratio < 1.05:
+            boost("fullscreen_news_visual", -28, "portrait framing should not fill 16:9")
+            boost("split_anchor_visual", 18, "portrait framing is safer in the split panel")
+
+    word_count = len(script_text.split())
+    if word_count >= 45:
+        boost("split_anchor_visual", 12, "dense narration benefits from anchor presence")
+    elif 0 < word_count <= 28:
+        boost("fullscreen_news_visual", 10, "concise narration leaves room for a hero visual")
+
+    if index == 0:
+        boost("fullscreen_anchor", 32, "opening establishes presenter and programme identity")
+        boost("split_anchor_visual", -8, "avoid beginning with the default split layout")
+    if total_sections and index == total_sections - 1:
+        boost("fullscreen_anchor", 18, "closing direct address provides resolution")
+        boost("fullscreen_news_visual", 14, "strong closing image can provide visual punctuation")
+
+    if last == "split_anchor_visual":
+        boost("fullscreen_news_visual", 14, "change scale after a split shot")
+        boost("fullscreen_anchor", 8, "change composition after a split shot")
+    elif last == "fullscreen_news_visual":
+        boost("split_anchor_visual", 18, "return presenter after fullscreen evidence")
+    elif last in anchor_like:
+        boost("split_anchor_visual", 14, "move away from consecutive anchor-only shots")
+        boost("fullscreen_news_visual", 18, "move from direct address to visual evidence")
+        boost("fullscreen_anchor", -34, "avoid consecutive anchor-only shots")
+
+    for template in scores:
+        if last == template:
+            boost(template, -24, "avoid repeating the previous layout")
+        if len(previous) >= 2 and previous[-2:] == [template, template]:
+            boost(template, -100, "never use one layout more than twice consecutively")
+
+    selected = max(scores, key=lambda template: scores[template])
+    selected_reasons = reasons[selected] or ["highest balanced editorial score"]
+    return TemplateDecision(selected, scores, selected_reasons)
 
 
 def _is_approved_visual(visual: VisualCandidate) -> bool:
@@ -37,6 +227,17 @@ def _is_approved_visual(visual: VisualCandidate) -> bool:
         and visual.review_status != ReviewStatus.manual_approved
     ):
         return False
+    if visual.media_type in {MediaType.image, MediaType.video} and config.env_bool(
+        "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
+    ):
+        eligible, _reason, _score = broadcast_media_fit(
+            visual.width, visual.height
+        )
+        if not eligible:
+            return False
+    if visual.media_type in {MediaType.image, MediaType.video}:
+        if visual.content_cleanliness_status != "passed" or visual.approval_blockers:
+            return False
     return True
 
 
@@ -44,7 +245,18 @@ def approved_visuals_by_section(
     visuals: list[VisualCandidate],
 ) -> dict[str, VisualCandidate]:
     result: dict[str, VisualCandidate] = {}
-    for visual in visuals:
+    ranked = sorted(
+        visuals,
+        key=lambda visual: (
+            visual.content_role == ContentRole.fallback
+            or visual.media_type == MediaType.fallback
+            or visual.provider
+            in {"generated_visual_card", "synthpost_anchor_fallback"},
+            visual.review_status != ReviewStatus.manual_approved,
+            -(visual.relevance_score + visual.visual_quality_score),
+        ),
+    )
+    for visual in ranked:
         if not _is_approved_visual(visual):
             continue
         for section_id in visual.section_ids:
@@ -89,28 +301,32 @@ def distribute_unassigned_visuals(
 
 
 def choose_template(
-    section_type: str, visual: VisualCandidate | None, index: int
+    section_type: str,
+    visual: VisualCandidate | None,
+    index: int,
+    *,
+    total_sections: int | None = None,
+    previous_templates: list[str] | tuple[str, ...] = (),
+    script_text: str = "",
 ) -> str:
-    if index == 0 and visual is None:
-        return "fullscreen_anchor"
-    if visual:
-        if (
-            visual.content_role == ContentRole.primary_footage
-            and visual.media_type == MediaType.video
-        ):
-            return "fullscreen_news_visual"
-        # Non-quote explainer/card templates are currently blacklisted for
-        # production. Keep approved documents, charts, maps, and context media in
-        # the retained split broadcast shell until those cards are redesigned.
-        return "split_anchor_visual"
-    # Default to the retained broadcast anchor look. The newer card/explainer
-    # templates should be explicit choices, not automatic replacements for the
-    # original SynthPost template language.
-    return "fallback_anchor" if index else "fullscreen_anchor"
+    return select_template(
+        section_type,
+        visual,
+        index,
+        total_sections=total_sections,
+        previous_templates=previous_templates,
+        script_text=script_text,
+    ).template_id
 
 
 def segment_visual_from_candidate(visual: VisualCandidate | None) -> SegmentVisual:
-    if not visual:
+    if (
+        not visual
+        or visual.content_role == ContentRole.fallback
+        or visual.media_type == MediaType.fallback
+        or visual.provider
+        in {"generated_visual_card", "synthpost_anchor_fallback"}
+    ):
         return SegmentVisual(
             media_type=MediaType.fallback,
             content_role=ContentRole.fallback,
@@ -131,7 +347,10 @@ def segment_visual_from_candidate(visual: VisualCandidate | None) -> SegmentVisu
         audio_mode="muted",
         trim_start=visual.trim_start,
         trim_end=visual.trim_end,
+        has_audio=visual_has_audio(visual),
         attribution_text=visual.attribution_text,
+        content_cleanliness_status=visual.content_cleanliness_status,
+        approval_blockers=list(visual.approval_blockers),
     )
 
 
@@ -184,29 +403,37 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
     for index, section in enumerate(script.sections):
         duration = max(4.0, section.estimated_duration_seconds or 5.0)
         visual = by_section.get(section.section_id)
-        template_id = choose_template(section.section_type, visual, index)
-        audio_mode = (
-            AudioMode.source
-            if template_id == "fullscreen_news_visual"
-            and visual
-            and visual.media_type == MediaType.video
-            and visual.duration_seconds
-            and not section.text.strip()
-            else AudioMode.narration
+        decision = select_template(
+            section.section_type,
+            visual,
+            index,
+            total_sections=len(script.sections),
+            previous_templates=[item.template.template_id for item in segments],
+            script_text=section.text,
         )
+        template_id = decision.template_id
+        render_visual = (
+            visual
+            if template_id in {"split_anchor_visual", "fullscreen_news_visual"}
+            else None
+        )
+        audio_mode = choose_audio_mode(template_id, render_visual)
         anchor = SegmentAnchor(
-            visible=template_id
-            in {
-                "split_anchor_visual",
-                "fullscreen_anchor",
-                "fallback_anchor",
-            },
-            speaking=audio_mode != AudioMode.source,
+            visible=template_id != "fullscreen_news_visual",
+            speaking=(
+                template_id != "fullscreen_news_visual"
+                and audio_mode != AudioMode.source
+            ),
             camera="front_close"
             if template_id != "fullscreen_anchor"
             else "landscape_intro",
         )
         source_volume = 1.0 if audio_mode == AudioMode.source else 0.0
+        segment_visual = segment_visual_from_candidate(render_visual)
+        if audio_mode == AudioMode.source:
+            segment_visual.audio_mode = "original"
+        elif audio_mode == AudioMode.mixed:
+            segment_visual.audio_mode = "mixed"
         segment = TimelineSegment(
             segment_id=f"seg_{index + 1:03d}",
             section_id=section.section_id,
@@ -216,7 +443,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
             script_text=section.text,
             claim_ids=section.claim_ids,
             anchor=anchor,
-            visual=segment_visual_from_candidate(visual),
+            visual=segment_visual,
             template=SegmentTemplate(template_id=template_id),
             audio=SegmentAudio(
                 mode=audio_mode,
@@ -231,10 +458,11 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 chyron=script.chyrons[0]
                 if script.chyrons
                 else section.section_type.replace("_", " "),
-                attribution=visual.attribution_text if visual else "",
+                attribution=render_visual.attribution_text if render_visual else "",
                 quote_text="",
-                document_source=visual.attribution_text
-                if visual and visual.content_role == ContentRole.document
+                document_source=render_visual.attribution_text
+                if render_visual
+                and render_visual.content_role == ContentRole.document
                 else "",
                 data={
                     "title": section.section_type.replace("_", " ").title(),
@@ -242,6 +470,12 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                     "values": [],
                     "locations": [],
                     "events": [],
+                    "template_selection": {
+                        "policy": "editorial_v1",
+                        "selected": template_id,
+                        "scores": decision.scores,
+                        "reasons": decision.reasons,
+                    },
                 },
             ),
             status=ApprovalStatus.review,

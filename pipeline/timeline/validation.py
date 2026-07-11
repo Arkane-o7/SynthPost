@@ -62,6 +62,16 @@ def validate_timeline(
             warnings.append(f"{prefix}: anchor.speaking differs from template default")
         visual = segment.visual
         if visual.asset_id:
+            if visual.content_cleanliness_status != "passed":
+                errors.append(
+                    f"{prefix}: visual content cleanliness is "
+                    f"{visual.content_cleanliness_status}, not passed"
+                )
+            if visual.approval_blockers:
+                errors.append(
+                    f"{prefix}: visual has approval blockers: "
+                    + "; ".join(visual.approval_blockers[:3])
+                )
             if visual.rights_tier == RightsTier.red:
                 errors.append(f"{prefix}: red-tier asset cannot render")
             if (

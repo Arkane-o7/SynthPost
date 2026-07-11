@@ -2,6 +2,7 @@ import React from "react";
 import {
   AbsoluteFill,
   Img,
+  OffthreadVideo,
   Sequence,
   interpolate,
   useCurrentFrame,
@@ -41,10 +42,15 @@ const fallbackVisual: TimedVisual = {
 const segmentVisual = (segment: TimelineSegmentProps): TimedVisual =>
   segment.visual ?? fallbackVisual;
 const visualMuted = (segment: TimelineSegmentProps): boolean => {
-  if (segment.audio?.mode === "source" || segment.audio?.mode === "mixed") {
-    return false;
-  }
-  return segment.visual?.kind !== "video" || segment.visual?.audio === false;
+  const mode = segment.audio?.mode ?? "narration";
+  const sourceHasAudio = Boolean(
+    segment.visual?.kind === "video" &&
+      (segment.visual.hasAudio ?? segment.visual.audio),
+  );
+  return !(
+    sourceHasAudio &&
+    (mode === "source" || mode === "mixed")
+  );
 };
 const sourceVolume = (segment: TimelineSegmentProps): number => {
   if (segment.audio?.mode === "source") {
@@ -69,13 +75,40 @@ const relativeSegmentVisual = (
 const segmentHeadlineItems = (segment: TimelineSegmentProps) => [
   {
     text:
-      segment.overlays.chyron ||
       segment.overlays.lowerThird ||
+      segment.overlays.chyron ||
       segment.sectionId.replace(/_/g, " "),
     start: 0,
     end: Math.max(0.1, segment.duration),
   },
 ];
+
+const AnchorNarrationTrack: React.FC<{
+  anchor?: StoryProps["anchor"];
+  startFrom: number;
+  enabled: boolean;
+  volume: number;
+}> = ({ anchor, startFrom, enabled, volume }) => {
+  if (!anchor || anchor.kind !== "video" || !enabled) {
+    return null;
+  }
+  return (
+    <OffthreadVideo
+      src={mediaSrc(anchor)}
+      startFrom={startFrom}
+      volume={volume}
+      style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        pointerEvents: "none",
+      }}
+    />
+  );
+};
 
 const RetainedSplitSegment: React.FC<{
   segment: TimelineSegmentProps;
@@ -132,7 +165,8 @@ const RetainedFullScreenVisualSegment: React.FC<{
   story: StoryProps;
   visual: TimedVisual;
   progress: number;
-}> = ({ segment, story, visual, progress }) => (
+  startFrom: number;
+}> = ({ segment, story, visual, progress, startFrom }) => (
   <AbsoluteFill
     style={{
       backgroundColor: brand.ink,
@@ -140,6 +174,15 @@ const RetainedFullScreenVisualSegment: React.FC<{
       color: brand.white,
     }}
   >
+    <AnchorNarrationTrack
+      anchor={story.anchor}
+      startFrom={startFrom}
+      enabled={
+        segment.audio?.mode !== "source" &&
+        segment.audio?.mode !== "silent"
+      }
+      volume={segment.audio?.narrationVolume ?? 1}
+    />
     <VisualMediaLayer
       visual={relativeSegmentVisual(segment, visual)}
       progress={progress}
@@ -853,6 +896,7 @@ const Segment: React.FC<{
             story={story}
             visual={visual}
             progress={progress}
+            startFrom={Math.round(segment.start * fps)}
           />
         ) : null}
 

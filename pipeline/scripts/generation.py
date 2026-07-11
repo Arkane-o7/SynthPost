@@ -16,6 +16,7 @@ from pipeline.models import (
     ScriptStatus,
     StoryWorkflowState,
     new_id,
+    now_iso,
 )
 
 SECTION_ORDER = [
@@ -44,23 +45,70 @@ def duration_tolerance_seconds(duration_seconds: int) -> float:
 
 def section_word_targets(duration_seconds: int) -> dict[str, int]:
     total = target_word_count(duration_seconds)
-    weights = {
-        "cold_open": 0.06,
-        "intro": 0.08,
-        "context": 0.16,
-        "key_developments": 0.18,
-        "why_it_matters": 0.13,
-        "stakes": 0.13,
-        "uncertainty": 0.11,
-        "conclusion": 0.10,
-        "outro": 0.05,
-    }
+    if total < 350:
+        # Short broadcast pieces need fewer, stronger sections. Applying the
+        # long-form minimum to all nine section types produced impossible or
+        # even negative targets for 60-90 second scripts.
+        weights = {
+            "cold_open": 0.08,
+            "context": 0.18,
+            "key_developments": 0.28,
+            "why_it_matters": 0.20,
+            "uncertainty": 0.12,
+            "conclusion": 0.14,
+        }
+        minimum = 12
+    else:
+        weights = {
+            "cold_open": 0.06,
+            "intro": 0.08,
+            "context": 0.16,
+            "key_developments": 0.18,
+            "why_it_matters": 0.13,
+            "stakes": 0.13,
+            "uncertainty": 0.11,
+            "conclusion": 0.10,
+            "outro": 0.05,
+        }
+        minimum = 20
     targets = {
-        section: max(35, round(total * weight)) for section, weight in weights.items()
+        section: max(minimum, round(total * weight))
+        for section, weight in weights.items()
     }
     delta = total - sum(targets.values())
     targets["key_developments"] += delta
     return targets
+
+
+def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
+    """Keep grounded evidence while excluding bulky scraped page boilerplate."""
+
+    return {
+        "story_id": pack.get("story_id"),
+        "research_summary": pack.get("research_summary", ""),
+        "documents": [
+            {
+                key: document.get(key)
+                for key in (
+                    "document_id",
+                    "url",
+                    "title",
+                    "publisher",
+                    "published_at",
+                    "extraction_status",
+                    "warnings",
+                )
+            }
+            for document in pack.get("documents", [])
+        ],
+        "claims": pack.get("claims", []),
+        "evidence": pack.get("evidence", []),
+        "organizations": pack.get("organizations", [])[:20],
+        "locations": pack.get("locations", [])[:20],
+        "numbers": pack.get("numbers", [])[:30],
+        "dates": pack.get("dates", [])[:20],
+        "uncertainties": pack.get("uncertainties", []),
+    }
 
 
 def estimate_duration(text: str) -> float:
@@ -236,6 +284,7 @@ def generation_prompt(
         f"- {section}: about {count} words"
         for section, count in section_targets.items()
     )
+    prompt_pack = compact_research_pack_for_prompt(pack)
     return f"""
 You are SynthPost Studio's local newsroom writer. Create a grounded section-based news script.
 Use only the supplied research pack. Do not fabricate quotes, statistics, names, dates, or attribution.
@@ -251,9 +300,13 @@ Approximate section word targets:
 Required tone: clear spoken delivery, no clickbait, separate facts from uncertainty.
 Required section types to use when appropriate: {", ".join(SECTION_ORDER)}.
 Every factual section must include claim_ids from the pack.
+For every section, return exactly two suggested_search_queries grounded in its linked claims:
+1. A still-image, diagram, or map query using concrete people, places, objects, and events.
+2. A primary-source video query using the exact event/person/location plus "official video", "raw footage", "B-roll", or "press footage". Do not request finished news coverage or broadcaster packages.
+Keep each query between 4 and 10 words. Avoid abstract searches such as "benefits", "future plans", "advancements", or "latest updates" unless paired with a concrete subject and location.
 
 Research pack JSON:
-{json.dumps(pack, ensure_ascii=True)}
+{json.dumps(prompt_pack, ensure_ascii=True)}
 """.strip()
 
 
@@ -280,6 +333,179 @@ def enforce_target_duration(
         script.warnings.append(msg)
         return script
     raise ValueError(msg)
+
+
+def _long_form_section_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": [
+            "text",
+            "claim_ids",
+            "suggested_visual_types",
+            "suggested_search_queries",
+            "suggested_template_ids",
+        ],
+        "properties": {
+            "text": {"type": "string"},
+            "claim_ids": {"type": "array", "items": {"type": "string"}},
+            "suggested_visual_types": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "suggested_search_queries": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "suggested_template_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+    }
+
+
+def _long_form_base_section(
+    outline: ScriptDocument, section_type: str
+) -> ScriptSection:
+    by_type = {section.section_type: section for section in outline.sections}
+    if section_type in by_type:
+        return by_type[section_type]
+    fallback_types = {
+        "intro": ["cold_open", "context"],
+        "stakes": ["why_it_matters", "key_developments"],
+        "outro": ["conclusion"],
+    }
+    for fallback_type in fallback_types.get(section_type, []):
+        if fallback_type in by_type:
+            return by_type[fallback_type]
+    return outline.sections[min(len(outline.sections) - 1, 0)]
+
+
+def _validate_long_form_section(
+    raw: dict[str, Any],
+    *,
+    section_type: str,
+    index: int,
+    target_words: int,
+    valid_claim_ids: set[str],
+) -> ScriptSection:
+    text = " ".join(str(raw.get("text") or "").split()).strip()
+    word_count = len(text.split())
+    lower = max(45, round(target_words * 0.72))
+    upper = round(target_words * 1.35)
+    if word_count < lower or word_count > upper:
+        raise ValueError(
+            f"{section_type} must contain {lower}-{upper} words; got {word_count}"
+        )
+    claim_ids = [
+        str(value)
+        for value in raw.get("claim_ids", [])
+        if str(value) in valid_claim_ids
+    ]
+    if not claim_ids and section_type != "outro":
+        raise ValueError(f"{section_type} must link at least one valid claim_id")
+    queries = [
+        " ".join(str(value).split())
+        for value in raw.get("suggested_search_queries", [])
+        if str(value).strip()
+    ]
+    if len(queries) != 2:
+        raise ValueError(f"{section_type} must return exactly two search queries")
+    return ScriptSection(
+        section_id=section_id(section_type, index),
+        section_type=section_type,  # type: ignore[arg-type]
+        text=text,
+        estimated_duration_seconds=estimate_duration(text),
+        claim_ids=list(dict.fromkeys(claim_ids)),
+        suggested_visual_types=[
+            str(value)
+            for value in raw.get("suggested_visual_types", ["context"])
+        ],
+        suggested_search_queries=queries,
+        suggested_template_ids=[
+            str(value)
+            for value in raw.get(
+                "suggested_template_ids", ["split_anchor_visual"]
+            )
+        ],
+        approval_status=ApprovalStatus.review,
+    )
+
+
+def expand_long_form_script(
+    provider,
+    outline: ScriptDocument,
+    pack: dict[str, Any],
+    *,
+    target_duration_seconds: int,
+) -> tuple[ScriptDocument, int]:
+    targets = section_word_targets(target_duration_seconds)
+    compact_pack = compact_research_pack_for_prompt(pack)
+    valid_claim_ids = {
+        str(claim.get("claim_id"))
+        for claim in compact_pack.get("claims", [])
+        if claim.get("claim_id")
+    }
+    sections: list[ScriptSection] = []
+    attempt_count = 0
+    for index, (section_type, target_words) in enumerate(targets.items(), start=1):
+        base = _long_form_base_section(outline, section_type)
+        payload = {
+            "headline": outline.headline,
+            "section_type": section_type,
+            "target_words": target_words,
+            "base_outline_text": base.text,
+            "base_claim_ids": base.claim_ids,
+            "research": compact_pack,
+        }
+        prompt = f"""
+You are performing a long-form section expansion for SynthPost Studio.
+Write only this one section of a grounded spoken-news script.
+
+Section type: {section_type}
+Exact target: approximately {target_words} words.
+Use only facts supported by the supplied claims/evidence. Do not invent or
+generalize beyond them. Develop chronology, explanation, practical implications,
+caveats, and transitions appropriate to this section without repeating the base
+draft sentence-by-sentence. Use natural paragraphs, not bullets.
+
+Return exactly two grounded visual queries: first a concrete still/map/diagram;
+second an official primary-source video/raw-footage/B-roll query. Never request a
+finished broadcaster news package.
+
+Return only JSON matching this schema:
+{json.dumps(_long_form_section_schema())}
+
+INPUT JSON:
+{json.dumps(payload, ensure_ascii=True)}
+""".strip()
+        section, attempts = structured_generate(
+            provider,
+            prompt,
+            _long_form_section_schema(),
+            lambda raw, st=section_type, idx=index, tw=target_words: (
+                _validate_long_form_section(
+                    raw,
+                    section_type=st,
+                    index=idx,
+                    target_words=tw,
+                    valid_claim_ids=valid_claim_ids,
+                )
+            ),
+            max_retries=2,
+        )
+        sections.append(section)
+        attempt_count += len(attempts)
+    expanded = outline.model_copy(deep=True)
+    expanded.script_id = new_id("script")
+    expanded.sections = sections
+    expanded.estimated_duration_seconds = round(
+        sum(section.estimated_duration_seconds for section in sections), 2
+    )
+    expanded.status = ScriptStatus.review
+    expanded.created_at = now_iso()
+    expanded.updated_at = expanded.created_at
+    return expanded, attempt_count
 
 
 def _generate_with_provider(
@@ -326,15 +552,33 @@ def generate_script(
         provider,
         generation_prompt(pack, target_duration_seconds=target_duration_seconds),
         script_schema(),
-        lambda raw: enforce_target_duration(
-            script_from_llm_json(story_id, raw, pack), target_duration_seconds
-        ),
-        max_retries=3,
+        lambda raw: script_from_llm_json(story_id, raw, pack),
+        max_retries=2,
     )
+    expansion_attempts = 0
+    tolerance = duration_tolerance_seconds(target_duration_seconds)
+    if (
+        target_duration_seconds >= 240
+        and value.estimated_duration_seconds < target_duration_seconds - tolerance
+    ):
+        value, expansion_attempts = expand_long_form_script(
+            selected_provider,
+            value,
+            pack,
+            target_duration_seconds=target_duration_seconds,
+        )
+    value = enforce_target_duration(value, target_duration_seconds)
     generation_warnings = [
         f"llm_provider={selected_provider.name}",
         f"structured_attempts={len(attempts)}",
     ]
+    if expansion_attempts:
+        generation_warnings.extend(
+            [
+                "long_form_chunked_expansion=true",
+                f"long_form_expansion_attempts={expansion_attempts}",
+            ]
+        )
     model = getattr(selected_provider, "last_model", None)
     if model:
         generation_warnings.append(f"llm_model={model}")
@@ -350,7 +594,25 @@ def generate_script(
 def save_manual_script(
     repository, story_id: str, headline: str, text: str, *, category: str = "manual"
 ) -> ScriptDocument:
+    previous = repository.latest_script(story_id)
     script = split_manual_script(story_id, headline, text, category=category)
+    if previous:
+        # Editing narration in Studio should not sever the research and visual
+        # provenance produced by the structured-generation pass. Paragraphs map
+        # one-to-one to sections in the editor, so carry section metadata forward
+        # by position while deliberately resetting approval to review.
+        if category == "manual":
+            script.category = previous.category
+        script.source_ids = list(previous.source_ids)
+        script.warnings = list(previous.warnings)
+        for edited, original in zip(script.sections, previous.sections, strict=False):
+            edited.section_id = original.section_id
+            edited.section_type = original.section_type
+            edited.claim_ids = list(original.claim_ids)
+            edited.suggested_visual_types = list(original.suggested_visual_types)
+            edited.suggested_search_queries = list(original.suggested_search_queries)
+            edited.suggested_template_ids = list(original.suggested_template_ids)
+            edited.editorial_notes = list(original.editorial_notes)
     saved = repository.save_script(script)
     candidate = repository.candidate_for_story(story_id)
     if candidate.workflow_state in {

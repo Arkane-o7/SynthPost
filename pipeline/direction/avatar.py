@@ -1082,7 +1082,6 @@ def run_browser_avatar_engine(
     audio_path = resolve_engine_path(str(job.get("audio_path", "")), engine_dir)
     viseme_path = resolve_engine_path(str(job.get("viseme_path", "")), engine_dir)
     initial_inputs: list[str | Path] = [
-        resolve_project_path(story_json_path),
         job_path,
         audio_path,
         viseme_path,
@@ -1139,7 +1138,6 @@ def run_browser_avatar_engine(
     update_browser_direction_after_prepare(story_json_path, job, prepared)
     output_path = resolve_project_path(avatar_job_output_path(job))
     inputs: list[str | Path] = [
-        resolve_project_path(story_json_path),
         job_path,
         prepared["audio_path"],
         prepared["viseme_path"],

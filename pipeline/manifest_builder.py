@@ -9,6 +9,8 @@ from pipeline.artifacts import (
 )
 from pipeline.models import (
     ArtifactRecord,
+    ContentRole,
+    MediaType,
     ReviewStatus,
     RightsTier,
     TimelinePlan,
@@ -43,7 +45,10 @@ def remotion_visual_from_segment(segment) -> dict[str, Any] | None:
         "audio_mode": visual.audio_mode,
         "trim_start": visual.trim_start,
         "trim_end": visual.trim_end,
+        "has_audio": visual.has_audio,
         "attribution_text": visual.attribution_text,
+        "content_cleanliness_status": visual.content_cleanliness_status,
+        "approval_blockers": visual.approval_blockers,
     }
 
 
@@ -57,6 +62,66 @@ def renderer_timeline(plan: TimelinePlan) -> dict[str, Any]:
         else None,
         "segments": [segment.model_dump(mode="json") for segment in plan.segments],
     }
+
+
+def hydrate_timeline_visuals(
+    plan: TimelinePlan, visuals: list[Any]
+) -> TimelinePlan:
+    """Refresh mutable asset metadata while preserving approved edit decisions.
+
+    Timeline structure and asset selection remain immutable after approval, but
+    an editor may still correct attribution or rights metadata on that selected
+    asset. Renderer manifests must use the current asset record rather than the
+    stale snapshot embedded when the timeline was first approved.
+    """
+
+    hydrated = plan.model_copy(deep=True)
+    by_id = {visual.asset_id: visual for visual in visuals}
+    for segment in hydrated.segments:
+        asset_id = segment.visual.asset_id
+        current = by_id.get(asset_id) if asset_id else None
+        if current is None:
+            continue
+        if (
+            current.content_role == ContentRole.fallback
+            or current.media_type == MediaType.fallback
+            or current.provider
+            in {"generated_visual_card", "synthpost_anchor_fallback"}
+        ):
+            segment.visual.asset_id = None
+            segment.visual.path = None
+            segment.visual.media_type = MediaType.fallback
+            segment.visual.content_role = ContentRole.fallback
+            segment.visual.source = "SynthPost"
+            segment.visual.source_url = None
+            segment.visual.attribution_text = ""
+            if segment.template.template_id not in {
+                "fullscreen_anchor",
+                "fallback_anchor",
+            }:
+                segment.template.template_id = "fallback_anchor"
+            segment.anchor.visible = True
+            segment.overlays.attribution = ""
+            segment.overlays.document_source = ""
+            continue
+        segment.visual.path = current.download_path
+        segment.visual.media_type = current.media_type
+        segment.visual.content_role = current.content_role
+        segment.visual.source = current.provider
+        segment.visual.source_url = current.source_url
+        segment.visual.rights_tier = current.rights_tier
+        segment.visual.review_status = current.review_status
+        segment.visual.trim_start = current.trim_start
+        segment.visual.trim_end = current.trim_end
+        if current.has_audio is not None:
+            segment.visual.has_audio = current.has_audio
+        segment.visual.attribution_text = current.attribution_text
+        segment.visual.content_cleanliness_status = current.content_cleanliness_status
+        segment.visual.approval_blockers = list(current.approval_blockers)
+        segment.overlays.attribution = current.attribution_text or ""
+        if segment.overlays.document_source:
+            segment.overlays.document_source = current.attribution_text or ""
+    return hydrated
 
 
 def build_story_manifest(
@@ -78,6 +143,8 @@ def build_story_manifest(
         raise ValueError(
             "An approved timeline is required before building the renderer manifest"
         )
+    visuals = repository.list_visuals(story_id)
+    timeline = hydrate_timeline_visuals(timeline, visuals)
     assert_timeline_valid(timeline, require_approved=True, check_media_exists=True)
     artifacts = materialize_story_artifacts(repository, story_id)
     story_path = story_manifest_path(episode.episode_id, story_id)
@@ -87,7 +154,7 @@ def build_story_manifest(
     preview_path = story_path.with_name("preview.png")
     approved_visuals = [
         visual
-        for visual in repository.list_visuals(story_id)
+        for visual in visuals
         if visual.review_status in {ReviewStatus.approved, ReviewStatus.manual_approved}
         and visual.rights_tier != RightsTier.red
     ]
@@ -131,6 +198,7 @@ def build_story_manifest(
                 "rights_category": visual.rights_tier.value,
                 "manual_review_flag": visual.manual_review_flag,
                 "motion": visual.motion,
+                "has_audio": visual.has_audio,
             }
             for visual in approved_visuals
             if visual.download_path

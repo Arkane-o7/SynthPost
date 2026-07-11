@@ -39,6 +39,7 @@ from pipeline.timeline.planner import approve_timeline, generate_timeline
 from pipeline.timeline.templates import template_registry_json
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
+    analyze_visual,
     approve_visual,
     reject_visual,
     stage_local_visual,
@@ -622,6 +623,15 @@ def api_approve_visual(asset_id: str) -> dict[str, Any]:
         repository.close()
 
 
+@app.post("/api/visuals/{asset_id}/analyze")
+def api_analyze_visual(asset_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        return analyze_visual(repository, asset_id).model_dump(mode="json")
+    finally:
+        repository.close()
+
+
 @app.post("/api/visuals/{asset_id}/manual-approve")
 def api_manual_approve_visual(
     asset_id: str, patch: VisualPatch | None = None
@@ -866,6 +876,12 @@ def cancel_job(job_id: str) -> dict[str, Any]:
         job.status = JobStatus.cancelled
         job.stage = "cancelled"
         repository.upsert_job(job)
+        if job.job_type == "script_generate" and job.story_id:
+            candidate = repository.candidate_for_story(job.story_id)
+            if candidate.workflow_state == StoryWorkflowState.script_generating:
+                repository.transition_story(
+                    job.story_id, StoryWorkflowState.research_ready
+                )
         return job.model_dump(mode="json")
     finally:
         repository.close()
@@ -906,7 +922,7 @@ def job_logs(job_id: str) -> Response:
         repository.close()
 
 
-@app.get("/api/jobs/events")
+@app.get("/api/job-events")
 def job_events() -> StreamingResponse:
     def stream():
         import time
