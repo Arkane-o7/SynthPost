@@ -150,7 +150,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Generate or write a script",
         description:
-          "Use Ollama to auto-generate a broadcast script, or write one manually from the research pack.",
+          "Use the configured hosted AI provider to generate a broadcast script, or write one manually from the research pack.",
         ctaLabel: "Generate Script",
         ctaType: "api",
         stageKey: "script",
@@ -160,7 +160,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Script generation is running",
         description:
-          "SynthPost is waiting for the structured script generator. If Ollama is offline, open Script and write manually or retry after starting Ollama.",
+          "SynthPost is waiting for the hosted structured script generator. Provider failures are reported directly and never fall back to a local model.",
         ctaLabel: "Open Script",
         ctaType: "navigate",
         stageKey: "script",
@@ -178,7 +178,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Add and review visuals",
         description:
-          "Search the local drop folder, upload files, or stage visuals. Review rights tiers and approve each one.",
+          "Search this episode's isolated media inbox, upload files, or stage visuals. Review rights tiers and approve each one.",
         ctaLabel: "Open Visuals",
         ctaType: "navigate",
         stageKey: "visuals",
@@ -187,7 +187,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Visual search is running",
         description:
-          "The worker is scanning/staging visuals. Watch Active Jobs, then review rights when candidates appear.",
+          "The worker is scanning this episode's media inbox and web sources. Watch Active Jobs, then review rights when candidates appear.",
         ctaLabel: "Open Visuals",
         ctaType: "navigate",
         stageKey: "visuals",

@@ -292,25 +292,24 @@ Implemented providers:
 
 ### LLM
 
-- Ollama provider using `/api/generate` with JSON format
-- Deterministic mock provider for tests/smoke demos
+- Hosted Groq and Gemini providers with schema-constrained JSON output
+- Optional explicit hosted-only failover from Groq to Gemini
+- Deterministic mock provider restricted to tests/smoke demos
 
 Environment variables:
 
 ```bash
-SYNTHPOST_LLM_PROVIDER=ollama|mock
-SYNTHPOST_OLLAMA_BASE_URL=http://127.0.0.1:11434
-SYNTHPOST_OLLAMA_MODEL=gemma4:26b
-SYNTHPOST_OLLAMA_FALLBACK_MODELS=gemma4:e2b-mlx
-SYNTHPOST_OLLAMA_TIMEOUT=240
-SYNTHPOST_OLLAMA_TEMPERATURE=0.2
-SYNTHPOST_OLLAMA_CONTEXT_SIZE=8192
+SYNTHPOST_LLM_PROVIDER=groq|gemini|hosted_fallback
+GROQ_API_KEY=...
+SYNTHPOST_GROQ_MODEL=openai/gpt-oss-120b
+GEMINI_API_KEY=...
+SYNTHPOST_GEMINI_MODEL=gemini-3.5-flash
 ```
 
 ### Visuals
 
 - Local upload/stage path
-- Local drop folder via `SYNTHPOST_MEDIA_DROP_DIR`
+- Project/episode-isolated media inbox at `projects/{project_id}/episodes/{episode_id}/media_inbox`
 - ffprobe metadata summary where available
 - thumbnail generation for images and videos
 

@@ -38,7 +38,7 @@ The output has a consistent anchor/visual split, full lower-third headline, rest
 
 1. **SearXNG research and visuals** — added a shared private SearXNG client, news research expansion, image/video discovery, settings, runtime configuration, and UI visibility.
 2. **Missing/stale Studio job updates** — moved the SSE stream away from the shadowed dynamic jobs route.
-3. **Local LLM generation failures** — restored Ollama, accepted reasoning-model JSON in `thinking`, compacted oversized prompts, and repaired short-form word allocation.
+3. **LLM generation failures** — hardened hosted structured generation, compacted oversized prompts, repaired short-form word allocation, and later removed local production providers entirely.
 4. **Human script edits losing provenance** — manual saves now retain section identity, claim/source links, visual queries, and editorial metadata.
 5. **Uneven visual coverage** — queries are allocated round-robin across sections; every section receives a deterministic local fallback.
 6. **Poor visual relevance and duplicate assets** — added lexical relevance filtering and deterministic local asset IDs.
@@ -58,10 +58,12 @@ The output has a consistent anchor/visual split, full lower-third headline, rest
 20. **Low-resolution and portrait visual candidates** — added AI landscape/1080p direction, strict `yt-dlp` format selection, post-download dimension probing, approval/timeline broadcast-fit gates, and deeper searching past rejected media.
 21. **Generic local media contaminating every section** — unscoped drop-folder assets now remain unassigned until an editor or source integration maps them instead of being attached to all script sections.
 22. **Competing broadcaster packages passing technical checks** — added primary-source AI queries, channel/uploader metadata preflight, quarantine paths, seven-frame OCR/contact-sheet analysis, structured AI cleanliness decisions, Studio evidence, and fail-closed approval/timeline enforcement.
+23. **Local LLM quality ceiling for long-form scripts** — removed the local production provider, all of its configuration/UI/documentation paths, and implicit provider selection; production now permits Groq, Gemini, or explicit hosted-only Groq→Gemini failover.
+24. **Groq Cloudflare 1010 rejection** — added an explicit SynthPost application user-agent and JSON Accept header; independent live schema calls now pass on both Groq and Gemini.
 
 ## Verification
 
-- 56 Python tests passed.
+- 60 Python tests passed.
 - Studio TypeScript compilation and Vite production build passed.
 - Remotion compositor TypeScript typecheck passed.
 - Final video/audio streams were verified with `ffprobe`.

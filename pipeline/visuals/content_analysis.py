@@ -494,7 +494,15 @@ def analyze_media_cleanliness(
     else:
         status = "needs_review"
     if status != "passed" and not blockers:
-        blockers.append("content cleanliness scan did not produce a pass decision")
+        decision_reason = next(
+            (
+                str(reason).strip()
+                for reason in ai_result.get("reasons", [])
+                if str(reason).strip()
+            ),
+            "classifier returned needs_review",
+        )
+        blockers.append(f"cleanliness review required: {decision_reason}")
     if is_video and source.source_class == "unknown":
         blockers.append(
             "video source identity is not an approved primary, licensed, or user-owned source"

@@ -9,7 +9,7 @@ SynthPost Studio is a local-first newsroom production editor built around the re
 - Store workflow state in SQLite and reproducible artifacts on disk.
 - Treat AI output as suggestions, never approvals.
 - Render only from approved scripts, approved visuals, and approved timelines.
-- Keep operation local on macOS: Python, FastAPI, SQLite, React/Vite, Ollama, Remotion, Avatar Engine, FFmpeg.
+- Keep the newsroom application local on macOS while using explicitly configured hosted AI providers for production generation.
 
 ## Major directories
 
@@ -24,10 +24,15 @@ pipeline/
   db/                                   SQLite migration + repository layer
   discovery/                            Source seeds, RSS/Atom discovery, ranking
   research/                             Source extraction and research-pack builder
-  llm/                                  Ollama/mock structured-generation providers
+  llm/                                  Hosted Groq/Gemini structured-generation providers
   scripts/                              Script generation, revisions, grounding checks
   visuals/                              Local visual provider and rights review
   timeline/                             Template registry, draft planner, validator
+
+projects/<project_id>/episodes/<episode_id>/media_inbox/
+                                        Editor-managed local media isolated to one
+                                        production; imports and browser uploads are
+                                        copied here before analysis.
   jobs/                                 SQLite-backed local worker
   api/                                  FastAPI backend
   manifest_builder.py                   Approved state → renderer story.json
@@ -151,8 +156,9 @@ Research is deterministic first:
 
 Script generation uses a provider abstraction:
 
-- `OllamaProvider` for local production generation.
-- `MockProvider` for deterministic tests/offline demos.
+- `GroqProvider` and `GeminiProvider` for production generation.
+- `HostedFallbackProvider` only when hosted failover is explicitly configured.
+- `MockProvider` for deterministic automated tests and smoke demos only.
 
 Structured stages request JSON, parse it, validate it into Pydantic models, retry on malformed output, and store warnings.
 

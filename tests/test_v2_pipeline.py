@@ -45,7 +45,11 @@ from pipeline.scripts.generation import (
     section_word_targets,
 )
 from pipeline.llm.providers import MockProvider
-from pipeline.storage import PROJECT_ROOT
+from pipeline.storage import (
+    PROJECT_ROOT,
+    episode_media_inbox_dir,
+    resolve_project_path,
+)
 from pipeline.timeline.planner import (
     approved_visuals_by_section,
     approve_timeline,
@@ -62,6 +66,7 @@ from pipeline.visuals.providers import (
     _visual_search_queries,
     _visual_search_tasks,
     approve_visual,
+    search_episode_media_inbox,
     stage_local_visual,
 )
 from pipeline.workflow import assert_transition, can_transition
@@ -69,6 +74,149 @@ from assembly.stitch_episode import story_manifests
 
 
 class V2WorkflowAndPipelineTests(unittest.TestCase):
+    def test_episode_candidate_listing_excludes_global_and_other_episode_rows(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "candidate-isolation.sqlite3")
+        try:
+            project = repository.create_project("Candidate isolation")
+            episode_a = repository.create_episode(project.project_id, "Episode A")
+            episode_b = repository.create_episode(project.project_id, "Episode B")
+            candidate_a = add_manual_story(
+                repository,
+                title="Episode A story",
+                body="Only A should see this.",
+                episode_id=episode_a.episode_id,
+            )
+            repository.select_candidate(candidate_a.candidate_id, episode_a.episode_id)
+            suggested_a = add_manual_story(
+                repository,
+                title="Higher-scored Episode A suggestion",
+                body="This remains only a suggestion.",
+                episode_id=episode_a.episode_id,
+            )
+            suggested_a.final_score = 1.0
+            repository.upsert_candidate(suggested_a)
+            add_manual_story(
+                repository,
+                title="Episode B story",
+                body="Only B should see this.",
+                episode_id=episode_b.episode_id,
+            )
+            add_manual_story(
+                repository,
+                title="Unassigned story",
+                body="This is not attached to an episode.",
+            )
+
+            rows = repository.list_candidates(episode_id=episode_a.episode_id)
+
+            self.assertEqual(rows[0].candidate_id, candidate_a.candidate_id)
+            self.assertEqual(
+                {row.candidate_id for row in rows},
+                {candidate_a.candidate_id, suggested_a.candidate_id},
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_local_visual_search_is_isolated_by_project_and_episode(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "isolated-media.sqlite3")
+        project_dirs: list[Path] = []
+        try:
+            source = (
+                PROJECT_ROOT
+                / "compositor"
+                / "remotion_renderer"
+                / "public"
+                / "news"
+                / "datacenter-server-racks.jpg"
+            )
+            story_ids: list[str] = []
+            inboxes: list[Path] = []
+            for index in range(2):
+                project = repository.create_project(f"Isolated Project {index}")
+                episode = repository.create_episode(
+                    project.project_id, f"Episode {index}"
+                )
+                candidate = add_manual_story(
+                    repository,
+                    title=f"Isolated story {index}",
+                    body="A scoped media test story.",
+                    episode_id=episode.episode_id,
+                )
+                selected = repository.select_candidate(
+                    candidate.candidate_id, episode.episode_id
+                )
+                assert selected.story_id is not None
+                story_ids.append(selected.story_id)
+                inbox = episode_media_inbox_dir(
+                    project.project_id, episode.episode_id
+                )
+                inbox.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, inbox / f"episode-{index}.jpg")
+                inboxes.append(inbox)
+                project_dirs.append(PROJECT_ROOT / "projects" / project.project_id)
+
+            visuals = search_episode_media_inbox(
+                repository, story_ids[0], generate_fallback=False
+            )
+            self.assertEqual(len(visuals), 1)
+            self.assertTrue(visuals[0].source_url.endswith("episode-0.jpg"))
+            self.assertNotIn("episode-1.jpg", visuals[0].source_url)
+        finally:
+            repository.close()
+            temp.cleanup()
+            for directory in project_dirs:
+                shutil.rmtree(directory, ignore_errors=True)
+
+    def test_staging_external_media_imports_it_into_the_active_episode(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "media-import.sqlite3")
+        project_dir: Path | None = None
+        episode_id = ""
+        try:
+            project = repository.create_project("Scoped imports")
+            project_dir = PROJECT_ROOT / "projects" / project.project_id
+            episode = repository.create_episode(project.project_id, "One episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Scoped import story",
+                body="A local file should be copied into this episode only.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id is not None
+            external = (
+                PROJECT_ROOT
+                / "compositor"
+                / "remotion_renderer"
+                / "public"
+                / "news"
+                / "datacenter-server-racks.jpg"
+            )
+
+            visual = stage_local_visual(repository, selected.story_id, external)
+
+            inbox = episode_media_inbox_dir(project.project_id, episode.episode_id)
+            imported = resolve_project_path(visual.source_url or "")
+            self.assertTrue(imported.is_relative_to(inbox.resolve()))
+            self.assertTrue(imported.exists())
+            self.assertNotEqual(imported, external.resolve())
+            self.assertIn("datacenter-server-racks.jpg", visual.attribution_text)
+        finally:
+            repository.close()
+            temp.cleanup()
+            if project_dir is not None:
+                shutil.rmtree(project_dir, ignore_errors=True)
+            if episode_id:
+                shutil.rmtree(
+                    PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True
+                )
+
     def test_long_form_script_expands_in_section_sized_chunks(self) -> None:
         outline = ScriptDocument(
             story_id="story_long_form",
@@ -588,7 +736,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 headline="Generated headline",
                 category="transport",
                 source_ids=["doc_primary"],
-                warnings=["llm_provider=ollama"],
+                warnings=["llm_provider=groq"],
                 sections=[
                     ScriptSection(
                         section_id="sec_001_cold_open",
@@ -613,7 +761,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
 
             self.assertEqual(edited.category, "transport")
             self.assertEqual(edited.source_ids, ["doc_primary"])
-            self.assertEqual(edited.warnings, ["llm_provider=ollama"])
+            self.assertEqual(edited.warnings, ["llm_provider=groq"])
             self.assertEqual(edited.sections[0].section_id, "sec_001_cold_open")
             self.assertEqual(edited.sections[0].section_type, "cold_open")
             self.assertEqual(edited.sections[0].claim_ids, ["claim_launch"])
@@ -894,9 +1042,11 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "test.sqlite3")
         episode_id = ""
+        project_id = ""
         story_id = None
         try:
             project = repository.create_project("Unit Project")
+            project_id = project.project_id
             episode = repository.create_episode(
                 project.project_id, "Unit Episode", render_profile="preview"
             )
@@ -962,6 +1112,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
             shutil.rmtree(PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True)
+            shutil.rmtree(PROJECT_ROOT / "projects" / project_id, ignore_errors=True)
 
 
 if __name__ == "__main__":

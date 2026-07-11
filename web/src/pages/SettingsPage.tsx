@@ -24,12 +24,6 @@ export const SettingsPage: React.FC = () => (
               label: "Gemini temperature",
               env: "SYNTHPOST_GEMINI_TEMPERATURE",
             },
-            { label: "Ollama Base URL", env: "SYNTHPOST_OLLAMA_BASE_URL" },
-            { label: "Ollama primary model", env: "SYNTHPOST_OLLAMA_MODEL" },
-            {
-              label: "Ollama fallback models",
-              env: "SYNTHPOST_OLLAMA_FALLBACK_MODELS",
-            },
           ].map((item) => (
             <div key={item.env} className="row-between">
               <span className="text-muted" style={{ fontSize: 13 }}>

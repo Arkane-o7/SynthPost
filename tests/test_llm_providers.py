@@ -4,7 +4,23 @@ import json
 import unittest
 from unittest.mock import patch
 
-from pipeline.llm.providers import OllamaProvider
+from pipeline.llm.providers import (
+    GeminiProvider,
+    GroqProvider,
+    HostedFallbackProvider,
+    configured_provider,
+)
+
+
+class _Provider:
+    def __init__(self, name: str, *, error: Exception | None = None):
+        self.name = name
+        self.error = error
+
+    def generate_json(self, prompt, schema, *, temperature=None):
+        if self.error:
+            raise self.error
+        return {"provider": self.name}
 
 
 class _JSONResponse:
@@ -22,38 +38,48 @@ class _JSONResponse:
 
 
 class LLMProviderTests(unittest.TestCase):
-    def test_ollama_provider_sends_json_schema_and_parses_response(self) -> None:
-        response = _JSONResponse({"response": '{"ok": true}'})
-        provider = OllamaProvider(
-            base_url="http://127.0.0.1:11434",
-            model="unit-model",
-            context_size=8192,
+    def test_configured_provider_defaults_to_hosted_groq(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            provider = configured_provider()
+        self.assertIsInstance(provider, GroqProvider)
+
+    def test_configured_provider_supports_hosted_providers(self) -> None:
+        self.assertIsInstance(configured_provider("groq"), GroqProvider)
+        self.assertIsInstance(configured_provider("gemini"), GeminiProvider)
+        self.assertIsInstance(
+            configured_provider("hosted_fallback"), HostedFallbackProvider
         )
-        with patch(
+
+    def test_unsupported_provider_fails_instead_of_silently_falling_back(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported SYNTHPOST_LLM_PROVIDER"):
+            configured_provider("local-provider")
+
+    def test_explicit_hosted_fallback_never_uses_a_local_provider(self) -> None:
+        provider = HostedFallbackProvider(
+            _Provider("primary", error=RuntimeError("offline")),
+            _Provider("hosted-secondary"),
+        )
+        value = provider.generate_json("prompt", {"type": "object"})
+        self.assertEqual(value, {"provider": "hosted-secondary"})
+
+    def test_groq_client_sends_an_explicit_application_user_agent(self) -> None:
+        response = _JSONResponse(
+            {"choices": [{"message": {"content": '{"ok": true}'}}]}
+        )
+        with patch.dict("os.environ", {"GROQ_API_KEY": "unit-key"}), patch(
             "pipeline.llm.providers.urlopen", return_value=response
         ) as mocked_urlopen:
-            value = provider.generate_json(
-                "Return JSON", {"type": "object", "properties": {"ok": {"type": "boolean"}}}
-            )
-        request = mocked_urlopen.call_args.args[0]
-        payload = json.loads(request.data.decode("utf-8"))
-        self.assertEqual(value, {"ok": True})
-        self.assertEqual(payload["model"], "unit-model")
-        self.assertEqual(payload["format"]["type"], "object")
-        self.assertEqual(payload["options"]["num_ctx"], 8192)
-        self.assertEqual(provider.last_model, "unit-model")
-
-    def test_ollama_provider_accepts_reasoning_field_when_response_is_empty(self) -> None:
-        response = _JSONResponse(
-            {"response": "", "thinking": '{"ok": true}', "done": True}
-        )
-        provider = OllamaProvider(model="reasoning-model")
-        with patch("pipeline.llm.providers.urlopen", return_value=response):
-            value = provider.generate_json(
+            value = GroqProvider().generate_json(
                 "Return JSON",
                 {"type": "object", "properties": {"ok": {"type": "boolean"}}},
             )
+        request = mocked_urlopen.call_args.args[0]
+        self.assertEqual(mocked_urlopen.call_args.kwargs["timeout"], 45.0)
         self.assertEqual(value, {"ok": True})
+        self.assertEqual(
+            request.get_header("User-agent"),
+            "SynthPostStudio/2.0 hosted-llm-client",
+        )
 
 
 if __name__ == "__main__":

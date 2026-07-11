@@ -52,6 +52,19 @@ def episode_dir(episode_id: str) -> Path:
     return PROJECT_ROOT / "episodes" / episode_id
 
 
+def episode_media_inbox_dir(project_id: str, episode_id: str) -> Path:
+    """Editor-managed media inbox isolated to one project and episode."""
+
+    return (
+        PROJECT_ROOT
+        / "projects"
+        / project_id
+        / "episodes"
+        / episode_id
+        / "media_inbox"
+    )
+
+
 def story_dir(episode_id: str, story_id: str) -> Path:
     return episode_dir(episode_id) / "stories" / story_id
 

@@ -76,6 +76,15 @@ CHROMA_GREEN = "0x00ff00"
 H264_CRF = 20
 H264_PRESET = "fast"
 
+# Canvas capture writes one PNG per frame before muxing. Long-form 1080p jobs
+# therefore need substantially more temporary space than the final MP4.
+CANVAS_FRAME_ESTIMATED_BYTES = int(
+    os.environ.get("AVATAR_ENGINE_ESTIMATED_BYTES_PER_FRAME", "1250000")
+)
+MIN_RENDER_FREE_BYTES = int(
+    os.environ.get("AVATAR_ENGINE_MIN_RENDER_FREE_BYTES", str(5 * 1024**3))
+)
+
 
 # --------------------------------------------------------------------------- #
 # Renderer                                                                     #
@@ -130,6 +139,25 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
                 metadata={"avatar_validation": validation},
             )
         warnings: list[str] = list(validation.get("warnings", []))
+
+        duration_s = job.camera_duration or _estimate_duration(root / job.audio_path)
+        target_fps = job.camera_fps or 24
+        estimated_temp_bytes = max(
+            MIN_RENDER_FREE_BYTES,
+            int(duration_s * target_fps * CANVAS_FRAME_ESTIMATED_BYTES * 1.25),
+        )
+        free_bytes = shutil.disk_usage(root).free
+        if free_bytes < estimated_temp_bytes:
+            return AvatarRenderResult(
+                renderer=self.name,
+                status="fail",
+                error=(
+                    "Insufficient free disk space for long-form avatar capture: "
+                    f"need approximately {estimated_temp_bytes / 1024**3:.1f} GiB, "
+                    f"have {free_bytes / 1024**3:.1f} GiB. Clear "
+                    "avatar-engine/assets/temp/th_* render caches and retry."
+                ),
+            )
 
         # ------------------------------------------------------------------ #
         # 2.  Ensure web_avatar_runtime is built                              #
@@ -228,6 +256,12 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
             )
         finally:
             server.shutdown()
+
+        keep_failed_temp = os.environ.get(
+            "AVATAR_ENGINE_KEEP_FAILED_TEMP", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        if result.status == "pass" or not keep_failed_temp:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
         return result
 

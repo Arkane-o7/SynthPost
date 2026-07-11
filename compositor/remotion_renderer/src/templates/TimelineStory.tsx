@@ -38,7 +38,6 @@ const fallbackVisual: TimedVisual = {
   sourceLabel: "SYNTHPOST",
   contentRole: "fallback",
 };
-
 const segmentVisual = (segment: TimelineSegmentProps): TimedVisual =>
   segment.visual ?? fallbackVisual;
 const visualMuted = (segment: TimelineSegmentProps): boolean => {

@@ -231,7 +231,7 @@ def _is_approved_visual(visual: VisualCandidate) -> bool:
         "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
     ):
         eligible, _reason, _score = broadcast_media_fit(
-            visual.width, visual.height
+            visual.width, visual.height, visual.media_type
         )
         if not eligible:
             return False
@@ -420,10 +420,9 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         audio_mode = choose_audio_mode(template_id, render_visual)
         anchor = SegmentAnchor(
             visible=template_id != "fullscreen_news_visual",
-            speaking=(
-                template_id != "fullscreen_news_visual"
-                and audio_mode != AudioMode.source
-            ),
+            # Narration can continue while the anchor is off screen. Only an
+            # audible fullscreen source clip replaces the anchor voice.
+            speaking=audio_mode != AudioMode.source,
             camera="front_close"
             if template_id != "fullscreen_anchor"
             else "landscape_intro",

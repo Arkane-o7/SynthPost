@@ -26,52 +26,6 @@ class LLMProvider(Protocol):
 
 
 @dataclass
-class OllamaProvider:
-    base_url: str = os.environ.get(
-        "SYNTHPOST_OLLAMA_BASE_URL", "http://127.0.0.1:11434"
-    )
-    model: str = os.environ.get("SYNTHPOST_OLLAMA_MODEL", "gemma4:26b")
-    timeout: float = float(os.environ.get("SYNTHPOST_OLLAMA_TIMEOUT", "300"))
-    temperature: float = float(os.environ.get("SYNTHPOST_OLLAMA_TEMPERATURE", "0.2"))
-    context_size: int | None = (
-        int(os.environ["SYNTHPOST_OLLAMA_CONTEXT_SIZE"])
-        if os.environ.get("SYNTHPOST_OLLAMA_CONTEXT_SIZE")
-        else None
-    )
-    name: str = "ollama"
-    last_model: str | None = None
-
-    def generate_json(
-        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
-    ) -> dict[str, Any]:
-        options: dict[str, Any] = {
-            "temperature": self.temperature if temperature is None else temperature
-        }
-        if self.context_size:
-            options["num_ctx"] = self.context_size
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "format": schema,
-            "options": options,
-        }
-        self.last_model = self.model
-        request = Request(
-            self.base_url.rstrip("/") + "/api/generate",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urlopen(request, timeout=self.timeout) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        # Reasoning-capable Ollama models such as Qwen 3.5 may place a
-        # schema-constrained result in `thinking` and leave `response` empty.
-        text = data.get("response") or data.get("thinking") or ""
-        return parse_json_object(str(text))
-
-
-@dataclass
 class GeminiProvider:
     model: str = os.environ.get("SYNTHPOST_GEMINI_MODEL", "gemini-3.5-flash")
     temperature: float = float(os.environ.get("SYNTHPOST_GEMINI_TEMPERATURE", "0.2"))
@@ -114,6 +68,9 @@ class GroqProvider:
     temperature: float = float(os.environ.get("SYNTHPOST_GROQ_TEMPERATURE", "0.2"))
     name: str = "groq"
     last_model: str | None = None
+    timeout_seconds: float = float(
+        os.environ.get("SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS", "45")
+    )
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
@@ -128,6 +85,8 @@ class GroqProvider:
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "SynthPostStudio/2.0 hosted-llm-client",
         }
 
         data = {
@@ -153,7 +112,7 @@ class GroqProvider:
             method="POST",
         )
 
-        with urlopen(req) as response:
+        with urlopen(req, timeout=self.timeout_seconds) as response:
             result = json.loads(response.read().decode("utf-8"))
 
         content = result["choices"][0]["message"]["content"]
@@ -161,18 +120,21 @@ class GroqProvider:
 
 
 @dataclass
-class FallbackProvider:
+class HostedFallbackProvider:
     primary: LLMProvider
     fallback: LLMProvider
-    name: str = "fallback"
+    name: str = "groq_then_gemini"
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]:
         try:
             return self.primary.generate_json(prompt, schema, temperature=temperature)
-        except Exception as e:
-            print(f"[FallbackProvider] Primary {self.primary.name} failed: {e}. Falling back to {self.fallback.name}...")
+        except Exception as exc:
+            print(
+                f"[HostedFallbackProvider] Primary {self.primary.name} failed: "
+                f"{exc}. Falling back to hosted provider {self.fallback.name}."
+            )
             return self.fallback.generate_json(prompt, schema, temperature=temperature)
 
 
@@ -229,7 +191,7 @@ class MockProvider:
                             f"{topic_words} {section['section_type']} editorial photo"
                         ),
                         "video_query": (
-                            f"{topic_words} {section['section_type']} news footage"
+                            f"{topic_words} {section['section_type']} official raw footage"
                         ),
                         "video_priority": section["section_type"]
                         in {"cold_open", "key_developments", "conclusion"},
@@ -274,19 +236,22 @@ class MockProvider:
         return {"ok": True}
 
 
-def configured_provider() -> LLMProvider:
-    provider = os.environ.get("SYNTHPOST_LLM_PROVIDER", "groq_with_fallback").strip().lower()
+def configured_provider(provider_name: str | None = None) -> LLMProvider:
+    provider = (
+        provider_name or os.environ.get("SYNTHPOST_LLM_PROVIDER", "groq")
+    ).strip().lower()
     if provider == "mock":
         return MockProvider()
-    if provider == "ollama":
-        return OllamaProvider()
     if provider == "gemini":
         return GeminiProvider()
     if provider == "groq":
         return GroqProvider()
-    if provider in {"groq_with_fallback", "fallback"}:
-        return FallbackProvider(GroqProvider(), GeminiProvider())
-    raise ValueError(f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}")
+    if provider in {"hosted_fallback", "groq_then_gemini"}:
+        return HostedFallbackProvider(GroqProvider(), GeminiProvider())
+    raise ValueError(
+        f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}. "
+        "Use groq, gemini, or the explicit hosted_fallback option."
+    )
 
 
 def parse_json_object(text: str) -> dict[str, Any]:

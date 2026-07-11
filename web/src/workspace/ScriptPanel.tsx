@@ -148,22 +148,6 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               >
                 {isGenerating ? "Generating…" : "Generate with AI"}
               </button>
-              <button
-                className="btn-lg"
-                disabled={isGenerating}
-                title="Dev fallback only. This creates a mock script when Ollama is not running."
-                onClick={() =>
-                  act(() =>
-                    api.generateScript(
-                      storyId,
-                      "mock",
-                      normalizedTargetDuration,
-                    ),
-                  )
-                }
-              >
-                Generate Dev Fallback Draft
-              </button>
             </div>
           </div>
         </EmptyState>
@@ -172,16 +156,15 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           <div className="validation-msg validation-warning">
             Script generation failed:{" "}
             {latestScriptJob.error || latestScriptJob.stage}. Adjust the target
-            length, retry, use the offline draft, or write the script manually
-            below.
+            length, retry the hosted provider, or write the script manually below.
           </div>
         )}
 
         <div className="card stack">
           <h2>Write Script Manually</h2>
           <p className="text-muted" style={{ fontSize: 13 }}>
-            This bypasses the LLM and moves the story into script review, so
-            production can continue even if Ollama is offline.
+            This bypasses AI generation and moves the story into script review.
+            Use it when an editor deliberately wants to author the script.
           </p>
           <label>
             Headline

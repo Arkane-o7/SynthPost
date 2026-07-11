@@ -329,7 +329,10 @@ class Repository:
         clauses: list[str] = []
         params: list[Any] = []
         if episode_id:
-            clauses.append("(episode_id = ? OR episode_id IS NULL)")
+            # Episode workspaces are isolation boundaries. Global/unassigned
+            # inbox candidates must not crowd out the selected episode's story
+            # after enough discoveries have accumulated.
+            clauses.append("episode_id = ?")
             params.append(episode_id)
         if status:
             clauses.append("selection_status = ?")
@@ -347,7 +350,9 @@ class Repository:
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         params.append(limit)
         rows = self._many(
-            f"SELECT data FROM story_candidates{where} ORDER BY final_score DESC, discovered_at DESC LIMIT ?",
+            f"SELECT data FROM story_candidates{where} "
+            "ORDER BY CASE WHEN selection_status = 'selected' THEN 0 ELSE 1 END, "
+            "final_score DESC, discovered_at DESC LIMIT ?",
             params,
         )
         return [StoryCandidate.model_validate(data) for data in rows_data(rows)]

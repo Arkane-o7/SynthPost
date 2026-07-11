@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -34,13 +36,19 @@ from pipeline.models import (
     TimelineStatus,
 )
 from pipeline.scripts.generation import approve_script, save_manual_script
-from pipeline.storage import PROJECT_ROOT, project_relative, resolve_project_path
+from pipeline.storage import (
+    PROJECT_ROOT,
+    episode_media_inbox_dir,
+    project_relative,
+    resolve_project_path,
+)
 from pipeline.timeline.planner import approve_timeline, generate_timeline
 from pipeline.timeline.templates import template_registry_json
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
     analyze_visual,
     approve_visual,
+    download_visual,
     reject_visual,
     stage_local_visual,
     update_visual,
@@ -553,6 +561,22 @@ def list_visuals(story_id: str) -> list[dict[str, Any]]:
         repository.close()
 
 
+@app.get("/api/stories/{story_id}/visuals/local-folder")
+def local_visual_folder(story_id: str) -> dict[str, str]:
+    repository = repo()
+    try:
+        episode = repository.episode_for_story(story_id)
+        folder = episode_media_inbox_dir(episode.project_id, episode.episode_id)
+        folder.mkdir(parents=True, exist_ok=True)
+        return {
+            "project_id": episode.project_id,
+            "episode_id": episode.episode_id,
+            "path": project_relative(folder),
+        }
+    finally:
+        repository.close()
+
+
 @app.post("/api/stories/{story_id}/visuals/stage-local")
 def stage_visual(story_id: str, payload: VisualStageRequest) -> dict[str, Any]:
     repository = repo()
@@ -581,15 +605,10 @@ async def upload_visual_bytes(
     repository = repo()
     try:
         episode_id = repository.episode_for_story(story_id).episode_id
-        upload_dir = (
-            PROJECT_ROOT
-            / "episodes"
-            / episode_id
-            / "stories"
-            / story_id
-            / "visuals"
-            / "uploads"
-        )
+        episode = repository.get_episode(episode_id)
+        upload_dir = episode_media_inbox_dir(
+            episode.project_id, episode_id
+        ) / "uploads" / story_id
         upload_dir.mkdir(parents=True, exist_ok=True)
         safe = (
             "".join(
@@ -628,6 +647,15 @@ def api_analyze_visual(asset_id: str) -> dict[str, Any]:
     repository = repo()
     try:
         return analyze_visual(repository, asset_id).model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.post("/api/visuals/{asset_id}/download")
+def api_download_visual(asset_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        return download_visual(repository, asset_id).model_dump(mode="json")
     finally:
         repository.close()
 
@@ -831,6 +859,30 @@ def api_assemble_episode(episode_id: str, payload: RenderRequest) -> dict[str, A
             payload=payload.model_dump(),
         )
         return job.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.post("/api/episodes/{episode_id}/reveal-output")
+def api_reveal_episode_output(episode_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        episode = repository.get_episode(episode_id)
+        if not episode.final_output_path:
+            raise HTTPException(status_code=404, detail="Episode has no final output yet")
+        output = resolve_project_path(episode.final_output_path).resolve()
+        project_root = PROJECT_ROOT.resolve()
+        if not output.is_relative_to(project_root):
+            raise HTTPException(status_code=400, detail="Final output is outside the project")
+        if not output.is_file():
+            raise HTTPException(status_code=404, detail="Final output file is missing")
+        if sys.platform != "darwin":
+            raise HTTPException(status_code=501, detail="Show in Finder is only available on macOS")
+        try:
+            subprocess.run(["open", "-R", str(output)], check=True)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise HTTPException(status_code=500, detail="Finder could not reveal the output") from exc
+        return {"revealed": True, "path": project_relative(output)}
     finally:
         repository.close()
 

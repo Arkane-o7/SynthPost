@@ -1,0 +1,36 @@
+flowchart TD
+  A["Approved script"] --> B["For each script section"]
+  B --> C["Create section-specific image and video queries"]
+  C --> D["Search through SearXNG"]
+  D --> E["Download or retain as research lead"]
+  E --> F["Check dimensions and aspect ratio"]
+  F --> G["Run source and content-cleanliness analysis"]
+  G --> H["Store VisualCandidate with section_ids, role, scores, paths, and review state"]
+
+  H --> I["approved_visuals_by_section"]
+  I --> J{"Passes every eligibility gate?"}
+  J -- "No" --> K["Exclude from timeline selection"]
+  J -- "Yes" --> L["Rank by real-vs-fallback, review state, relevance plus quality"]
+  L --> M["First eligible candidate wins for each linked section"]
+  M --> N["Distribute unassigned approved uploads across empty sections"]
+
+  B --> O["Timeline segment loop"]
+  N --> O
+  K --> O
+  O --> P{"Eligible visual exists?"}
+  P -- "No" --> Q["Opening/editorial beat: fullscreen_anchor; otherwise fallback_anchor"]
+  P -- "Yes" --> R["Score split_anchor_visual, fullscreen_news_visual, fullscreen_anchor"]
+  R --> S["Apply section-type, media-role, quality, aspect-ratio, word-count, position, and rhythm boosts"]
+  S --> T["Choose highest score"]
+  T --> U{"Chosen template uses a visual?"}
+  U -- "No" --> V["Discard selected asset from this segment and emit SynthPost fallback"]
+  U -- "Yes" --> W["Snapshot asset into SegmentVisual"]
+  Q --> X["Build segment timing, anchor, audio, overlays, and decision metadata"]
+  V --> X
+  W --> X
+
+  X --> Y["Validate template compatibility, approvals, media path, audio, and timing"]
+  Y --> Z["Editor approves timeline"]
+  Z --> AA["Manifest hydrates current metadata without changing approved selection"]
+  AA --> AB["Remotion stages media and maps template_id to React layout"]
+  AB --> AC["Render each segment as a timed Sequence"]

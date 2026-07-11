@@ -23,9 +23,9 @@ The current V2 implementation supports a real local vertical slice:
 3. Discover RSS/Atom candidates or add a custom topic, URL, or manual story.
 4. Select a story into an episode.
 5. Build a multi-source research pack from the lead story plus related SearXNG news coverage.
-6. Generate a script via local Ollama or deterministic mock provider.
+6. Generate a script via a configured hosted Groq or Gemini provider.
 7. Save manual script revisions and approve the script.
-8. Search local media and SearXNG image/video sources, or upload media manually.
+8. Search the active episode's isolated media inbox and SearXNG image/video sources, or upload media manually.
 9. Approve or reject visuals with rights checks.
 10. Generate a multi-template timeline.
 11. Edit/reorder timeline segments in SynthPost Studio.
@@ -46,7 +46,7 @@ pipeline/discovery/                Source registry, RSS/Atom discovery, ranking
 pipeline/search/                   SearXNG JSON client and result normalization
 pipeline/news/                     Related-news coverage discovery
 pipeline/research/                 Multi-source extraction and research-pack generation
-pipeline/llm/                      Ollama/mock structured-generation providers
+pipeline/llm/                      Hosted Groq/Gemini structured-generation providers
 pipeline/scripts/                  Script generation/editing/grounding checks
 pipeline/visuals/                  Local + SearXNG visual discovery, download, and rights review
 pipeline/timeline/                 Template registry, timeline generation, validation
@@ -257,20 +257,23 @@ Assemble all story clips in an episode:
 python3 assembly/stitch_episode.py <episode_id> --render-profile production
 ```
 
-## Ollama configuration
+## Hosted LLM configuration
 
-Structured local generation uses Ollama by default:
+Production generation uses an explicitly selected hosted provider:
 
 ```bash
-SYNTHPOST_LLM_PROVIDER=ollama
-SYNTHPOST_OLLAMA_BASE_URL=http://127.0.0.1:11434
-SYNTHPOST_OLLAMA_MODEL=gemma4:26b
-SYNTHPOST_OLLAMA_FALLBACK_MODELS=gemma4:e2b-mlx
-SYNTHPOST_OLLAMA_TIMEOUT=240
-SYNTHPOST_OLLAMA_TEMPERATURE=0.2
+SYNTHPOST_LLM_PROVIDER=groq
+GROQ_API_KEY=replace_with_your_groq_api_key
+SYNTHPOST_GROQ_MODEL=openai/gpt-oss-120b
 ```
 
-For deterministic tests/demos:
+Gemini can be selected explicitly with `SYNTHPOST_LLM_PROVIDER=gemini`. An
+explicit `hosted_fallback` option uses Groq first and Gemini second; it never
+invokes a local model. Provider errors otherwise fail visibly. The deterministic
+mock provider is reserved for automated tests and smoke demos, not production
+script generation.
+
+For deterministic tests only:
 
 ```bash
 SYNTHPOST_LLM_PROVIDER=mock

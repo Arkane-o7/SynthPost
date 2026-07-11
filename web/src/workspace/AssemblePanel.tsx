@@ -119,8 +119,24 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         </div>
 
         {episode?.final_output_path && (
-          <div>
-            <h3>Production Output</h3>
+          <div className="assembly-output">
+            <div className="assembly-output-heading">
+              <div>
+                <div className="assembly-output-kicker">Assembly complete</div>
+                <h3>Production Output</h3>
+              </div>
+              <button
+                type="button"
+                className="btn-finder"
+                disabled={busy || !studio.selectedEpisodeId}
+                onClick={() =>
+                  act(() => api.revealEpisodeOutput(studio.selectedEpisodeId))
+                }
+              >
+                <span aria-hidden="true">⌖</span>
+                Show in Finder
+              </button>
+            </div>
             <div
               className="font-mono"
               style={{

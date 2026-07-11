@@ -48,7 +48,7 @@ Selected story:
 
 SearXNG expanded the lead article into a five-document pack using Indian Express, News18, India TV, CNBC-TV18, and an MSN lead. The sources converged on the Jind–Sonipat route, July 17 launch expectation, hydrogen fuel-cell technology, and the pilot-project framing.
 
-The first AI script job exposed two provider failures: Groq returned HTTP 403 and Gemini returned repeated 503 high-demand errors. The repository still documented Ollama as a supported local provider, but the current provider registry had accidentally removed its implementation. Restored the Ollama structured-JSON provider and selected the local `gemma4:31b-mlx` model for the production script.
+The first AI script job exposed two hosted-provider failures: Groq returned HTTP 403 and Gemini returned repeated 503 high-demand errors. A temporary local structured-generation path was used during the original run, but that path has since been fully retired; production now permits hosted Groq or Gemini only.
 
 The 31B model remained healthy on GPU but did not complete the oversized prompt after eleven minutes. Inspection found two pipeline problems rather than a model-quality problem:
 
@@ -57,7 +57,7 @@ The 31B model remained healthy on GPU but did not complete the oversized prompt 
 
 Fixed both issues by compacting the prompt to source metadata, claims, evidence, dates/numbers, and capped entities; and by using a six-section short-form pacing model whose word targets remain positive and sum to the requested duration. Switched runtime generation to local `qwen3.5:9b` for a better quality/latency balance. Also fixed script-job cancellation so the story returns from `script_generating` to `research_ready` cleanly.
 
-Qwen then returned schema-valid JSON in Ollama's `thinking` field while leaving `response` empty. The provider had discarded that field and reported a JSON parse error. Updated it to accept `response` or, for reasoning-capable models, `thinking`; added regression coverage for this Ollama response shape.
+A temporary reasoning provider then returned schema-valid JSON in a reasoning field while leaving its normal response empty. That local-provider compatibility work has since been removed with the hosted-only provider policy.
 
 The corrected local generation completed in 34 seconds. I edited the six-section narration in Studio to remove repetition, qualify the expected launch date, and add the operational questions that matter after the ceremony. The final draft is approximately 87 seconds. Studio's manual-save path initially erased claim IDs, source IDs, and visual queries, so it was fixed to preserve structured provenance and section identity across human revisions. The polished revision retained five research documents and its linked claims before browser approval.
 
@@ -215,3 +215,17 @@ Cleanliness states, source identity, channel metadata, detected brands, scan tim
 The two motivating clips were rescanned live. Mint was identified as the uploader and TOI as The Times of India. Both are now `rejected`, red-tier, and `blocked`; both lost their renderable paths while retaining quarantined files and seven-frame contact sheets. Studio exposes this evidence and disables approval. Full implementation documentation is in `docs/video-source-cleanliness.md`.
 
 Verification after the quarantine implementation: **56 Python tests passed**, the Studio production build passed, and the Remotion TypeScript check passed.
+
+### 19. Retire local production LLM providers
+
+Production script generation, visual keyword planning, and visual-cleanliness classification now use hosted providers only. The local provider implementation, environment variables, provider-selection aliases, tests, Settings entries, workflow copy, documentation, and Studio offline/mock draft button were removed. The active environment selects Groq with `openai/gpt-oss-120b`; Gemini remains an explicit hosted alternative. Optional failover is available only through the explicitly selected `hosted_fallback` mode, which runs Groq first and Gemini second.
+
+Unsupported provider names now fail with a configuration error. Script generation passes any explicit provider choice through the same hosted-only registry, and structured retries remain on the selected provider rather than silently switching to a local model. The deterministic mock provider remains code-level test/smoke infrastructure but is no longer offered by the production Studio UI.
+
+Verification after this change: **59 Python tests passed**, the Studio production build passed, the Remotion TypeScript check passed, and a repository-wide scan found no remaining references to the retired provider or its environment variables.
+
+### 20. Hosted AI API health check
+
+Minimal schema-constrained requests were sent independently to Groq and Gemini. Gemini succeeded with `gemini-2.5-flash` in 1.64 seconds. Groq initially returned Cloudflare Error 1010 because Python's default request fingerprint was blocked before authentication/model processing. The Groq client now sends an explicit SynthPost application user-agent and JSON Accept header; the same request then succeeded with `openai/gpt-oss-120b` in 0.83 seconds. A regression test preserves the required header.
+
+Final provider verification: both hosted APIs passed independently, **60 Python tests passed**, and the API/worker were restarted with the corrected Groq client.

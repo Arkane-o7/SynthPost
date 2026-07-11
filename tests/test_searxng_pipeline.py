@@ -12,6 +12,7 @@ from unittest.mock import patch
 from pipeline.db.repository import Repository
 from pipeline.discovery.discover import add_manual_story
 from pipeline.models import MediaType, SourceDocument
+from pipeline.news.discovery import discover_news
 from pipeline.research.extract import build_research_pack
 from pipeline.search.searxng_client import SearXNGResult, search
 from pipeline.storage import PROJECT_ROOT
@@ -24,6 +25,7 @@ from pipeline.visuals.providers import (
     _stage_searxng_result,
     approve_visual,
     broadcast_media_fit,
+    download_visual,
 )
 
 
@@ -145,7 +147,7 @@ class SearXNGPipelineTests(unittest.TestCase):
         finally:
             temp.cleanup()
 
-    def test_broadcaster_source_is_blocked_before_video_download(self) -> None:
+    def test_video_source_is_downloaded_for_editor_review(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "test.sqlite3")
         episode_id = ""
@@ -171,12 +173,26 @@ class SearXNGPipelineTests(unittest.TestCase):
                 category="videos",
                 source_domain="video.example",
             )
+            def fake_download(_url: str, stem: Path) -> Path:
+                path = stem.with_suffix(".mp4")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"broadcaster-review-clip")
+                return path
+
             with patch(
-                "pipeline.visuals.providers.probe_video_source",
-                return_value={"channel": "Mint", "channel_id": "mint-channel"},
+                "pipeline.visuals.providers._download_remote_video",
+                side_effect=fake_download,
+            ) as download, patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
             ), patch(
-                "pipeline.visuals.providers._download_remote_video"
-            ) as download:
+                "pipeline.visuals.providers.media_metadata",
+                return_value={
+                    "duration_seconds": 30.0,
+                    "width": 1920,
+                    "height": 1080,
+                    "audio_codec": "aac",
+                },
+            ):
                 visual = _stage_searxng_result(
                     repository,
                     story_id,
@@ -188,12 +204,13 @@ class SearXNGPipelineTests(unittest.TestCase):
                 )
 
             assert visual
-            download.assert_not_called()
-            self.assertEqual(visual.source_class, "news_broadcaster")
-            self.assertEqual(visual.content_cleanliness_status, "rejected")
-            self.assertEqual(visual.review_status.value, "blocked")
-            self.assertEqual(visual.rights_tier.value, "red")
-            self.assertIsNone(visual.download_path)
+            download.assert_called_once()
+            self.assertEqual(visual.source_class, "editor_review")
+            self.assertEqual(visual.content_cleanliness_status, "passed")
+            self.assertEqual(visual.review_status.value, "suggested")
+            self.assertEqual(visual.rights_tier.value, "yellow")
+            self.assertIsNotNone(visual.download_path)
+            self.assertIsNone(visual.quarantine_path)
         finally:
             repository.close()
             temp.cleanup()
@@ -204,14 +221,18 @@ class SearXNGPipelineTests(unittest.TestCase):
         fullscreen = broadcast_media_fit(1920, 1080)
         split = broadcast_media_fit(1920, 1280)
         portrait = broadcast_media_fit(1080, 1920)
+        relaxed_image = broadcast_media_fit(1600, 1280, MediaType.image)
+        same_ratio_video = broadcast_media_fit(1600, 1280, MediaType.video)
         low_resolution = broadcast_media_fit(1024, 576)
 
         self.assertTrue(fullscreen[0])
         self.assertTrue(split[0])
+        self.assertTrue(relaxed_image[0])
+        self.assertFalse(same_ratio_video[0])
         self.assertFalse(portrait[0])
         self.assertIn("outside landscape range", portrait[1])
         self.assertFalse(low_resolution[0])
-        self.assertIn("below 1920x1080", low_resolution[1])
+        self.assertIn("below 1280x720", low_resolution[1])
 
     def test_video_result_becomes_render_ready_when_acquisition_succeeds(self) -> None:
         temp = tempfile.TemporaryDirectory()
@@ -247,12 +268,6 @@ class SearXNGPipelineTests(unittest.TestCase):
                 return path
 
             with patch(
-                "pipeline.visuals.providers.probe_video_source",
-                return_value={
-                    "channel": "Hydrogen Project",
-                    "channel_id": "official-unit-channel",
-                },
-            ), patch(
                 "pipeline.visuals.providers._download_remote_video",
                 side_effect=fake_download,
             ), patch(
@@ -264,12 +279,6 @@ class SearXNGPipelineTests(unittest.TestCase):
                     "width": 1920,
                     "height": 1080,
                     "audio_codec": "aac",
-                },
-            ), patch(
-                "pipeline.visuals.providers.analyze_media_cleanliness",
-                return_value={
-                    "content_cleanliness_status": "passed",
-                    "approval_blockers": [],
                 },
             ):
                 visual = _stage_searxng_result(
@@ -297,12 +306,6 @@ class SearXNGPipelineTests(unittest.TestCase):
                 source_domain="video.example",
             )
             with patch(
-                "pipeline.visuals.providers.probe_video_source",
-                return_value={
-                    "channel": "Hydrogen Project",
-                    "channel_id": "official-unit-channel",
-                },
-            ), patch(
                 "pipeline.visuals.providers._download_remote_video",
                 side_effect=fake_download,
             ), patch(
@@ -314,12 +317,6 @@ class SearXNGPipelineTests(unittest.TestCase):
                     "width": 1080,
                     "height": 1920,
                     "audio_codec": "aac",
-                },
-            ), patch(
-                "pipeline.visuals.providers.analyze_media_cleanliness",
-                return_value={
-                    "content_cleanliness_status": "passed",
-                    "approval_blockers": [],
                 },
             ):
                 portrait = _stage_searxng_result(
@@ -476,8 +473,82 @@ class SearXNGPipelineTests(unittest.TestCase):
                 )
             assert visual
             self.assertIsNone(visual.download_path)
-            with self.assertRaisesRegex(ValueError, "content-cleanliness gate"):
+            with self.assertRaisesRegex(ValueError, "without local media"):
                 approve_visual(repository, visual.asset_id, manual=True)
+        finally:
+            repository.close()
+            temp.cleanup()
+            if episode_id:
+                shutil.rmtree(PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True)
+
+    def test_video_lead_can_be_downloaded_then_manually_approved(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "test.sqlite3")
+        episode_id = ""
+        try:
+            project = repository.create_project("Visual downloads")
+            episode = repository.create_episode(project.project_id, "Episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Senate footage",
+                body="The Senate convened for a vote.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            story_id = selected.story_id
+            assert story_id
+            result = SearXNGResult(
+                title="Senate floor video",
+                url="https://video.example/watch/456",
+                engine="example videos",
+                category="videos",
+                source_domain="video.example",
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS": "0",
+                    "SYNTHPOST_INCLUDE_VISUAL_LEADS": "1",
+                },
+            ):
+                lead = _stage_searxng_result(
+                    repository, story_id, None, result, MediaType.video, 0
+                )
+            assert lead
+
+            def fake_download(_url: str, stem: Path) -> Path:
+                path = stem.with_suffix(".mp4")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"video")
+                return path
+
+            with patch(
+                "pipeline.visuals.providers._download_remote_video",
+                side_effect=fake_download,
+            ), patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={
+                    "duration_seconds": 20.0,
+                    "width": 1920,
+                    "height": 1080,
+                    "audio_codec": "aac",
+                },
+            ):
+                downloaded = download_visual(repository, lead.asset_id)
+
+            self.assertIsNotNone(downloaded.download_path)
+            self.assertTrue(downloaded.has_audio)
+            self.assertEqual(downloaded.content_cleanliness_status, "passed")
+            self.assertFalse(
+                any("download failed" in warning for warning in downloaded.warnings)
+            )
+            approved = approve_visual(repository, lead.asset_id, manual=True)
+            self.assertEqual(approved.review_status.value, "manual_approved")
         finally:
             repository.close()
             temp.cleanup()

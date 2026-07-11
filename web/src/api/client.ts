@@ -206,6 +206,10 @@ export const api = {
     }),
   listVisuals: (storyId: string) =>
     request<VisualCandidate[]>(`/api/stories/${storyId}/visuals`),
+  localVisualFolder: (storyId: string) =>
+    request<{ project_id: string; episode_id: string; path: string }>(
+      `/api/stories/${storyId}/visuals/local-folder`,
+    ),
   stageLocalVisual: (
     storyId: string,
     payload: {
@@ -237,6 +241,10 @@ export const api = {
     }),
   analyzeVisual: (assetId: string) =>
     request<VisualCandidate>(`/api/visuals/${assetId}/analyze`, {
+      method: "POST",
+    }),
+  downloadVisual: (assetId: string) =>
+    request<VisualCandidate>(`/api/visuals/${assetId}/download`, {
       method: "POST",
     }),
   manualApproveVisual: (assetId: string, attribution_text?: string) =>
@@ -323,6 +331,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ render_profile, test_mode }),
     }),
+  revealEpisodeOutput: (episodeId: string) =>
+    request<{ revealed: boolean; path: string }>(
+      `/api/episodes/${episodeId}/reveal-output`,
+      { method: "POST" },
+    ),
 
   listJobs: (
     params: {
