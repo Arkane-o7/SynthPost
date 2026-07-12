@@ -1,0 +1,41 @@
+sequenceDiagram
+  actor E as Editor
+  participant UI as Research Panel
+  participant API as Studio API
+  participant DB as SQLite
+  participant W as Laptop Worker
+  participant A as Article Publisher
+  participant S as SearXNG
+
+  E->>UI: Click Start Research
+  UI->>API: POST /api/stories/{story_id}/research/start
+  API->>DB: Insert queued research job
+  API-->>UI: Return job immediately
+  W->>DB: Claim next queued job
+  W->>DB: Load selected story candidate
+  W->>A: Fetch lead article HTML
+  alt Full article is readable
+    A-->>W: Article HTML
+    W->>W: Extract and clean readable text
+  else Blocked, short, or paywalled
+    A-->>W: Error or boilerplate
+    W->>W: Fall back to RSS title and summary
+  end
+  opt SearXNG is configured
+    W->>S: Search selected headline in news category
+    S-->>W: Related coverage leads
+    loop Up to research document limit
+      W->>A: Fetch related article
+      A-->>W: HTML or failure
+      W->>W: Use readable text or search snippet fallback
+    end
+  end
+  W->>W: Split documents into sentence claims and evidence
+  W->>W: Extract entities, numbers, dates, and warnings
+  W->>DB: Save source documents and research pack
+  W->>DB: Move story to research_ready
+  W->>DB: Mark job completed
+  DB-->>UI: SSE job update triggers refresh
+  UI->>API: GET /api/stories/{story_id}/research
+  API->>DB: Load latest research pack
+  DB-->>UI: Summary, sources, claims, entities, warnings

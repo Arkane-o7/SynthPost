@@ -71,7 +71,7 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             "RetainedSplitSegment",
             "RetainedFullScreenVisualSegment",
             "RetainedFullScreenAnchorSegment",
-            "standaloneTemplate",
+            "timelineHeadlineItems",
         ]:
             self.assertIn(token, timeline_story)
         self.assertIn('template === "split_anchor_visual"', timeline_story)
@@ -120,6 +120,16 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         self.assertNotIn("<Img", logo_bug)
         self.assertIn("SYNTHPOST", lower_third)
         self.assertNotIn("sourceMeta", lower_third)
+
+    def test_timeline_lower_thirds_use_intra_segment_spoken_cues(self) -> None:
+        timeline_story = (
+            REMOTION_SRC / "templates" / "TimelineStory.tsx"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("segment.overlays.data?.headline_cues", timeline_story)
+        self.assertIn("headlineItems={timelineHeadlineItems(segments)}", timeline_story)
+        self.assertIn('<DesignCanvas background="transparent">', timeline_story)
+        self.assertEqual(timeline_story.count("<LowerThird"), 1)
 
     def test_news_visuals_use_original_source_label_overlay_without_tiny_duplicate_attribution(
         self,

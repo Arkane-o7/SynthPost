@@ -11,8 +11,12 @@ from unittest.mock import patch
 
 from pipeline.db.repository import Repository
 from pipeline.discovery.discover import add_manual_story
-from pipeline.models import MediaType, SourceDocument
-from pipeline.news.discovery import discover_news
+from pipeline.models import MediaType, SourceDefinition, SourceDocument, SourceType, StoryCandidate
+from pipeline.news.discovery import (
+    diversified_articles,
+    discover_news,
+    research_queries,
+)
 from pipeline.research.extract import build_research_pack
 from pipeline.search.searxng_client import SearXNGResult, search
 from pipeline.storage import PROJECT_ROOT
@@ -44,6 +48,124 @@ class _JSONResponse:
 
 
 class SearXNGPipelineTests(unittest.TestCase):
+    def test_research_queries_use_headline_topic_and_summary(self) -> None:
+        candidate = StoryCandidate(
+            title="Central bank cuts interest rates after inflation slows",
+            source_name="Example",
+            category="economy",
+            summary="Borrowing costs and consumer prices are central to the decision.",
+        )
+
+        queries = research_queries(candidate)
+
+        self.assertEqual(queries[0], candidate.title)
+        self.assertGreaterEqual(len(queries), 2)
+        self.assertTrue(any("economy" in query for query in queries))
+
+    def test_news_research_combines_multiple_queries_and_diversifies_publishers(
+        self,
+    ) -> None:
+        candidate = StoryCandidate(
+            title="Central bank cuts interest rates after inflation slows",
+            canonical_url="https://lead.example/rates",
+            source_name="Lead",
+            category="economy",
+            summary="The rate decision follows several months of lower inflation.",
+        )
+
+        def fake_search(query, **_kwargs):
+            suffix = "policy" if query == candidate.title else "markets"
+            return [
+                SearXNGResult(
+                    title=f"Central bank interest rate cut reshapes {suffix}",
+                    url=f"https://{suffix}.example/rate-cut",
+                    snippet="Inflation slowed before the central bank decision.",
+                    source_domain=f"{suffix}.example",
+                    published_date="2026-07-12T08:00:00Z",
+                )
+            ]
+
+        with patch(
+            "pipeline.news.discovery.searxng_configured", return_value=True
+        ), patch("pipeline.news.discovery.search", side_effect=fake_search):
+            coverage = discover_news(candidate)
+
+        articles = [
+            article for angle in coverage.angles for article in angle.articles
+        ]
+        self.assertGreaterEqual(len(coverage.queries), 2)
+        self.assertEqual(
+            {article["source"] for article in articles},
+            {"policy.example", "markets.example"},
+        )
+        self.assertTrue(
+            all(article["discovery_method"] == "searxng" for article in articles)
+        )
+
+    def test_news_research_uses_enabled_rss_sources_without_searxng(self) -> None:
+        candidate = StoryCandidate(
+            title="Satellite launch expands regional connectivity",
+            canonical_url="https://lead.example/satellite",
+            source_name="Lead",
+            category="technology",
+            summary="The spacecraft will connect remote communities.",
+        )
+        source = SourceDefinition(
+            source_id="src_related",
+            name="Related Wire",
+            source_type=SourceType.rss,
+            feed_url="https://related.example/feed.xml",
+        )
+        related = StoryCandidate(
+            title="Satellite launch brings connectivity to remote communities",
+            canonical_url="https://related.example/satellite-connectivity",
+            source_id=source.source_id,
+            source_name=source.name,
+            published_at="2026-07-12T07:00:00Z",
+            summary="The regional satellite entered orbit after launch.",
+        )
+        repository = SimpleNamespace(list_sources=lambda **_kwargs: [source])
+
+        with patch(
+            "pipeline.news.discovery.searxng_configured", return_value=False
+        ), patch(
+            "pipeline.news.discovery.discover_from_source", return_value=[related]
+        ):
+            coverage = discover_news(candidate, repository=repository)
+
+        articles = [
+            article for angle in coverage.angles for article in angle.articles
+        ]
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(articles[0]["source"], "Related Wire")
+        self.assertEqual(articles[0]["discovery_method"], "rss_related_coverage")
+
+    def test_article_selection_prefers_distinct_publishers(self) -> None:
+        articles = [
+            {
+                "title": "Wire A first",
+                "url": "https://wire-a.example/one",
+                "source": "Wire A",
+                "relevance_score": 0.90,
+            },
+            {
+                "title": "Wire A second",
+                "url": "https://wire-a.example/two",
+                "source": "Wire A",
+                "relevance_score": 0.88,
+            },
+            {
+                "title": "Wire B",
+                "url": "https://wire-b.example/one",
+                "source": "Wire B",
+                "relevance_score": 0.80,
+            },
+        ]
+
+        selected = diversified_articles(articles, limit=2)
+
+        self.assertEqual([article["source"] for article in selected], ["Wire A", "Wire B"])
+
     def test_source_preflight_blocks_broadcasters_and_recognizes_officials(self) -> None:
         broadcaster = assess_video_source(
             url="https://youtube.example/mint",

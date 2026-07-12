@@ -67,26 +67,43 @@ export const ResearchPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             </div>
           )}
         </div>
+        {pack.research_queries.length > 0 && (
+          <div className="stack" style={{ gap: 6 }}>
+            <h3>Research queries</h3>
+            {pack.research_queries.map((query) => (
+              <div key={query} className="font-mono text-muted" style={{ fontSize: 11 }}>
+                {query}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="stack" style={{ gap: 6 }}>
           <h3>Sources</h3>
-          {pack.documents.map((document) =>
-            document.url ? (
-              <a
-                key={document.document_id}
-                href={document.url}
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: 12, lineHeight: 1.4 }}
-              >
-                {document.publisher ? `${document.publisher}: ` : ''}
-                {document.title} ↗
-              </a>
-            ) : (
-              <div key={document.document_id} className="text-muted" style={{ fontSize: 12 }}>
-                {document.title} (local/editor-provided)
+          {pack.documents.map((document) => (
+            <div key={document.document_id} className="stack" style={{ gap: 2 }}>
+              {document.url ? (
+                <a
+                  href={document.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ fontSize: 12, lineHeight: 1.4 }}
+                >
+                  {document.publisher ? `${document.publisher}: ` : ''}
+                  {document.title} ↗
+                </a>
+              ) : (
+                <div className="text-muted" style={{ fontSize: 12 }}>
+                  {document.title} (local/editor-provided)
+                </div>
+              )}
+              <div className="text-muted font-mono" style={{ fontSize: 10 }}>
+                {(document.discovery_method ?? 'selected_article').replace(/_/g, ' ')}
+                {document.relevance_score != null
+                  ? ` · ${Math.round(document.relevance_score * 100)}% relevance`
+                  : ''}
               </div>
-            ),
-          )}
+            </div>
+          ))}
         </div>
         <button
           disabled={loading}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
@@ -247,6 +248,9 @@ class SourceDocument(StrictModel):
     content_hash: str
     document_type: str = "article"
     primary_source: bool = False
+    discovery_method: str | None = None
+    research_query: str | None = None
+    relevance_score: float | None = None
     extraction_status: str = "extracted"
     warnings: list[str] = Field(default_factory=list)
 
@@ -273,6 +277,7 @@ class ResearchPack(StrictModel):
     research_pack_id: str = Field(default_factory=lambda: new_id("research"))
     story_id: str
     documents: list[SourceDocument] = Field(default_factory=list)
+    research_queries: list[str] = Field(default_factory=list)
     evidence: list[EvidenceItem] = Field(default_factory=list)
     claims: list[Claim] = Field(default_factory=list)
     timeline_events: list[dict[str, Any]] = Field(default_factory=list)
@@ -311,6 +316,9 @@ class ScriptSection(StrictModel):
     suggested_visual_types: list[str] = Field(default_factory=list)
     suggested_search_queries: list[str] = Field(default_factory=list)
     suggested_template_ids: list[str] = Field(default_factory=list)
+    lower_third: str = ""
+    chyron: str = ""
+    headline_cues: list[str] = Field(default_factory=list)
     editorial_notes: list[str] = Field(default_factory=list)
     approval_status: ApprovalStatus = ApprovalStatus.review
     locked: bool = False
@@ -333,11 +341,227 @@ class ScriptDocument(StrictModel):
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
 
+    @model_validator(mode="after")
+    def normalize_section_overlays(self) -> "ScriptDocument":
+        """Backfill section overlays and keep legacy positional arrays in sync.
+
+        Older V2 scripts stored a single episode headline in ``lower_thirds`` and
+        ``chyrons``. Treat a one-item list on a multi-section script as that
+        legacy format, then derive distinct overlays from each section's actual
+        narration. Multi-item lists remain valid positional input for older API
+        clients.
+        """
+
+        lower_thirds = list(self.lower_thirds)
+        chyrons = list(self.chyrons)
+        positional_lower_thirds = len(lower_thirds) > 1 or len(self.sections) == 1
+        positional_chyrons = len(chyrons) > 1 or len(self.sections) == 1
+        seen_lower_thirds: set[str] = set()
+        seen_chyrons: set[str] = set()
+        episode_lower_third = section_overlay_text(
+            self.headline, "intro", max_chars=80
+        ).casefold()
+        episode_chyron = section_overlay_text(
+            self.headline, "intro", max_chars=64
+        ).casefold()
+
+        for index, section in enumerate(self.sections):
+            lower_third = section.lower_third.strip()
+            if not lower_third:
+                lower_third = (
+                    lower_thirds[index]
+                    if positional_lower_thirds and index < len(lower_thirds)
+                    else ""
+                )
+            lower_third = section_overlay_text(
+                lower_third or section.text, section.section_type, max_chars=80
+            )
+            if len(self.sections) > 1 and (
+                lower_third.casefold() == episode_lower_third
+                or lower_third.casefold() in seen_lower_thirds
+            ):
+                lower_third = section_overlay_text(
+                    section.text, section.section_type, max_chars=80
+                )
+            if lower_third.casefold() in seen_lower_thirds:
+                lower_third = section_overlay_text(
+                    f"{section.section_type.replace('_', ' ').title()}: "
+                    f"{section.text}",
+                    section.section_type,
+                    max_chars=80,
+                )
+            section.lower_third = lower_third
+            seen_lower_thirds.add(lower_third.casefold())
+
+            chyron = section.chyron.strip()
+            if not chyron:
+                chyron = (
+                    chyrons[index]
+                    if positional_chyrons and index < len(chyrons)
+                    else ""
+                )
+            chyron = section_overlay_text(
+                chyron or section.text, section.section_type, max_chars=64
+            )
+            if len(self.sections) > 1 and (
+                chyron.casefold() == episode_chyron
+                or chyron.casefold() in seen_chyrons
+            ):
+                chyron = section_overlay_text(
+                    section.text, section.section_type, max_chars=64
+                )
+            if chyron.casefold() in seen_chyrons:
+                chyron = section_overlay_text(
+                    f"{section.section_type.replace('_', ' ').title()}: "
+                    f"{section.text}",
+                    section.section_type,
+                    max_chars=64,
+                )
+            section.chyron = chyron
+            seen_chyrons.add(chyron.casefold())
+
+            section.headline_cues = normalize_section_headline_cues(
+                section.text,
+                section.section_type,
+                section.headline_cues,
+            )
+
+        self.lower_thirds = [section.lower_third for section in self.sections]
+        self.chyrons = [section.chyron for section in self.sections]
+        return self
+
     @property
     def text(self) -> str:
         return "\n\n".join(
             section.text.strip() for section in self.sections if section.text.strip()
         )
+
+
+def section_overlay_text(
+    text: str, section_type: str, *, max_chars: int
+) -> str:
+    """Create a concise, deterministic overlay for legacy or manual scripts."""
+
+    normalized = " ".join(text.split()).strip(" \t\n\r-–—")
+    if not normalized:
+        normalized = section_type.replace("_", " ").title()
+    first_sentence = re.split(r"(?<=[.!?])\s+", normalized, maxsplit=1)[0]
+    first_sentence = first_sentence.rstrip(".!?").strip()
+    if len(first_sentence) <= max_chars:
+        return first_sentence
+    shortened = first_sentence[: max_chars + 1].rsplit(" ", 1)[0].rstrip(" ,;:-–—")
+    return shortened or first_sentence[:max_chars].rstrip()
+
+
+def narration_beats(text: str, *, max_words: int = 24) -> list[str]:
+    """Split narration into stable sentence/clause beats for timed overlays."""
+
+    normalized = " ".join(text.split()).strip()
+    if not normalized:
+        return []
+
+    protected: dict[str, str] = {}
+
+    def protect_abbreviation(match: re.Match[str]) -> str:
+        token = f"__ABBR_{len(protected)}__"
+        protected[token] = match.group(0)
+        return token
+
+    sentence_safe = re.sub(r"\b(?:[A-Z]\.){2,}", protect_abbreviation, normalized)
+    sentences = re.split(r"(?<=[.!?])\s+", sentence_safe)
+    sentences = [
+        _restore_abbreviations(sentence, protected).strip()
+        for sentence in sentences
+        if sentence.strip()
+    ]
+
+    beats: list[str] = []
+    for sentence in sentences:
+        words = sentence.split()
+        if len(words) <= max_words:
+            beats.append(sentence)
+            continue
+        clauses = [
+            clause.strip()
+            for clause in re.split(
+                r"(?<=[;:])\s+|\s+[—–]\s+|,\s+(?=(?:and|but|while|which|as)\b)",
+                sentence,
+                flags=re.IGNORECASE,
+            )
+            if clause.strip()
+        ]
+        if len(clauses) == 1:
+            clauses = [
+                " ".join(words[index : index + max_words])
+                for index in range(0, len(words), max_words)
+            ]
+        beats.extend(clauses)
+
+    merged: list[str] = []
+    for beat in beats:
+        if merged and len(beat.split()) < 5:
+            merged[-1] = f"{merged[-1]} {beat}".strip()
+        else:
+            merged.append(beat)
+    return merged
+
+
+def _restore_abbreviations(text: str, protected: dict[str, str]) -> str:
+    for token, abbreviation in protected.items():
+        text = text.replace(token, abbreviation)
+    return text
+
+
+def normalize_section_headline_cues(
+    text: str,
+    section_type: str,
+    provided: list[str] | tuple[str, ...] = (),
+) -> list[str]:
+    """Return one concise headline per narration beat in spoken order."""
+
+    beats = narration_beats(text)
+    if not beats:
+        return [section_overlay_text(text, section_type, max_chars=80)]
+    cleaned = [
+        section_overlay_text(str(value), section_type, max_chars=80)
+        for value in provided
+        if str(value).strip()
+    ]
+    if len(cleaned) == len(beats):
+        return cleaned
+    return [
+        section_overlay_text(beat, section_type, max_chars=80) for beat in beats
+    ]
+
+
+def timed_section_headline_cues(
+    text: str,
+    section_type: str,
+    provided: list[str] | tuple[str, ...],
+    duration: float,
+) -> list[dict[str, float | str]]:
+    """Align section headlines to narration using spoken-word proportions."""
+
+    beats = narration_beats(text)
+    headlines = normalize_section_headline_cues(text, section_type, provided)
+    if not beats:
+        beats = [text or section_type.replace("_", " ")]
+    weights = [max(1, len(beat.split())) for beat in beats]
+    total_weight = max(1, sum(weights))
+    cursor = 0
+    cues: list[dict[str, float | str]] = []
+    for index, (headline, weight) in enumerate(zip(headlines, weights)):
+        start = duration * cursor / total_weight
+        cursor += weight
+        end = duration if index == len(headlines) - 1 else duration * cursor / total_weight
+        cues.append(
+            {
+                "text": headline,
+                "start": round(start, 3),
+                "end": round(max(start + 0.01, end), 3),
+            }
+        )
+    return cues
 
 
 class VisualCandidate(StrictModel):

@@ -169,9 +169,15 @@ class MockProvider:
                 if claim.get("claim_id")
             ][:1]
             topic = str(payload.get("headline") or "SynthPost briefing")
+            section_type = str(payload.get("section_type") or "context")
             return {
                 "text": " ".join(expanded_words),
                 "claim_ids": claims,
+                "lower_third": f"{topic}: {section_type.replace('_', ' ').title()}",
+                "chyron": section_type.replace("_", " ").title(),
+                "headline_cues": [
+                    f"{topic}: {section_type.replace('_', ' ').title()}"
+                ],
                 "suggested_visual_types": ["image", "video"],
                 "suggested_search_queries": [
                     f"{topic} official editorial photo",
@@ -210,26 +216,41 @@ class MockProvider:
                         "section_type": "cold_open",
                         "text": "Here is the core development and why it matters right now.",
                         "claim_ids": ["claim_001"],
+                        "lower_third": "The Core Development Right Now",
+                        "chyron": "Breaking Down the Core Development",
+                        "headline_cues": ["The Core Development Right Now"],
                     },
                     {
                         "section_type": "context",
                         "text": "The source material gives us the context without requiring unsupported assumptions.",
                         "claim_ids": ["claim_001"],
+                        "lower_third": "The Documented Context",
+                        "chyron": "What the Source Material Shows",
+                        "headline_cues": ["The Documented Context"],
                     },
                     {
                         "section_type": "key_developments",
                         "text": "The key development is best understood through the documented facts in the research pack.",
                         "claim_ids": ["claim_001"],
+                        "lower_third": "Key Developments in the Record",
+                        "chyron": "The Documented Facts",
+                        "headline_cues": ["Key Developments in the Record"],
                     },
                     {
                         "section_type": "why_it_matters",
                         "text": "For viewers, the importance is the practical impact and the uncertainty still left open.",
                         "claim_ids": ["claim_001"],
+                        "lower_third": "The Practical Impact for Viewers",
+                        "chyron": "Why This Matters",
+                        "headline_cues": ["The Practical Impact for Viewers"],
                     },
                     {
                         "section_type": "conclusion",
                         "text": "We will keep the attribution visible and separate confirmed facts from analysis.",
                         "claim_ids": ["claim_001"],
+                        "lower_third": "Confirmed Facts, Clearly Attributed",
+                        "chyron": "What Is Confirmed",
+                        "headline_cues": ["Confirmed Facts, Clearly Attributed"],
                     },
                 ],
             }

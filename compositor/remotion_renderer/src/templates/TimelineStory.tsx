@@ -18,7 +18,12 @@ import { SourceLabel } from "../components/SourceLabel";
 import { VisualMediaLayer } from "../components/VisualMediaLayer";
 import { getTemplateDefinition } from "../registry/templates";
 import { brand, fullAnchorCrop, layout, typography } from "../styles/brand";
-import type { StoryProps, TimedVisual, TimelineSegmentProps } from "../types";
+import type {
+  HeadlineItem,
+  StoryProps,
+  TimedVisual,
+  TimelineSegmentProps,
+} from "../types";
 import {
   BulletSummary,
   ChartExplainer,
@@ -71,16 +76,74 @@ const relativeSegmentVisual = (
   sourceLabel: visual.sourceLabel || visual.provider || "",
 });
 
-const segmentHeadlineItems = (segment: TimelineSegmentProps) => [
-  {
-    text:
-      segment.overlays.lowerThird ||
-      segment.overlays.chyron ||
-      segment.sectionId.replace(/_/g, " "),
-    start: 0,
-    end: Math.max(0.1, segment.duration),
-  },
-];
+const segmentHeadlineItems = (
+  segment: TimelineSegmentProps,
+): HeadlineItem[] => {
+  const configured = segment.overlays.data?.headline_cues;
+  if (Array.isArray(configured)) {
+    const cues = configured
+      .map((value): HeadlineItem | null => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          return null;
+        }
+        const cue = value as Record<string, unknown>;
+        const text = String(cue.text ?? cue.headline ?? "").trim();
+        const start = Number(cue.start);
+        const end = Number(cue.end);
+        if (!text || !Number.isFinite(start) || !Number.isFinite(end)) {
+          return null;
+        }
+        return {
+          text,
+          start: Math.max(0, start),
+          end: Math.min(segment.duration, Math.max(start + 0.01, end)),
+        };
+      })
+      .filter((cue): cue is HeadlineItem => cue !== null);
+    if (cues.length) {
+      return cues;
+    }
+  }
+  return [
+    {
+      text:
+        segment.overlays.lowerThird ||
+        segment.overlays.chyron ||
+        segment.sectionId.replace(/_/g, " "),
+      start: 0,
+      end: Math.max(0.1, segment.duration),
+    },
+  ];
+};
+
+const timelineHeadlineItems = (
+  segments: TimelineSegmentProps[],
+): HeadlineItem[] =>
+  segments.flatMap((segment) =>
+    segmentHeadlineItems(segment).map((cue) => ({
+      ...cue,
+      start: segment.start + (cue.start ?? 0),
+      end: segment.start + (cue.end ?? segment.duration),
+    })),
+  );
+
+const useActiveSegmentHeadline = (segment: TimelineSegmentProps): string => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const second = frame / fps;
+  const cues = segmentHeadlineItems(segment);
+  return (
+    cues.find(
+      (cue) =>
+        second >= (cue.start ?? 0) &&
+        (cue.end === undefined || second < cue.end),
+    )?.text ??
+    cues[cues.length - 1]?.text ??
+    segment.overlays.lowerThird ??
+    segment.overlays.chyron ??
+    segment.sectionId.replace(/_/g, " ")
+  );
+};
 
 const AnchorNarrationTrack: React.FC<{
   anchor?: StoryProps["anchor"];
@@ -149,13 +212,6 @@ const RetainedSplitSegment: React.FC<{
       sourceLabel={story.sourceLabel}
       sourceDate={story.sourceDate}
     />
-    <LowerThird
-      headline={story.headline}
-      headlineItems={segmentHeadlineItems(segment)}
-      sourceLabel={story.sourceLabel}
-      sourceDate={story.sourceDate}
-      logo={story.logo}
-    />
   </AbsoluteFill>
 );
 
@@ -217,13 +273,6 @@ const RetainedFullScreenVisualSegment: React.FC<{
       left={54}
       bottom={layout.lower.height + 42}
     />
-    <LowerThird
-      headline={story.headline}
-      headlineItems={segmentHeadlineItems(segment)}
-      sourceLabel={story.sourceLabel}
-      sourceDate={story.sourceDate}
-      logo={story.logo}
-    />
   </AbsoluteFill>
 );
 
@@ -259,65 +308,7 @@ const RetainedFullScreenAnchorSegment: React.FC<{
         pointerEvents: "none",
       }}
     />
-    <LowerThird
-      headline={story.headline}
-      headlineItems={segmentHeadlineItems(segment)}
-      sourceLabel={story.sourceLabel}
-      sourceDate={story.sourceDate}
-      logo={story.logo}
-    />
   </AbsoluteFill>
-);
-
-const SegmentLowerThird: React.FC<{
-  segment: TimelineSegmentProps;
-  sourceLabel: string;
-  sourceDate: string;
-}> = ({ segment, sourceLabel, sourceDate }) => (
-  <div
-    style={{
-      position: "absolute",
-      left: layout.lower.left,
-      right: 54,
-      bottom: 42,
-      minHeight: 118,
-      background:
-        "linear-gradient(90deg, rgba(2,8,16,0.98), rgba(8,20,36,0.92))",
-      borderTop: "1px solid rgba(245,247,250,0.28)",
-      boxShadow: "0 -18px 58px rgba(0,0,0,0.34)",
-      padding: "22px 28px",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      gap: 10,
-    }}
-  >
-    <div
-      style={{
-        fontFamily: typography.sans,
-        fontSize: 15,
-        fontWeight: 900,
-        letterSpacing: 1.2,
-        color: brand.red,
-        textTransform: "uppercase",
-      }}
-    >
-      {sourceLabel} · {sourceDate}
-    </div>
-    <div
-      style={{
-        fontFamily: typography.serif,
-        fontSize: 42,
-        lineHeight: 1.05,
-        color: brand.white,
-        textTransform: "uppercase",
-      }}
-    >
-      {segment.overlays.chyron ||
-        segment.overlays.lowerThird ||
-        segment.sectionId.replace(/_/g, " ")}
-    </div>
-  </div>
 );
 
 type QuoteLine = {
@@ -700,6 +691,7 @@ const DocumentCallout: React.FC<{
   progress: number;
 }> = ({ segment, progress }) => {
   const visual = segmentVisual(segment);
+  const activeHeadline = useActiveSegmentHeadline(segment);
   return (
     <AbsoluteFill
       style={{
@@ -750,9 +742,7 @@ const DocumentCallout: React.FC<{
             fontWeight: 400,
           }}
         >
-          {segment.overlays.lowerThird ||
-            segment.overlays.chyron ||
-            "What the source document says"}
+          {activeHeadline || "What the source document says"}
         </h2>
         <p
           style={{
@@ -804,12 +794,6 @@ const Segment: React.FC<{
     !segment.anchor.speaking ||
     segment.audio?.mode === "source" ||
     segment.audio?.mode === "silent";
-  const retainedTemplate = [
-    "split_anchor_visual",
-    "fullscreen_news_visual",
-    "fullscreen_anchor",
-    "fallback_anchor",
-  ].includes(template);
   const explainerProps = {
     segment,
     storySourceLabel: story.sourceLabel,
@@ -817,21 +801,6 @@ const Segment: React.FC<{
     visual,
     progress,
   };
-
-  const isCardTemplate = [
-    "chart_explainer",
-    "map_explainer",
-    "timeline_explainer",
-    "comparison_card",
-    "bullet_summary",
-    "source_screenshot",
-    "fallback_context_card",
-  ].includes(template);
-  const standaloneTemplate =
-    retainedTemplate ||
-    isCardTemplate ||
-    template === "quote_card" ||
-    template === "document_callout";
 
   return (
     <DesignCanvas background="linear-gradient(115deg, #020610, #07182c 52%, #04070d)">
@@ -908,13 +877,6 @@ const Segment: React.FC<{
           />
         ) : null}
 
-        {!standaloneTemplate ? (
-          <SegmentLowerThird
-            segment={segment}
-            sourceLabel={story.sourceLabel}
-            sourceDate={story.sourceDate}
-          />
-        ) : null}
       </AbsoluteFill>
     </DesignCanvas>
   );
@@ -944,6 +906,24 @@ export const TimelineStory: React.FC<StoryProps> = (props) => {
           </Sequence>
         );
       })}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 100,
+          pointerEvents: "none",
+        }}
+      >
+        <DesignCanvas background="transparent">
+          <LowerThird
+            headline={props.headline}
+            headlineItems={timelineHeadlineItems(segments)}
+            sourceLabel={props.sourceLabel}
+            sourceDate={props.sourceDate}
+            logo={props.logo}
+          />
+        </DesignCanvas>
+      </div>
     </AbsoluteFill>
   );
 };

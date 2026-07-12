@@ -14,11 +14,7 @@ from pipeline.models import (
     SourceDocument,
     StoryWorkflowState,
 )
-from pipeline.news.discovery import discover_news
-from pipeline.search.searxng_client import (
-    SearXNGError,
-    configured as searxng_configured,
-)
+from pipeline.news.discovery import diversified_articles, discover_news
 
 
 class ReadableHTMLParser(HTMLParser):
@@ -256,6 +252,9 @@ def source_document_from_candidate(candidate) -> SourceDocument:
         content_hash=sha256_text(text),
         document_type="manual_story" if candidate.manual_body else "article",
         primary_source=False,
+        discovery_method="selected_article",
+        research_query=candidate.title,
+        relevance_score=1.0,
         extraction_status="extracted" if text else "failed",
         warnings=warnings,
     )
@@ -294,6 +293,9 @@ def source_document_from_search_result(story_id: str, article: dict) -> SourceDo
         content_hash=sha256_text(text),
         document_type="related_news_article",
         primary_source=False,
+        discovery_method=str(article.get("discovery_method") or "related_coverage"),
+        research_query=str(article.get("query") or "") or None,
+        relevance_score=float(article.get("relevance_score") or 0.0),
         extraction_status=extraction_status,
         warnings=warnings,
     )
@@ -304,33 +306,23 @@ def build_research_pack(repository, story_id: str) -> ResearchPack:
     lead_document = source_document_from_candidate(candidate)
     documents = [lead_document]
     search_warnings: list[str] = []
-    if searxng_configured() and candidate.title:
-        try:
-            coverage = discover_news(candidate)
-            articles = [
-                article for angle in coverage.angles for article in angle.articles
-            ]
-            seen_urls = {
-                canonicalize_url(lead_document.url) if lead_document.url else None
-            }
-            max_documents = max(
-                1,
-                int(
-                    config.env("SYNTHPOST_RESEARCH_MAX_DOCUMENTS", "6") or "6"
-                ),
-            )
-            for article in articles:
-                canonical_url = canonicalize_url(article.get("url"))
-                if not canonical_url or canonical_url in seen_urls:
-                    continue
-                seen_urls.add(canonical_url)
-                documents.append(source_document_from_search_result(story_id, article))
-                if len(documents) >= max_documents:
-                    break
-        except SearXNGError as exc:
-            search_warnings.append(f"SearXNG news research unavailable: {exc}")
-        except Exception as exc:
-            search_warnings.append(f"SearXNG news research failed: {exc}")
+    research_queries: list[str] = []
+    try:
+        coverage = discover_news(candidate, repository=repository)
+        research_queries = list(getattr(coverage, "queries", []))
+        search_warnings.extend(getattr(coverage, "warnings", []))
+        articles = [article for angle in coverage.angles for article in angle.articles]
+        max_documents = max(
+            1,
+            int(config.env("SYNTHPOST_RESEARCH_MAX_DOCUMENTS", "6") or "6"),
+        )
+        selected_articles = diversified_articles(
+            articles, limit=max(0, max_documents - 1)
+        )
+        for article in selected_articles:
+            documents.append(source_document_from_search_result(story_id, article))
+    except Exception as exc:
+        search_warnings.append(f"multi-article news research failed: {exc}")
 
     for document in documents:
         repository.upsert_source_document(document)
@@ -384,13 +376,15 @@ def build_research_pack(repository, story_id: str) -> ResearchPack:
             f"{document.title}: {warning}" for warning in document.warnings
         )
     source_note = (
-        f" Reviewed {len(documents)} source documents."
+        f" Reviewed {len(documents)} source documents across "
+        f"{len({document.publisher for document in documents if document.publisher})} publishers."
         if len(documents) > 1
         else ""
     )
     pack = ResearchPack(
         story_id=story_id,
         documents=documents,
+        research_queries=research_queries,
         evidence=evidence,
         claims=claims,
         people=people,

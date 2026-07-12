@@ -50,6 +50,24 @@ class V2ContractTests(unittest.TestCase):
         ]:
             self.assertIn(f"export type {name}", ts)
 
+    def test_script_sections_own_their_broadcast_overlays(self) -> None:
+        schema = json.loads(
+            (ROOT / "contracts" / "schemas" / "synthpost.v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        section = schema["$defs"]["ScriptSection"]
+        ts = (ROOT / "contracts" / "typescript" / "index.ts").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("lower_third", section["required"])
+        self.assertIn("chyron", section["required"])
+        self.assertIn("headline_cues", section["required"])
+        self.assertIn("lower_third: string", ts)
+        self.assertIn("chyron: string", ts)
+        self.assertIn("headline_cues: string[]", ts)
+
     def test_job_event_stream_uses_unambiguous_static_route(self) -> None:
         api = (ROOT / "pipeline" / "api" / "main.py").read_text(encoding="utf-8")
         studio = (ROOT / "web" / "src" / "state" / "useStudio.tsx").read_text(

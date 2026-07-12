@@ -22,6 +22,7 @@ from pipeline.models import (
     TimelineSegment,
     TimelineStatus,
     VisualCandidate,
+    timed_section_headline_cues,
 )
 from pipeline.provenance import ffprobe_summary
 from pipeline.timeline.validation import validate_timeline
@@ -451,12 +452,8 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 ducking=False,
             ),
             overlays=SegmentOverlays(
-                lower_third=script.lower_thirds[0]
-                if script.lower_thirds
-                else script.headline,
-                chyron=script.chyrons[0]
-                if script.chyrons
-                else section.section_type.replace("_", " "),
+                lower_third=section.lower_third,
+                chyron=section.chyron,
                 attribution=render_visual.attribution_text if render_visual else "",
                 quote_text="",
                 document_source=render_visual.attribution_text
@@ -465,6 +462,12 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 else "",
                 data={
                     "title": section.section_type.replace("_", " ").title(),
+                    "headline_cues": timed_section_headline_cues(
+                        section.text,
+                        section.section_type,
+                        section.headline_cues,
+                        duration,
+                    ),
                     "bullets": [section.text[:120]],
                     "values": [],
                     "locations": [],

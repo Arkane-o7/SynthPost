@@ -894,6 +894,28 @@ label {
     line-height: 1.4;
 }
 
+.visual-headline-cues {
+    display: grid;
+    gap: 7px;
+    max-height: 138px;
+    overflow-y: auto;
+}
+
+.visual-headline-cues strong {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 7px;
+    align-items: start;
+}
+
+.visual-headline-cues i {
+    color: var(--accent-red);
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 9px;
+    font-style: normal;
+    line-height: 1.85;
+}
+
 .visual-section-foot {
     display: flex;
     gap: var(--sp-3);
@@ -2579,4 +2601,47 @@ label {
     .episode-control-actions button:last-child {
         grid-column: auto;
     }
+}
+
+.studio-crash-screen {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background:
+        radial-gradient(circle at top, rgba(228, 28, 35, 0.12), transparent 42%),
+        var(--ink, #04060a);
+    color: var(--text, #f0f4fa);
+}
+
+.studio-crash-card {
+    width: min(100%, 480px);
+    padding: 28px;
+    border: 1px solid var(--border, rgba(200, 215, 240, 0.1));
+    border-radius: 18px;
+    background: var(--surface-elevated, #101c2c);
+    box-shadow: var(--shadow-modal, 0 24px 80px rgba(0, 0, 0, 0.35));
+}
+
+.studio-crash-kicker {
+    color: var(--accent-red, #e41c23);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.studio-crash-card h1 {
+    margin: 12px 0 8px;
+    font-size: clamp(26px, 8vw, 38px);
+}
+
+.studio-crash-card p {
+    margin: 0 0 22px;
+    color: var(--text-muted, rgba(240, 244, 250, 0.6));
+    line-height: 1.6;
+}
+
+.studio-crash-card button {
+    width: 100%;
 }

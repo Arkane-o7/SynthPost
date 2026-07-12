@@ -68,8 +68,20 @@ def handle_research(ctx: JobContext) -> dict[str, str]:
         raise ValueError("research job requires story_id")
     ctx.progress(10, "extracting source document")
     pack = build_research_pack(ctx.repository, ctx.job.story_id)
-    ctx.progress(100, "research pack ready")
-    return {"research_pack_id": pack.research_pack_id}
+    publishers = {
+        document.publisher for document in pack.documents if document.publisher
+    }
+    ctx.progress(
+        100,
+        f"research pack ready: {len(pack.documents)} articles from "
+        f"{len(publishers)} publishers",
+    )
+    return {
+        "research_pack_id": pack.research_pack_id,
+        "document_count": str(len(pack.documents)),
+        "publisher_count": str(len(publishers)),
+        "query_count": str(len(pack.research_queries)),
+    }
 
 
 def handle_script_generate(ctx: JobContext) -> dict[str, str]:

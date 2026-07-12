@@ -77,6 +77,9 @@ export type SourceDocument = {
   content_hash: string;
   document_type: string;
   primary_source: boolean;
+  discovery_method?: string | null;
+  research_query?: string | null;
+  relevance_score?: number | null;
   extraction_status: string;
   warnings: string[];
 };
@@ -103,6 +106,7 @@ export type ResearchPack = {
   research_pack_id: string;
   story_id: string;
   documents: SourceDocument[];
+  research_queries: string[];
   evidence: EvidenceItem[];
   claims: Claim[];
   timeline_events: Record<string, unknown>[];
@@ -128,6 +132,9 @@ export type ScriptSection = {
   suggested_visual_types: string[];
   suggested_search_queries: string[];
   suggested_template_ids: string[];
+  lower_third: string;
+  chyron: string;
+  headline_cues: string[];
   editorial_notes: string[];
   approval_status: string;
   locked?: boolean;

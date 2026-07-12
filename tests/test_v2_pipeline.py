@@ -36,6 +36,8 @@ from pipeline.models import (
     TimelinePlan,
     TimelineSegment,
     VisualCandidate,
+    narration_beats,
+    timed_section_headline_cues,
 )
 from pipeline.research.extract import build_research_pack
 from pipeline.run_story import _sync_timeline_to_avatar_duration
@@ -280,6 +282,64 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertGreaterEqual(expanded.estimated_duration_seconds, 590)
         self.assertLessEqual(expanded.estimated_duration_seconds, 610)
         self.assertEqual(attempts, 9)
+        self.assertEqual(
+            expanded.lower_thirds,
+            [section.lower_third for section in expanded.sections],
+        )
+        self.assertEqual(
+            expanded.chyrons,
+            [section.chyron for section in expanded.sections],
+        )
+
+    def test_legacy_static_overlays_are_backfilled_from_each_section(self) -> None:
+        script = ScriptDocument(
+            story_id="story_legacy_overlays",
+            headline="One episode headline repeated everywhere",
+            sections=[
+                ScriptSection(
+                    section_id="sec_001_cold_open",
+                    section_type="cold_open",
+                    text="A surprise vote changed the Senate race overnight.",
+                ),
+                ScriptSection(
+                    section_id="sec_002_context",
+                    section_type="context",
+                    text="The vacancy follows a candidate's unexpected withdrawal.",
+                ),
+                ScriptSection(
+                    section_id="sec_003_conclusion",
+                    section_type="conclusion",
+                    text="Party leaders must now find a replacement before the deadline.",
+                ),
+            ],
+            lower_thirds=["One episode headline repeated everywhere"],
+            chyrons=["One episode headline repeated everywhere"],
+        )
+
+        self.assertEqual(len(script.lower_thirds), 3)
+        self.assertEqual(len(set(script.lower_thirds)), 3)
+        self.assertEqual(len(set(script.chyrons)), 3)
+        self.assertEqual(
+            script.lower_thirds,
+            [section.lower_third for section in script.sections],
+        )
+        self.assertNotIn(script.headline, script.lower_thirds)
+
+    def test_headline_cues_follow_spoken_beats_inside_one_section(self) -> None:
+        text = (
+            "The candidate withdrew from the Senate race overnight. "
+            "Party officials now face a compressed replacement deadline. "
+            "The decision could reshape control of the chamber."
+        )
+        beats = narration_beats(text)
+        cues = timed_section_headline_cues(text, "key_developments", [], 18.0)
+
+        self.assertEqual(len(beats), 3)
+        self.assertEqual(len(cues), 3)
+        self.assertEqual(cues[0]["start"], 0.0)
+        self.assertEqual(cues[-1]["end"], 18.0)
+        self.assertLess(float(cues[0]["end"]), float(cues[1]["end"]))
+        self.assertEqual(len({str(cue["text"]) for cue in cues}), 3)
 
     def test_fullscreen_audio_policy_only_replaces_narration_for_audible_video(
         self,
@@ -350,9 +410,8 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         visuals = [hero, hero, hero, hero, fallback, hero]
         selected: list[str] = []
 
-        for index, (section_type, visual) in enumerate(
-            zip(section_types, visuals, strict=True)
-        ):
+        self.assertEqual(len(section_types), len(visuals))
+        for index, (section_type, visual) in enumerate(zip(section_types, visuals)):
             decision = select_template(
                 section_type,
                 visual,
@@ -1096,7 +1155,9 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 repository,
                 story_id,
                 "Unit story for SynthPost Studio",
-                "SynthPost Studio keeps renderer approvals explicit.\n\nThe approved timeline becomes the rendering source of truth.",
+                "SynthPost Studio keeps renderer approvals explicit. "
+                "Editors can change the headline while the same layout remains on screen.\n\n"
+                "The approved timeline becomes the rendering source of truth.",
             )
             approve_script(repository, story_id)
             image = (
@@ -1119,6 +1180,27 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.upsert_visual(visual)
             approve_visual(repository, visual.asset_id)
             plan = generate_timeline(repository, story_id)
+            first_segment_cues = plan.segments[0].overlays.data["headline_cues"]
+            self.assertEqual(len(first_segment_cues), 2)
+            self.assertEqual(first_segment_cues[0]["start"], 0.0)
+            self.assertEqual(
+                first_segment_cues[-1]["end"], plan.segments[0].duration
+            )
+            self.assertNotEqual(
+                first_segment_cues[0]["text"], first_segment_cues[1]["text"]
+            )
+            self.assertEqual(
+                [segment.overlays.lower_third for segment in plan.segments],
+                [section.lower_third for section in script.sections],
+            )
+            self.assertEqual(
+                [segment.overlays.chyron for segment in plan.segments],
+                [section.chyron for section in script.sections],
+            )
+            self.assertEqual(
+                len({segment.overlays.lower_third for segment in plan.segments}),
+                len(plan.segments),
+            )
             errors, _warnings = validate_timeline(plan)
             self.assertEqual(errors, [])
             approved = approve_timeline(repository, story_id)

@@ -233,6 +233,13 @@ const SectionVisualRow: React.FC<{
 }> = ({ section, index, lowerThird, visuals, renderVisual, onApproveAll, busy }) => {
   const trackRef = React.useRef<HTMLDivElement>(null);
   const approvable = visuals.filter(isReadyToApprove);
+  // Older saved scripts and a backend that was already running before timed
+  // headlines were introduced do not include `headline_cues`. Keep the
+  // Visuals workspace usable while those scripts are regenerated or migrated.
+  const headlineCues =
+    Array.isArray(section.headline_cues) && section.headline_cues.length > 0
+      ? section.headline_cues
+      : [lowerThird];
   const scroll = (direction: -1 | 1) => {
     trackRef.current?.scrollBy({ left: direction * 344, behavior: "smooth" });
   };
@@ -246,8 +253,15 @@ const SectionVisualRow: React.FC<{
           <h3>{section.text}</h3>
         </div>
         <div className="visual-lower-third">
-          <span>Lower third</span>
-          <strong>{lowerThird}</strong>
+          <span>Timed lower thirds · {headlineCues.length}</span>
+          <div className="visual-headline-cues">
+            {headlineCues.map((headline, cueIndex) => (
+              <strong key={`${cueIndex}-${headline}`}>
+                <i>{String(cueIndex + 1).padStart(2, "0")}</i>
+                {headline}
+              </strong>
+            ))}
+          </div>
         </div>
         <div className="visual-section-foot">
           <span>~{Math.round(section.estimated_duration_seconds)}s</span>
@@ -566,7 +580,9 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               key={section.section_id}
               section={section}
               index={index}
-              lowerThird={script.lower_thirds[index] ?? script.lower_thirds[0] ?? script.headline}
+              lowerThird={
+                section.lower_third ?? script.lower_thirds[index] ?? script.headline
+              }
               visuals={filteredVisuals.filter((visual) => visual.section_ids.includes(section.section_id))}
               renderVisual={renderVisual}
               onApproveAll={approveAll}

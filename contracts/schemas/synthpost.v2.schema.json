@@ -90,17 +90,21 @@
         "content_hash": {"type": "string"},
         "document_type": {"type": "string"},
         "primary_source": {"type": "boolean"},
+        "discovery_method": {"type": ["string", "null"]},
+        "research_query": {"type": ["string", "null"]},
+        "relevance_score": {"type": ["number", "null"]},
         "extraction_status": {"type": "string"},
         "warnings": {"type": "array", "items": {"type": "string"}}
       }
     },
     "ResearchPack": {
       "type": "object",
-      "required": ["research_pack_id", "story_id", "documents", "claims", "timeline_events", "people", "organizations", "locations", "numbers", "dates", "contradictions", "uncertainties", "research_summary"],
+      "required": ["research_pack_id", "story_id", "documents", "research_queries", "claims", "timeline_events", "people", "organizations", "locations", "numbers", "dates", "contradictions", "uncertainties", "research_summary"],
       "properties": {
         "research_pack_id": {"type": "string"},
         "story_id": {"type": "string"},
         "documents": {"type": "array"},
+        "research_queries": {"type": "array", "items": {"type": "string"}},
         "evidence": {"type": "array"},
         "claims": {"type": "array", "items": {"$ref": "#/$defs/Claim"}},
         "timeline_events": {"type": "array"},
@@ -149,7 +153,7 @@
     },
     "ScriptSection": {
       "type": "object",
-      "required": ["section_id", "section_type", "text", "estimated_duration_seconds", "claim_ids", "suggested_visual_types", "suggested_search_queries", "suggested_template_ids", "editorial_notes", "approval_status"],
+      "required": ["section_id", "section_type", "text", "estimated_duration_seconds", "claim_ids", "suggested_visual_types", "suggested_search_queries", "suggested_template_ids", "lower_third", "chyron", "headline_cues", "editorial_notes", "approval_status"],
       "properties": {
         "section_id": {"type": "string"},
         "section_type": {"enum": ["cold_open", "intro", "context", "key_developments", "why_it_matters", "stakes", "uncertainty", "conclusion", "outro"]},
@@ -159,6 +163,9 @@
         "suggested_visual_types": {"type": "array"},
         "suggested_search_queries": {"type": "array"},
         "suggested_template_ids": {"type": "array"},
+        "lower_third": {"type": "string", "maxLength": 80},
+        "chyron": {"type": "string", "maxLength": 64},
+        "headline_cues": {"type": "array", "items": {"type": "string", "maxLength": 80}},
         "editorial_notes": {"type": "array"},
         "approval_status": {"type": "string"}
       }

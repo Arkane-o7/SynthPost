@@ -17,6 +17,8 @@ from pipeline.models import (
     StoryWorkflowState,
     new_id,
     now_iso,
+    normalize_section_headline_cues,
+    section_overlay_text,
 )
 
 SECTION_ORDER = [
@@ -86,6 +88,7 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
     return {
         "story_id": pack.get("story_id"),
         "research_summary": pack.get("research_summary", ""),
+        "research_queries": pack.get("research_queries", []),
         "documents": [
             {
                 key: document.get(key)
@@ -95,6 +98,9 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
                     "title",
                     "publisher",
                     "published_at",
+                    "discovery_method",
+                    "research_query",
+                    "relevance_score",
                     "extraction_status",
                     "warnings",
                 )
@@ -143,6 +149,13 @@ def split_manual_script(
                 suggested_template_ids=[
                     "split_anchor_visual" if index > 1 else "fullscreen_anchor"
                 ],
+                lower_third=section_overlay_text(
+                    paragraph, section_type, max_chars=80
+                ),
+                chyron=section_overlay_text(paragraph, section_type, max_chars=64),
+                headline_cues=normalize_section_headline_cues(
+                    paragraph, section_type
+                ),
                 approval_status=ApprovalStatus.review,
             )
         )
@@ -156,8 +169,6 @@ def split_manual_script(
         ),
         status=ScriptStatus.review,
         sections=sections,
-        lower_thirds=[headline[:80]],
-        chyrons=[headline[:64]],
     )
     return script
 
@@ -174,11 +185,24 @@ def script_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": {
                     "type": "object",
-                    "required": ["section_type", "text", "claim_ids"],
+                    "required": [
+                        "section_type",
+                        "text",
+                        "claim_ids",
+                        "lower_third",
+                        "chyron",
+                        "headline_cues",
+                    ],
                     "properties": {
                         "section_type": {"type": "string"},
                         "text": {"type": "string"},
                         "claim_ids": {"type": "array", "items": {"type": "string"}},
+                        "lower_third": {"type": "string", "maxLength": 80},
+                        "chyron": {"type": "string", "maxLength": 64},
+                        "headline_cues": {
+                            "type": "array",
+                            "items": {"type": "string", "maxLength": 80},
+                        },
                         "suggested_visual_types": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -215,6 +239,13 @@ def script_from_llm_json(
         if section_type not in SECTION_ORDER:
             section_type = SECTION_ORDER[min(index - 1, len(SECTION_ORDER) - 1)]
         text = str(item.get("text") or "").strip()
+        lower_third = str(item.get("lower_third") or "").strip()
+        chyron = str(item.get("chyron") or "").strip()
+        headline_cues = [
+            str(value)
+            for value in item.get("headline_cues", [])
+            if str(value).strip()
+        ]
         used_claim_ids = [
             claim_id for claim_id in item.get("claim_ids", []) if claim_id in claim_ids
         ]
@@ -241,6 +272,17 @@ def script_from_llm_json(
                         "suggested_template_ids", ["split_anchor_visual"]
                     )
                 ],
+                lower_third=(
+                    lower_third[:80]
+                    or section_overlay_text(text, section_type, max_chars=80)
+                ),
+                chyron=(
+                    chyron[:64]
+                    or section_overlay_text(text, section_type, max_chars=64)
+                ),
+                headline_cues=normalize_section_headline_cues(
+                    text, section_type, headline_cues
+                ),
                 editorial_notes=[],
                 approval_status=ApprovalStatus.review,
             )
@@ -257,8 +299,6 @@ def script_from_llm_json(
         ),
         status=ScriptStatus.review,
         sections=sections,
-        lower_thirds=[str(raw.get("headline") or "SynthPost Briefing")[:80]],
-        chyrons=[str(raw.get("headline") or "SynthPost Briefing")[:64]],
         source_ids=[
             doc.get("document_id")
             for doc in pack.get("documents", [])
@@ -300,6 +340,13 @@ Approximate section word targets:
 Required tone: clear spoken delivery, no clickbait, separate facts from uncertainty.
 Required section types to use when appropriate: {", ".join(SECTION_ORDER)}.
 Every factual section must include claim_ids from the pack.
+For every section, write a distinct lower_third of at most 80 characters and a
+distinct chyron of at most 64 characters. Both must summarize that section's
+specific content in concise broadcast language; do not repeat the episode
+headline or reuse the same overlay across sections.
+Also return headline_cues in spoken order: one concise headline for every
+sentence or major clause in the section narration. Each cue must describe the
+specific beat being spoken, not the template, visual, or overall episode.
 For every section, return exactly two suggested_search_queries grounded in its linked claims:
 1. A still-image, diagram, or map query using concrete people, places, objects, and events.
 2. A primary-source video query using the exact event/person/location plus "official video", "raw footage", "B-roll", or "press footage". Do not request finished news coverage or broadcaster packages.
@@ -341,6 +388,9 @@ def _long_form_section_schema() -> dict[str, Any]:
         "required": [
             "text",
             "claim_ids",
+            "lower_third",
+            "chyron",
+            "headline_cues",
             "suggested_visual_types",
             "suggested_search_queries",
             "suggested_template_ids",
@@ -348,6 +398,12 @@ def _long_form_section_schema() -> dict[str, Any]:
         "properties": {
             "text": {"type": "string"},
             "claim_ids": {"type": "array", "items": {"type": "string"}},
+            "lower_third": {"type": "string", "maxLength": 80},
+            "chyron": {"type": "string", "maxLength": 64},
+            "headline_cues": {
+                "type": "array",
+                "items": {"type": "string", "maxLength": 80},
+            },
             "suggested_visual_types": {
                 "type": "array",
                 "items": {"type": "string"},
@@ -428,6 +484,23 @@ def _validate_long_form_section(
                 "suggested_template_ids", ["split_anchor_visual"]
             )
         ],
+        lower_third=(
+            str(raw.get("lower_third") or "").strip()[:80]
+            or section_overlay_text(text, section_type, max_chars=80)
+        ),
+        chyron=(
+            str(raw.get("chyron") or "").strip()[:64]
+            or section_overlay_text(text, section_type, max_chars=64)
+        ),
+        headline_cues=normalize_section_headline_cues(
+            text,
+            section_type,
+            [
+                str(value)
+                for value in raw.get("headline_cues", [])
+                if str(value).strip()
+            ],
+        ),
         approval_status=ApprovalStatus.review,
     )
 
@@ -473,6 +546,11 @@ Return exactly two grounded visual queries: first a concrete still/map/diagram;
 second an official primary-source video/raw-footage/B-roll query. Never request a
 finished broadcaster news package.
 
+Return a lower_third of at most 80 characters and a chyron of at most 64
+characters that specifically summarize this section rather than the episode.
+Return headline_cues in spoken order, with one concise headline for each
+sentence or major clause in the narration.
+
 Return only JSON matching this schema:
 {json.dumps(_long_form_section_schema())}
 
@@ -505,6 +583,7 @@ INPUT JSON:
     expanded.status = ScriptStatus.review
     expanded.created_at = now_iso()
     expanded.updated_at = expanded.created_at
+    expanded = ScriptDocument.model_validate(expanded.model_dump(mode="json"))
     return expanded, attempt_count
 
 
@@ -605,7 +684,7 @@ def save_manual_script(
             script.category = previous.category
         script.source_ids = list(previous.source_ids)
         script.warnings = list(previous.warnings)
-        for edited, original in zip(script.sections, previous.sections, strict=False):
+        for edited, original in zip(script.sections, previous.sections):
             edited.section_id = original.section_id
             edited.section_type = original.section_type
             edited.claim_ids = list(original.claim_ids)

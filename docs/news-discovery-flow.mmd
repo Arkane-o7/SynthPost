@@ -1,0 +1,36 @@
+flowchart TD
+  subgraph "Studio UI"
+    A["Editor taps Refresh Discovery"]
+    B["Story Inbox displays ranked candidates"]
+  end
+
+  subgraph "API and job queue"
+    C["POST /api/discovery/start"]
+    D[("SQLite render_jobs")]
+    E["Background worker claims discovery job"]
+    F["SSE job event refreshes Studio state"]
+  end
+
+  subgraph "Source discovery"
+    G[("Enabled source definitions")]
+    H{"Feed cache younger than 15 minutes?"}
+    I["Read cached XML"]
+    J["HTTP fetch with ETag and Last-Modified"]
+    K["feedparser parses up to 40 entries"]
+  end
+
+  subgraph "Candidate processing"
+    L["Normalize title, summary, URL, date, thumbnail"]
+    M["Build duplicate-group hash"]
+    N["Calculate eight heuristic scores"]
+    O["Weighted final score"]
+    P[("SQLite story_candidates")]
+  end
+
+  A --> C --> D --> E
+  E --> G --> H
+  H -->|"yes"| I --> K
+  H -->|"no"| J --> K
+  J -.->|"network failure with old cache"| I
+  K --> L --> M --> N --> O --> P
+  P --> F --> B
