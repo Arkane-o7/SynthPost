@@ -9,6 +9,11 @@ export const JobsPage: React.FC = () => {
   const studio = useStudio();
   const [typeFilter, setTypeFilter] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('');
+  const [scope, setScope] = React.useState<'episode' | 'all'>(
+    studio.selectedEpisodeId ? 'episode' : 'all',
+  );
+  const [openLogId, setOpenLogId] = React.useState('');
+  const [logs, setLogs] = React.useState<Record<string, string>>({});
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -21,25 +26,59 @@ export const JobsPage: React.FC = () => {
   };
 
   const jobs = studio.jobs.filter((j) => {
+    if (
+      scope === 'episode' &&
+      studio.selectedEpisodeId &&
+      j.episode_id !== studio.selectedEpisodeId
+    ) return false;
     if (typeFilter && j.job_type !== typeFilter) return false;
     if (statusFilter && j.status !== statusFilter) return false;
     return true;
   });
 
-  const jobTypes = [...new Set(studio.jobs.map((j) => j.job_type))];
+  const scopedJobs = studio.jobs.filter(
+    (job) =>
+      scope === 'all' ||
+      !studio.selectedEpisodeId ||
+      job.episode_id === studio.selectedEpisodeId,
+  );
+  const jobTypes = [...new Set(scopedJobs.map((j) => j.job_type))];
+  const activeCount = scopedJobs.filter((job) =>
+    ['queued', 'paused', 'running'].includes(job.status),
+  ).length;
+
+  const toggleLogs = async (jobId: string) => {
+    if (openLogId === jobId) {
+      setOpenLogId('');
+      return;
+    }
+    setOpenLogId(jobId);
+    if (jobId in logs) return;
+    try {
+      const value = await api.jobLogs(jobId);
+      setLogs((current) => ({ ...current, [jobId]: value || 'No log output yet.' }));
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   return (
     <div>
-      <div className="topbar">
+      <div className="topbar mobile-page-hero jobs-page-hero">
         <div>
-          <div className="topbar-kicker">SynthPost Studio</div>
+          <div className="topbar-kicker">Laptop production queue</div>
           <h1>Jobs</h1>
+          <p>{activeCount} active · cancel, retry, and inspect remote work.</p>
         </div>
         <button onClick={() => void studio.refreshJobs()}>Refresh</button>
       </div>
 
       {/* Filters */}
       <div className="filter-toolbar" style={{ marginBottom: 16 }}>
+        <select value={scope} onChange={(e) => setScope(e.target.value as 'episode' | 'all')}>
+          <option value="episode" disabled={!studio.selectedEpisodeId}>Current episode</option>
+          <option value="all">All projects</option>
+        </select>
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           <option value="">All types</option>
           {jobTypes.map((t) => (
@@ -52,6 +91,7 @@ export const JobsPage: React.FC = () => {
         >
           <option value="">All statuses</option>
           <option value="queued">Queued</option>
+          <option value="paused">Paused</option>
           <option value="running">Running</option>
           <option value="completed">Completed</option>
           <option value="failed">Failed</option>
@@ -77,7 +117,17 @@ export const JobsPage: React.FC = () => {
                 job={job}
                 onRetry={() => act(() => api.retryJob(job.job_id))}
                 onCancel={() => act(() => api.cancelJob(job.job_id))}
+                onPause={() => act(() => api.pauseJob(job.job_id))}
+                onResume={() => act(() => api.resumeJob(job.job_id))}
               />
+              <div className="job-remote-actions">
+                <button type="button" onClick={() => void toggleLogs(job.job_id)}>
+                  {openLogId === job.job_id ? 'Hide logs' : 'View logs'}
+                </button>
+              </div>
+              {openLogId === job.job_id && (
+                <pre className="job-log-viewer">{logs[job.job_id] ?? 'Loading logs…'}</pre>
+              )}
               <div
                 className="row-between text-muted"
                 style={{ fontSize: 11, marginTop: 8 }}

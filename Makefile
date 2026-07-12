@@ -1,4 +1,4 @@
-.PHONY: setup dev backend worker web test typecheck smoke render-demo searxng-up searxng-down
+.PHONY: setup dev backend worker web remote remote-status remote-off test typecheck smoke render-demo searxng-up searxng-down
 
 DOCKER ?= $(shell command -v docker 2>/dev/null || { test -x /Applications/Docker.app/Contents/Resources/bin/docker && echo /Applications/Docker.app/Contents/Resources/bin/docker; } || echo docker)
 DOCKER_CONTEXT ?=
@@ -26,6 +26,15 @@ searxng-down:
 
 dev:
 	python3 -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 & python3 -m pipeline.jobs.worker & npm --prefix web run dev -- --host 127.0.0.1 --port 5173
+
+remote:
+	./tools/run_remote_studio.sh
+
+remote-status:
+	@tailscale serve status 2>/dev/null || tailscale --socket="$$HOME/.synthpost/tailscaled.sock" serve status
+
+remote-off:
+	@tailscale serve --https=443 off 2>/dev/null || tailscale --socket="$$HOME/.synthpost/tailscaled.sock" serve --https=443 off
 
 test:
 	python3 -m unittest discover -s tests

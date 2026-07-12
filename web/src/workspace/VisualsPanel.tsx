@@ -464,7 +464,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
     <div className="stack-lg animate-fade-in">
       {/* Toolbar */}
       <div className="card">
-        <div className="row-between" style={{ marginBottom: 12 }}>
+        <div className="row-between visual-toolbar-heading" style={{ marginBottom: 12 }}>
           <h2>Visuals</h2>
           <button
             type="button"

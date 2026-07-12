@@ -146,6 +146,7 @@ class AudioMode(str, Enum):
 
 class JobStatus(str, Enum):
     queued = "queued"
+    paused = "paused"
     running = "running"
     completed = "completed"
     failed = "failed"

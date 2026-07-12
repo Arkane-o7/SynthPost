@@ -18,6 +18,7 @@ from pipeline.manifest_builder import build_story_manifest, hydrate_timeline_vis
 from pipeline.models import (
     AudioMode,
     ContentRole,
+    JobStatus,
     MediaType,
     RightsTier,
     ScriptDocument,
@@ -74,6 +75,34 @@ from assembly.stitch_episode import story_manifests
 
 
 class V2WorkflowAndPipelineTests(unittest.TestCase):
+    def test_paused_job_stays_out_of_worker_queue_until_resumed(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "paused-job.sqlite3")
+        try:
+            project = repository.create_project("Remote control")
+            episode = repository.create_episode(project.project_id, "Phone episode")
+            job = repository.create_job(
+                "assemble_episode",
+                episode_id=episode.episode_id,
+                render_profile="production",
+            )
+            job.status = JobStatus.paused
+            job.stage = "paused_by_editor"
+            repository.upsert_job(job)
+
+            self.assertIsNone(repository.claim_next_job())
+
+            job.status = JobStatus.queued
+            job.stage = "queued_after_pause"
+            repository.upsert_job(job)
+            claimed = repository.claim_next_job()
+            self.assertIsNotNone(claimed)
+            self.assertEqual(claimed.job_id, job.job_id)
+            self.assertEqual(claimed.status, JobStatus.running)
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_episode_candidate_listing_excludes_global_and_other_episode_rows(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "candidate-isolation.sqlite3")

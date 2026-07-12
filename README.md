@@ -89,6 +89,39 @@ make worker
 make web
 ```
 
+## Private phone access
+
+SynthPost can keep all processing on the laptop while exposing the command UI
+privately to your phone through [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
+This uses an encrypted tailnet URL and does not make the Studio public on the
+internet.
+
+One-time setup:
+
+1. Install Tailscale on the Mac and phone and sign both into the same account.
+2. On macOS, use Tailscale's standalone package if you need the CLI in your
+   terminal: <https://tailscale.com/docs/install/mac>.
+3. Start the laptop-hosted remote Studio:
+
+```bash
+make remote
+```
+
+The command builds the mobile UI, starts FastAPI and the worker on localhost,
+and prints a private HTTPS `*.ts.net` address. Open that address on the phone.
+Press Ctrl+C to stop the services and remove the Serve mapping. You can inspect
+or disable the mapping separately with `make remote-status` and
+`make remote-off`.
+
+Do not replace Serve with Tailscale Funnel for this application: Funnel creates
+a public internet endpoint, while SynthPost's remote production controls should
+remain limited to authenticated devices in the private tailnet.
+
+If Tailscale was installed with Homebrew and its system tunnel is unavailable,
+the launcher automatically uses Tailscale's userspace networking mode. Its
+login state and socket are stored under `~/.synthpost`; no `sudo` daemon is
+required.
+
 ## SearXNG research and visual search
 
 SynthPost includes a localhost-only SearXNG container configured to expose the

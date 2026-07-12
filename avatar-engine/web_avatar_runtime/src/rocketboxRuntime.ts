@@ -358,6 +358,7 @@ function mouthOpenStrengthForCue(cueName: string, value: number): number {
 type TongueMotion = { x: number; y: number; z: number };
 
 const ZERO_TONGUE_MOTION: TongueMotion = { x: 0, y: 0, z: 0 };
+const TONGUE_REST_INSET_Z = -0.001;
 
 function tongueMotionForCue(
   cueName: string,
@@ -434,7 +435,7 @@ function applyCc4JawMotion(
     "CC_Base_Tongue01",
     tongueMotion.x,
     tongueMotion.y,
-    tongueMotion.z,
+    tongueMotion.z + TONGUE_REST_INSET_Z,
   );
 
   // Keep the upper row visible while reducing the original downward drift.

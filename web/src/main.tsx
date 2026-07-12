@@ -7,3 +7,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+
+if ('serviceWorker' in navigator && location.port !== '5173') {
+  void navigator.serviceWorker.register('/sw.js');
+}

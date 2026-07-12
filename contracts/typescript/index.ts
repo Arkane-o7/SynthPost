@@ -260,7 +260,7 @@ export type RenderJob = {
   story_id: string | null;
   job_type: string;
   render_profile: string;
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'paused' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   stage: string;
   started_at: string | null;

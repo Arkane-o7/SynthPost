@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from pipeline import config
@@ -939,6 +940,38 @@ def cancel_job(job_id: str) -> dict[str, Any]:
         repository.close()
 
 
+@app.post("/api/jobs/{job_id}/pause")
+def pause_job(job_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        job = repository.get_job(job_id)
+        if job.status == JobStatus.paused:
+            return job.model_dump(mode="json")
+        if job.status != JobStatus.queued:
+            raise ValueError("Only queued jobs can be paused; cancel a running job instead")
+        job.status = JobStatus.paused
+        job.stage = "paused_by_editor"
+        repository.upsert_job(job)
+        return job.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.post("/api/jobs/{job_id}/resume")
+def resume_job(job_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        job = repository.get_job(job_id)
+        if job.status != JobStatus.paused:
+            raise ValueError("Only paused jobs can be resumed")
+        job.status = JobStatus.queued
+        job.stage = "queued_after_pause"
+        repository.upsert_job(job)
+        return job.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
 @app.post("/api/jobs/{job_id}/retry")
 def retry_job(job_id: str) -> dict[str, Any]:
     repository = repo()
@@ -1009,6 +1042,14 @@ def serve_artifact(artifact_path: str) -> FileResponse:
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
     return FileResponse(resolved)
+
+
+# The remote/mobile build is served by the same localhost-only process as the
+# API. Tailscale Serve can then proxy one port without exposing SQLite, media
+# folders, the worker, or a development server directly to the network.
+WEB_DIST = PROJECT_ROOT / "web" / "dist"
+if WEB_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=WEB_DIST, html=True), name="studio")
 
 
 if __name__ == "__main__":

@@ -10,7 +10,10 @@ import type {
   VisualCandidate,
 } from "../contracts";
 
-export const RightRail: React.FC = () => {
+export const RightRail: React.FC<{
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}> = ({ mobileOpen = false, onMobileClose }) => {
   const studio = useStudio();
 
   const story = studio.candidates.find(
@@ -28,7 +31,7 @@ export const RightRail: React.FC = () => {
   };
   const contextJobs = studio.jobs.filter(isCurrentContextJob);
   const activeJobs = contextJobs.filter((j) =>
-    ["queued", "running"].includes(j.status),
+    ["queued", "paused", "running"].includes(j.status),
   );
   const recentJobs = contextJobs.slice(0, 5);
   const [script, setScript] = React.useState<ScriptDocument | null>(null);
@@ -168,7 +171,14 @@ export const RightRail: React.FC = () => {
   }
 
   return (
-    <aside className="right-rail">
+    <aside className={`right-rail ${mobileOpen ? "mobile-open" : ""}`}>
+      <div className="mobile-attention-heading">
+        <div>
+          <div className="mobile-section-kicker">Remote watch desk</div>
+          <h2>Attention center</h2>
+        </div>
+        <button type="button" aria-label="Close attention center" onClick={onMobileClose}>×</button>
+      </div>
       {/* Active Jobs */}
       <div className="right-rail-section">
         <h3>Active Jobs {activeJobs.length > 0 && `(${activeJobs.length})`}</h3>

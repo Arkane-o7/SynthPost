@@ -1,6 +1,32 @@
 import React from "react";
+import { StatusBadge } from "../components/StatusBadge";
 
-export const SettingsPage: React.FC = () => (
+export const SettingsPage: React.FC = () => {
+  const supported = "Notification" in window;
+  const [permission, setPermission] = React.useState<NotificationPermission | "unsupported">(
+    supported ? Notification.permission : "unsupported",
+  );
+
+  const enableNotifications = async () => {
+    if (!supported) return;
+    const next = await Notification.requestPermission();
+    setPermission(next);
+    if (next === "granted") {
+      localStorage.setItem("synthpost.notifications", "enabled");
+      const options = {
+        body: "This phone will report completed and failed laptop jobs while the Studio is open.",
+        icon: "/synthpost-icon.svg",
+      };
+      if ("serviceWorker" in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.showNotification("SynthPost remote notifications enabled", options);
+      } else {
+        new Notification("SynthPost remote notifications enabled", options);
+      }
+    }
+  };
+
+  return (
   <div>
     <div className="topbar">
       <div>
@@ -10,6 +36,27 @@ export const SettingsPage: React.FC = () => (
     </div>
 
     <div className="grid grid-2" style={{ alignItems: "start" }}>
+      <div className="card stack remote-notification-card">
+        <div className="mobile-section-kicker">Phone handoff</div>
+        <h2>Remote Notifications</h2>
+        <p className="text-muted" style={{ fontSize: 13 }}>
+          Get a device notification when a laptop job completes or needs intervention.
+          On iPhone, add SynthPost to the Home Screen before enabling notifications.
+        </p>
+        <div className="row-between">
+          <StatusBadge status={permission === "granted" ? "completed" : permission}>
+            {permission}
+          </StatusBadge>
+          <button
+            type="button"
+            className="btn-success"
+            disabled={!supported || permission === "granted"}
+            onClick={() => void enableNotifications()}
+          >
+            {permission === "granted" ? "Notifications enabled" : "Enable notifications"}
+          </button>
+        </div>
+      </div>
       {/* LLM provider */}
       <div className="card stack">
         <h2>LLM Provider</h2>
@@ -98,4 +145,5 @@ export const SettingsPage: React.FC = () => (
       </div>
     </div>
   </div>
-);
+  );
+};

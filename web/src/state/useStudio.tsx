@@ -37,6 +37,7 @@ const StudioContext = React.createContext<StudioContextValue | null>(null);
 export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const jobsRef = React.useRef<RenderJob[]>([]);
   const [state, setState] = React.useState<StudioState>({
     projects: [],
     episodes: [],
@@ -74,6 +75,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
         api.listSources(),
         api.listJobs(),
       ]);
+      jobsRef.current = jobs;
       const selectedProjectId =
         state.selectedProjectId || projects[0]?.project_id || "";
       const episodes = selectedProjectId
@@ -133,6 +135,42 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
     eventSource.addEventListener("jobs", (e) => {
       try {
         const jobs = JSON.parse(e.data) as RenderJob[];
+        const previousJobs = jobsRef.current;
+        const terminalTransitions = jobs.filter((newJob) => {
+          const oldJob = previousJobs.find((job) => job.job_id === newJob.job_id);
+          return (
+            oldJob &&
+            oldJob.status !== newJob.status &&
+            ["completed", "failed"].includes(newJob.status)
+          );
+        });
+        jobsRef.current = jobs;
+        if (
+          localStorage.getItem("synthpost.notifications") === "enabled" &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
+          for (const job of terminalTransitions.slice(0, 3)) {
+            const title = job.status === "failed"
+              ? "SynthPost needs attention"
+              : "SynthPost task complete";
+            const options = {
+              body:
+                job.status === "failed"
+                  ? `${job.job_type}: ${job.error ?? "Job failed"}`
+                  : `${job.job_type}: ${job.stage}`,
+              icon: "/synthpost-icon.svg",
+              tag: job.job_id,
+            };
+            if ("serviceWorker" in navigator) {
+              void navigator.serviceWorker.ready.then((registration) =>
+                registration.showNotification(title, options),
+              );
+            } else {
+              new Notification(title, options);
+            }
+          }
+        }
         setState((current) => {
           let updatedTimestamp = current.lastJobEventTimestamp;
           // Trigger a panel refresh if any job transitioned to completed/failed

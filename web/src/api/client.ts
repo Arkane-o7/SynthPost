@@ -78,6 +78,11 @@ export const api = {
     }),
   readEpisode: (episodeId: string) =>
     request<Episode>(`/api/episodes/${episodeId}`),
+  updateEpisode: (episodeId: string, patch: Partial<Episode>) =>
+    request<Episode>(`/api/episodes/${episodeId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
 
   listSources: () => request<SourceDefinition[]>("/api/sources"),
   createSource: (
@@ -359,6 +364,10 @@ export const api = {
     request<RenderJob>(`/api/jobs/${jobId}/retry`, { method: "POST" }),
   cancelJob: (jobId: string) =>
     request<RenderJob>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
+  pauseJob: (jobId: string) =>
+    request<RenderJob>(`/api/jobs/${jobId}/pause`, { method: "POST" }),
+  resumeJob: (jobId: string) =>
+    request<RenderJob>(`/api/jobs/${jobId}/resume`, { method: "POST" }),
   jobLogs: (jobId: string) => request<string>(`/api/jobs/${jobId}/logs`),
 };
 

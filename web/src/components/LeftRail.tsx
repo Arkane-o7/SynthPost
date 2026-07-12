@@ -1,10 +1,11 @@
 import React from 'react';
 import { useStudio } from '../state/useStudio';
 
-export type Page = 'command' | 'sources' | 'inbox' | 'jobs' | 'settings';
+export type Page = 'command' | 'episodes' | 'sources' | 'inbox' | 'jobs' | 'settings';
 
 const NAV_ITEMS: { key: Page; label: string; icon: string }[] = [
   { key: 'command', label: 'Command Center', icon: '◉' },
+  { key: 'episodes', label: 'Episodes', icon: '▤' },
   { key: 'sources', label: 'Sources', icon: '📡' },
   { key: 'inbox', label: 'Story Inbox', icon: '📨' },
   { key: 'jobs', label: 'Jobs', icon: '⚡' },

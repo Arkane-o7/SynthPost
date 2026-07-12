@@ -245,7 +245,7 @@
         "story_id": {"type": ["string", "null"]},
         "job_type": {"type": "string"},
         "render_profile": {"type": "string"},
-        "status": {"enum": ["queued", "running", "completed", "failed", "cancelled"]},
+        "status": {"enum": ["queued", "paused", "running", "completed", "failed", "cancelled"]},
         "progress": {"type": "number"},
         "stage": {"type": "string"},
         "started_at": {"type": ["string", "null"]},

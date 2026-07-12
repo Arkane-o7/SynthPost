@@ -10,7 +10,9 @@ export const InlineJobCard: React.FC<{
   job: RenderJob;
   onRetry?: () => void;
   onCancel?: () => void;
-}> = ({ job, onRetry, onCancel }) => {
+  onPause?: () => void;
+  onResume?: () => void;
+}> = ({ job, onRetry, onCancel, onPause, onResume }) => {
   const progressClass =
     job.status === 'completed'
       ? 'progress-complete'
@@ -37,7 +39,7 @@ export const InlineJobCard: React.FC<{
         {job.stage}
         {job.error ? ` · ${job.error}` : ''}
       </div>
-      {(onRetry || onCancel) && (
+      {(onRetry || onCancel || onPause || onResume) && (
         <div className="row-tight" style={{ marginTop: 8 }}>
           {onRetry && job.status === 'failed' && (
             <button className="btn-ghost" onClick={onRetry}>
@@ -47,6 +49,16 @@ export const InlineJobCard: React.FC<{
           {onCancel && ['queued', 'running'].includes(job.status) && (
             <button className="btn-ghost" onClick={onCancel}>
               Cancel
+            </button>
+          )}
+          {onPause && job.status === 'queued' && (
+            <button className="btn-ghost" onClick={onPause}>
+              Pause queue
+            </button>
+          )}
+          {onResume && job.status === 'paused' && (
+            <button className="btn-ghost" onClick={onResume}>
+              Resume
             </button>
           )}
         </div>

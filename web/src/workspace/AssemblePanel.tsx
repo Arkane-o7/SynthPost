@@ -206,6 +206,8 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 job={job}
                 onRetry={() => act(() => api.retryJob(job.job_id))}
                 onCancel={() => act(() => api.cancelJob(job.job_id))}
+                onPause={() => act(() => api.pauseJob(job.job_id))}
+                onResume={() => act(() => api.resumeJob(job.job_id))}
               />
             ))
         )}

@@ -7,6 +7,7 @@ import { SourcesPage } from "./pages/SourcesPage";
 import { StoryInboxPage } from "./pages/StoryInboxPage";
 import { JobsPage } from "./pages/JobsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { EpisodesPage } from "./pages/EpisodesPage";
 import "./styles/studio.css";
 
 const Main: React.FC = () => {
@@ -28,6 +29,9 @@ const Main: React.FC = () => {
         <>
           {page === "command" && (
             <CommandCenter onNavigateToInbox={() => setPage("inbox")} />
+          )}
+          {page === "episodes" && (
+            <EpisodesPage onOpenStudio={() => setPage("command")} />
           )}
           {page === "sources" && <SourcesPage />}
           {page === "inbox" && (
