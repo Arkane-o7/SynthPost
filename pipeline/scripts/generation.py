@@ -107,8 +107,28 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
             }
             for document in pack.get("documents", [])
         ],
-        "claims": pack.get("claims", []),
-        "evidence": pack.get("evidence", []),
+        "claims": [
+            {
+                key: claim.get(key)
+                for key in (
+                    "claim_id",
+                    "claim_text",
+                    "claim_type",
+                    "confidence",
+                    "evidence_ids",
+                    "supported",
+                )
+            }
+            for claim in pack.get("claims", [])
+        ],
+        "evidence": [
+            {
+                "evidence_id": evidence.get("evidence_id"),
+                "document_id": evidence.get("document_id"),
+                "excerpt": str(evidence.get("excerpt") or "")[:280],
+            }
+            for evidence in pack.get("evidence", [])
+        ],
         "organizations": pack.get("organizations", [])[:20],
         "locations": pack.get("locations", [])[:20],
         "numbers": pack.get("numbers", [])[:30],
@@ -328,7 +348,7 @@ def generation_prompt(
     return f"""
 You are SynthPost Studio's local newsroom writer. Create a grounded section-based news script.
 Use only the supplied research pack. Do not fabricate quotes, statistics, names, dates, or attribution.
-Return only JSON matching this schema: {json.dumps(script_schema())}
+Return only JSON matching the provided response schema.
 
 Target duration: {target_duration_seconds} seconds.
 Estimated narration target: about {words} spoken words.

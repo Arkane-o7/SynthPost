@@ -5,6 +5,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from pipeline import env as _env  # noqa: F401 - loads .env/.env.local at import time
@@ -23,6 +24,27 @@ class LLMProvider(Protocol):
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]: ...
+
+
+def groq_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a schema to Groq strict structured-output requirements."""
+
+    normalized = {key: value for key, value in schema.items()}
+    if normalized.get("type") == "object":
+        properties = normalized.get("properties", {})
+        normalized["properties"] = {
+            key: groq_strict_schema(value) for key, value in properties.items()
+        }
+        normalized["required"] = list(properties)
+        normalized["additionalProperties"] = False
+    if isinstance(normalized.get("items"), dict):
+        normalized["items"] = groq_strict_schema(normalized["items"])
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        if isinstance(normalized.get(keyword), list):
+            normalized[keyword] = [
+                groq_strict_schema(value) for value in normalized[keyword]
+            ]
+    return normalized
 
 
 @dataclass
@@ -94,7 +116,7 @@ class GroqProvider:
             "messages": [
                 {
                     "role": "system",
-                    "content": f"You are a helpful assistant. Output ONLY valid JSON matching this schema:\n{json.dumps(schema)}",
+                    "content": "You are a helpful assistant. Output only valid JSON matching the provided response schema.",
                 },
                 {
                     "role": "user",
@@ -102,7 +124,16 @@ class GroqProvider:
                 }
             ],
             "temperature": temp,
-            "response_format": {"type": "json_object"},
+            "reasoning_effort": "low",
+            "include_reasoning": False,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "synthpost_response",
+                    "strict": True,
+                    "schema": groq_strict_schema(schema),
+                },
+            },
         }
 
         req = Request(
@@ -112,8 +143,12 @@ class GroqProvider:
             method="POST",
         )
 
-        with urlopen(req, timeout=self.timeout_seconds) as response:
-            result = json.loads(response.read().decode("utf-8"))
+        try:
+            with urlopen(req, timeout=self.timeout_seconds) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace").strip()
+            raise ValueError(f"Groq HTTP {exc.code}: {body or exc.reason}") from exc
 
         content = result["choices"][0]["message"]["content"]
         return parse_json_object(content)

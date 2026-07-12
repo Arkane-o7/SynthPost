@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from urllib.error import HTTPError
 from unittest.mock import patch
 
 from pipeline.llm.providers import (
@@ -9,6 +10,7 @@ from pipeline.llm.providers import (
     GroqProvider,
     HostedFallbackProvider,
     configured_provider,
+    groq_strict_schema,
 )
 
 
@@ -80,6 +82,31 @@ class LLMProviderTests(unittest.TestCase):
             request.get_header("User-agent"),
             "SynthPostStudio/2.0 hosted-llm-client",
         )
+        body = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(body["response_format"]["type"], "json_schema")
+        self.assertTrue(body["response_format"]["json_schema"]["strict"])
+
+    def test_groq_strict_schema_requires_all_declared_fields(self) -> None:
+        schema = groq_strict_schema(
+            {"type": "object", "properties": {"name": {"type": "string"}}}
+        )
+        self.assertEqual(schema["required"], ["name"])
+        self.assertFalse(schema["additionalProperties"])
+
+    def test_groq_client_reports_http_error_body(self) -> None:
+        error = HTTPError(
+            "https://api.groq.com/openai/v1/chat/completions",
+            413,
+            "Payload Too Large",
+            {},
+            None,
+        )
+        error.read = lambda: b'{"error":{"message":"TPM limit 8000"}}'
+        with patch.dict("os.environ", {"GROQ_API_KEY": "unit-key"}), patch(
+            "pipeline.llm.providers.urlopen", side_effect=error
+        ):
+            with self.assertRaisesRegex(ValueError, "TPM limit 8000"):
+                GroqProvider().generate_json("large prompt", {"type": "object"})
 
 
 if __name__ == "__main__":

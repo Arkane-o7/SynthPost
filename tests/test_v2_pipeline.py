@@ -886,6 +886,30 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertNotIn("content_text", compact["documents"][0])
         self.assertNotIn("people", compact)
 
+    def test_generation_prompt_pack_removes_redundant_claim_notes(self) -> None:
+        compact = compact_research_pack_for_prompt(
+            {
+                "claims": [
+                    {
+                        "claim_id": "claim_001",
+                        "claim_text": "Grounded fact",
+                        "notes": "Repeated extraction metadata",
+                    }
+                ],
+                "evidence": [
+                    {
+                        "evidence_id": "ev_001",
+                        "document_id": "doc_001",
+                        "excerpt": "x" * 400,
+                        "url": "https://example.com/repeated-url",
+                    }
+                ],
+            }
+        )
+        self.assertNotIn("notes", compact["claims"][0])
+        self.assertNotIn("url", compact["evidence"][0])
+        self.assertEqual(len(compact["evidence"][0]["excerpt"]), 280)
+
     def test_workflow_blocks_invalid_transition(self) -> None:
         self.assertTrue(
             can_transition(StoryWorkflowState.discovered, StoryWorkflowState.selected)
