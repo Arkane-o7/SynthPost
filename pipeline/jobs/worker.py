@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -9,6 +10,7 @@ import traceback as traceback_module
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
+from datetime import datetime, timezone
 
 from assembly.stitch_episode import stitch_episode
 from pipeline.db.repository import Repository, get_repository
@@ -95,6 +97,7 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
         target_duration_seconds=int(
             ctx.job.payload.get("target_duration_seconds") or 600
         ),
+        narration_mode=str(ctx.job.payload.get("narration_mode") or "explained"),
     )
     ctx.progress(100, "script ready for review")
     return {"script_id": script.script_id}
@@ -252,6 +255,81 @@ HANDLERS: dict[str, Callable[[JobContext], dict[str, str]]] = {
     "assemble_episode": handle_assemble_episode,
 }
 
+JOB_TIMEOUT_SECONDS = {
+    "discovery": 5 * 60,
+    "research": 30 * 60,
+    "script_generate": 20 * 60,
+    "visual_search": 30 * 60,
+    "timeline_generate": 5 * 60,
+}
+
+STALE_JOB_SECONDS = {
+    **JOB_TIMEOUT_SECONDS,
+    "render_avatar": 3 * 60 * 60,
+    "render_story": 3 * 60 * 60,
+    "assemble_episode": 60 * 60,
+}
+
+
+@contextmanager
+def job_deadline(job_type: str):
+    """Interrupt non-render jobs that exceed their queue safety budget."""
+
+    seconds = JOB_TIMEOUT_SECONDS.get(job_type)
+    if not seconds or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def expired(_signum, _frame):
+        raise TimeoutError(
+            f"{job_type} exceeded its {seconds // 60}-minute execution limit"
+        )
+
+    previous = signal.signal(signal.SIGALRM, expired)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+
+
+def recover_stale_jobs(repository: Repository) -> int:
+    """Close abandoned running records left by a crash or laptop restart."""
+
+    now = datetime.now(timezone.utc)
+    recovered = 0
+    for job in repository.list_jobs(limit=500):
+        if job.status != JobStatus.running:
+            continue
+        limit = STALE_JOB_SECONDS.get(job.job_type, 60 * 60)
+        try:
+            updated = datetime.fromisoformat(job.updated_at.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            updated = now
+        age = max(0.0, (now - updated).total_seconds())
+        if age <= limit:
+            continue
+        job.status = JobStatus.failed
+        job.stage = "failed_stale_worker"
+        job.error = (
+            f"Worker stopped updating this {job.job_type} job for "
+            f"{int(age // 60)} minutes; it was released from the queue. Retry it if needed."
+        )
+        job.completed_at = now_iso()
+        repository.upsert_job(job)
+        if job.job_type == "script_generate" and job.story_id:
+            try:
+                candidate = repository.candidate_for_story(job.story_id)
+                if candidate.workflow_state == StoryWorkflowState.script_generating:
+                    repository.transition_story(
+                        job.story_id, StoryWorkflowState.research_ready
+                    )
+            except Exception:
+                pass
+        recovered += 1
+    return recovered
+
 
 def run_one(repository: Repository) -> bool:
     job = repository.claim_next_job()
@@ -267,7 +345,8 @@ def run_one(repository: Repository) -> bool:
         return True
     try:
         ctx.progress(1, "running")
-        outputs = handler(ctx)
+        with job_deadline(job.job_type):
+            outputs = handler(ctx)
         job.output_paths.update(outputs)
         job.status = JobStatus.completed
         job.progress = 100
@@ -299,6 +378,9 @@ def run_one(repository: Repository) -> bool:
 def run_loop(*, once: bool = False, interval: float = 1.0) -> None:
     repository = get_repository()
     try:
+        recovered = recover_stale_jobs(repository)
+        if recovered:
+            print(f"Recovered {recovered} stale running job(s).", flush=True)
         while True:
             did_work = run_one(repository)
             if once:

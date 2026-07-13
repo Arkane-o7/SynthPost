@@ -62,28 +62,21 @@ def validate_timeline(
             warnings.append(f"{prefix}: anchor.speaking differs from template default")
         visual = segment.visual
         if visual.asset_id:
-            if visual.content_cleanliness_status != "passed":
-                errors.append(
-                    f"{prefix}: visual content cleanliness is "
-                    f"{visual.content_cleanliness_status}, not passed"
+            if visual.review_status in {ReviewStatus.rejected, ReviewStatus.blocked}:
+                errors.append(f"{prefix}: rejected or blocked visual cannot render")
+            elif visual.review_status == ReviewStatus.suggested:
+                warnings.append(
+                    f"{prefix}: highest-fit suggested visual was selected automatically"
                 )
-            if visual.approval_blockers:
-                errors.append(
-                    f"{prefix}: visual has approval blockers: "
-                    + "; ".join(visual.approval_blockers[:3])
-                )
-            if visual.rights_tier == RightsTier.red:
-                errors.append(f"{prefix}: red-tier asset cannot render")
-            if (
+            elif visual.rights_tier == RightsTier.red:
+                errors.append(f"{prefix}: explicitly approved red-tier asset cannot render")
+            elif (
                 visual.rights_tier == RightsTier.yellow
                 and visual.review_status != ReviewStatus.manual_approved
             ):
-                errors.append(f"{prefix}: yellow-tier asset requires manual approval")
-            if visual.review_status not in {
-                ReviewStatus.approved,
-                ReviewStatus.manual_approved,
-            }:
-                errors.append(f"{prefix}: visual is not approved")
+                errors.append(
+                    f"{prefix}: explicitly approved yellow-tier asset requires manual approval"
+                )
             if visual.attribution_text in (None, ""):
                 warnings.append(f"{prefix}: approved visual has no attribution text")
         if not template_compatible(

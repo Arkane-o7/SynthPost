@@ -2,15 +2,25 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import Any, Callable
 
 from pipeline import config
 from pipeline.llm.providers import (
+    StructuredGenerationError,
     configured_provider,
     structured_generate,
 )
+from pipeline.editorial.charter import (
+    CHARTER_VERSION,
+    charter_prompt_context,
+    load_editorial_charter,
+    normalize_narration_mode,
+    show_format_for,
+)
 from pipeline.models import (
     ApprovalStatus,
+    GenerationAudit,
+    NarrationMode,
     ScriptDocument,
     ScriptSection,
     ScriptStatus,
@@ -18,6 +28,7 @@ from pipeline.models import (
     new_id,
     now_iso,
     normalize_section_headline_cues,
+    narration_beats,
     section_overlay_text,
 )
 
@@ -32,6 +43,10 @@ SECTION_ORDER = [
     "conclusion",
     "outro",
 ]
+
+SCRIPT_PROMPT_VERSION = "synthpost.script.v4"
+LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v3"
+HEADLINE_PROMPT_VERSION = "synthpost.headline-editor.v2"
 
 
 def target_word_count(duration_seconds: int) -> int:
@@ -94,27 +109,24 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
                 key: document.get(key)
                 for key in (
                     "document_id",
-                    "url",
                     "title",
                     "publisher",
                     "published_at",
                     "discovery_method",
-                    "research_query",
                     "relevance_score",
                     "extraction_status",
-                    "warnings",
                 )
             }
-            for document in pack.get("documents", [])
+            for document in pack.get("documents", [])[:12]
         ],
+        # Keep the grounding fields the writer actually consumes. Notes repeat
+        # claim text and can push Groq free/on-demand requests over their TPM cap.
         "claims": [
             {
                 key: claim.get(key)
                 for key in (
                     "claim_id",
                     "claim_text",
-                    "claim_type",
-                    "confidence",
                     "evidence_ids",
                     "supported",
                 )
@@ -125,15 +137,74 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
             {
                 "evidence_id": evidence.get("evidence_id"),
                 "document_id": evidence.get("document_id"),
-                "excerpt": str(evidence.get("excerpt") or "")[:280],
+                "excerpt": str(evidence.get("excerpt") or "")[:180],
             }
-            for evidence in pack.get("evidence", [])
+            for evidence in pack.get("evidence", [])[:30]
         ],
         "organizations": pack.get("organizations", [])[:20],
         "locations": pack.get("locations", [])[:20],
         "numbers": pack.get("numbers", [])[:30],
         "dates": pack.get("dates", [])[:20],
-        "uncertainties": pack.get("uncertainties", []),
+        "uncertainties": pack.get("uncertainties", [])[:8],
+        "systems": pack.get("systems", [])[:12],
+        "stakeholders": pack.get("stakeholders", [])[:12],
+        "trade_offs": pack.get("trade_offs", [])[:8],
+        "execution_gaps": pack.get("execution_gaps", [])[:8],
+        "editorial_questions": pack.get("editorial_questions", [])[:8],
+        "charter_version": pack.get("charter_version", CHARTER_VERSION),
+    }
+
+
+def section_research_context(
+    compact_pack: dict[str, Any], claim_ids: list[str], *, max_claims: int = 8
+) -> dict[str, Any]:
+    """Build a small evidence slice for one expansion request.
+
+    Sending the complete research pack for every section repeatedly exhausts
+    hosted-provider token windows. Linked claims come first, followed by a few
+    additional claims so the writer can make transitions without losing grounding.
+    """
+
+    requested = {str(value) for value in claim_ids}
+    all_claims = list(compact_pack.get("claims", []))
+    selected_claims = [
+        claim for claim in all_claims if str(claim.get("claim_id")) in requested
+    ]
+    for claim in all_claims:
+        if len(selected_claims) >= max_claims:
+            break
+        if claim not in selected_claims:
+            selected_claims.append(claim)
+    evidence_ids = {
+        str(evidence_id)
+        for claim in selected_claims
+        for evidence_id in (claim.get("evidence_ids") or [])
+    }
+    selected_evidence = [
+        evidence
+        for evidence in compact_pack.get("evidence", [])
+        if str(evidence.get("evidence_id")) in evidence_ids
+    ][:max_claims]
+    document_ids = {
+        str(evidence.get("document_id")) for evidence in selected_evidence
+    }
+    return {
+        "story_id": compact_pack.get("story_id"),
+        "research_summary": str(compact_pack.get("research_summary") or "")[:500],
+        "documents": [
+            document
+            for document in compact_pack.get("documents", [])
+            if str(document.get("document_id")) in document_ids
+        ],
+        "claims": selected_claims,
+        "evidence": selected_evidence,
+        "numbers": compact_pack.get("numbers", [])[:10],
+        "dates": compact_pack.get("dates", [])[:8],
+        "uncertainties": compact_pack.get("uncertainties", [])[:4],
+        "systems": compact_pack.get("systems", [])[:6],
+        "stakeholders": compact_pack.get("stakeholders", [])[:6],
+        "trade_offs": compact_pack.get("trade_offs", [])[:4],
+        "execution_gaps": compact_pack.get("execution_gaps", [])[:4],
     }
 
 
@@ -217,11 +288,11 @@ def script_schema() -> dict[str, Any]:
                         "section_type": {"type": "string"},
                         "text": {"type": "string"},
                         "claim_ids": {"type": "array", "items": {"type": "string"}},
-                        "lower_third": {"type": "string", "maxLength": 80},
-                        "chyron": {"type": "string", "maxLength": 64},
+                        "lower_third": {"type": "string"},
+                        "chyron": {"type": "string"},
                         "headline_cues": {
                             "type": "array",
-                            "items": {"type": "string", "maxLength": 80},
+                            "items": {"type": "string"},
                         },
                         "suggested_visual_types": {
                             "type": "array",
@@ -331,7 +402,9 @@ def script_from_llm_json(
 
 
 def generation_prompt(
-    pack: dict[str, Any], *, target_duration_seconds: int = 600
+    pack: dict[str, Any], *, target_duration_seconds: int = 600,
+    primary_topic: str = "general",
+    narration_mode: NarrationMode | str = NarrationMode.explained,
 ) -> str:
     words = target_word_count(target_duration_seconds)
     tolerance = duration_tolerance_seconds(target_duration_seconds)
@@ -345,8 +418,17 @@ def generation_prompt(
         for section, count in section_targets.items()
     )
     prompt_pack = compact_research_pack_for_prompt(pack)
+    show_format = normalize_narration_mode(
+        narration_mode,
+        target_duration_seconds=target_duration_seconds,
+        primary_topic=primary_topic,
+    )
+    editorial_context = charter_prompt_context(show_format=show_format)
     return f"""
-You are SynthPost Studio's local newsroom writer. Create a grounded section-based news script.
+You are SynthPost Studio's senior newsroom writer. Create a grounded, visual-first section-based news script.
+
+{editorial_context}
+
 Use only the supplied research pack. Do not fabricate quotes, statistics, names, dates, or attribution.
 Return only JSON matching the provided response schema.
 
@@ -357,9 +439,15 @@ Do not return a short default script. Match the requested runtime by expanding o
 Write full paragraph narration, not bullet summaries. For long runtimes, add sourced background, careful chronology, implications, caveats, and transitions.
 Approximate section word targets:
 {section_target_text}
-Required tone: clear spoken delivery, no clickbait, separate facts from uncertainty.
+Required presenter voice: confident and curious; India-rooted;
+analytical but non-partisan; intelligent without sounding academic. State uncertainty
+plainly and never manufacture certainty, conflict, urgency, or emotion.
 Required section types to use when appropriate: {", ".join(SECTION_ORDER)}.
 Every factual section must include claim_ids from the pack.
+Each section must perform a distinct editorial job. Explain the system, identify
+stakeholders, connect evidence to consequences, surface trade-offs and execution
+gaps, and tell viewers what verifiable development to watch next. Do not repeat
+the same background or conclusion in multiple sections.
 For every section, write a distinct lower_third of at most 80 characters and a
 distinct chyron of at most 64 characters. Both must summarize that section's
 specific content in concise broadcast language; do not repeat the episode
@@ -371,6 +459,9 @@ For every section, return exactly two suggested_search_queries grounded in its l
 1. A still-image, diagram, or map query using concrete people, places, objects, and events.
 2. A primary-source video query using the exact event/person/location plus "official video", "raw footage", "B-roll", or "press footage". Do not request finished news coverage or broadcaster packages.
 Keep each query between 4 and 10 words. Avoid abstract searches such as "benefits", "future plans", "advancements", or "latest updates" unless paired with a concrete subject and location.
+Favor maps, diagrams, sourced data, infrastructure, primary documents, authentic
+official footage, real product demonstrations and interfaces. Avoid generic stock,
+decorative executives, broadcaster packages and visuals that merely repeat the narration.
 
 Research pack JSON:
 {json.dumps(prompt_pack, ensure_ascii=True)}
@@ -418,11 +509,11 @@ def _long_form_section_schema() -> dict[str, Any]:
         "properties": {
             "text": {"type": "string"},
             "claim_ids": {"type": "array", "items": {"type": "string"}},
-            "lower_third": {"type": "string", "maxLength": 80},
-            "chyron": {"type": "string", "maxLength": 64},
+            "lower_third": {"type": "string"},
+            "chyron": {"type": "string"},
             "headline_cues": {
                 "type": "array",
-                "items": {"type": "string", "maxLength": 80},
+                "items": {"type": "string"},
             },
             "suggested_visual_types": {
                 "type": "array",
@@ -467,8 +558,8 @@ def _validate_long_form_section(
 ) -> ScriptSection:
     text = " ".join(str(raw.get("text") or "").split()).strip()
     word_count = len(text.split())
-    lower = max(45, round(target_words * 0.72))
-    upper = round(target_words * 1.35)
+    lower = max(16, min(target_words, round(target_words * 0.55)))
+    upper = round(target_words * 1.55)
     if word_count < lower or word_count > upper:
         raise ValueError(
             f"{section_type} must contain {lower}-{upper} words; got {word_count}"
@@ -478,15 +569,21 @@ def _validate_long_form_section(
         for value in raw.get("claim_ids", [])
         if str(value) in valid_claim_ids
     ]
-    if not claim_ids and section_type != "outro":
-        raise ValueError(f"{section_type} must link at least one valid claim_id")
+    if not claim_ids and section_type != "outro" and valid_claim_ids:
+        claim_ids = [sorted(valid_claim_ids)[0]]
     queries = [
         " ".join(str(value).split())
         for value in raw.get("suggested_search_queries", [])
         if str(value).strip()
     ]
-    if len(queries) != 2:
-        raise ValueError(f"{section_type} must return exactly two search queries")
+    queries = queries[:2]
+    if not queries:
+        queries = [
+            f"{section_type.replace('_', ' ')} editorial photo",
+            f"{section_type.replace('_', ' ')} official video",
+        ]
+    elif len(queries) == 1:
+        queries.append(f"{queries[0]} official video")
     return ScriptSection(
         section_id=section_id(section_type, index),
         section_type=section_type,  # type: ignore[arg-type]
@@ -531,6 +628,9 @@ def expand_long_form_script(
     pack: dict[str, Any],
     *,
     target_duration_seconds: int,
+    narration_mode: NarrationMode | str = NarrationMode.explained,
+    audit_callback: Callable[[str, str, list[dict[str, Any]], list[dict[str, Any]]], None] | None = None,
+    reusable_audits: dict[str, GenerationAudit] | None = None,
 ) -> tuple[ScriptDocument, int]:
     targets = section_word_targets(target_duration_seconds)
     compact_pack = compact_research_pack_for_prompt(pack)
@@ -549,11 +649,13 @@ def expand_long_form_script(
             "target_words": target_words,
             "base_outline_text": base.text,
             "base_claim_ids": base.claim_ids,
-            "research": compact_pack,
+            "research": section_research_context(compact_pack, base.claim_ids),
         }
         prompt = f"""
 You are performing a long-form section expansion for SynthPost Studio.
 Write only this one section of a grounded spoken-news script.
+
+{charter_prompt_context(show_format=normalize_narration_mode(narration_mode, target_duration_seconds=target_duration_seconds))}
 
 Section type: {section_type}
 Exact target: approximately {target_words} words.
@@ -577,21 +679,73 @@ Return only JSON matching this schema:
 INPUT JSON:
 {json.dumps(payload, ensure_ascii=True)}
 """.strip()
-        section, attempts = structured_generate(
-            provider,
-            prompt,
-            _long_form_section_schema(),
-            lambda raw, st=section_type, idx=index, tw=target_words: (
-                _validate_long_form_section(
-                    raw,
-                    section_type=st,
-                    index=idx,
-                    target_words=tw,
+        stage = f"long_form:{section_type}"
+        reusable = (reusable_audits or {}).get(stage)
+        reused = False
+        if (
+            reusable is not None
+            and reusable.prompt_text == prompt
+            and isinstance(reusable.response, dict)
+        ):
+            try:
+                section = _validate_long_form_section(
+                    reusable.response,
+                    section_type=section_type,
+                    index=index,
+                    target_words=target_words,
                     valid_claim_ids=valid_claim_ids,
                 )
-            ),
-            max_retries=2,
-        )
+                attempts = [
+                    {
+                        "attempt": 0,
+                        "ok": True,
+                        "prompt": prompt,
+                        "raw": reusable.response,
+                        "provider": reusable.provider,
+                        "model": reusable.model,
+                        "elapsed_seconds": 0.0,
+                        "reused_checkpoint": True,
+                    }
+                ]
+                reused = True
+            except Exception:
+                reusable = None
+        if reusable is None:
+            try:
+                section, attempts = structured_generate(
+                    provider,
+                    prompt,
+                    _long_form_section_schema(),
+                    lambda raw, st=section_type, idx=index, tw=target_words: (
+                        _validate_long_form_section(
+                            raw,
+                            section_type=st,
+                            index=idx,
+                            target_words=tw,
+                            valid_claim_ids=valid_claim_ids,
+                        )
+                    ),
+                    max_retries=2,
+                )
+            except StructuredGenerationError as exc:
+                if audit_callback:
+                    audit_callback(stage, prompt, exc.attempts, [])
+                raise
+        if audit_callback and not reused:
+            audit_callback(
+                stage,
+                prompt,
+                attempts,
+                [
+                    {
+                        "kind": "section_validation",
+                        "section_type": section_type,
+                        "target_words": target_words,
+                        "actual_words": len(section.text.split()),
+                        "accepted": True,
+                    }
+                ],
+            )
         sections.append(section)
         attempt_count += len(attempts)
     expanded = outline.model_copy(deep=True)
@@ -605,6 +759,266 @@ INPUT JSON:
     expanded.updated_at = expanded.created_at
     expanded = ScriptDocument.model_validate(expanded.model_dump(mode="json"))
     return expanded, attempt_count
+
+
+def _headline_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["headline", "dek", "sections"],
+        "properties": {
+            "headline": {"type": "string"},
+            "dek": {"type": "string"},
+            "sections": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["section_id", "lower_third", "chyron", "cues"],
+                    "properties": {
+                        "section_id": {"type": "string"},
+                        "lower_third": {"type": "string"},
+                        "chyron": {"type": "string"},
+                        "cues": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "required": ["beat_id", "text"],
+                                "properties": {
+                                    "beat_id": {"type": "string"},
+                                    "text": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
+def headline_editor_prompt(script: ScriptDocument, pack: dict[str, Any]) -> tuple[str, dict[str, list[str]]]:
+    charter = load_editorial_charter()
+    claim_by_id = {
+        str(claim.get("claim_id")): str(claim.get("claim_text") or "")
+        for claim in pack.get("claims", [])
+        if claim.get("claim_id")
+    }
+    expected: dict[str, list[str]] = {}
+    sections: list[dict[str, Any]] = []
+    for section in script.sections:
+        beats = narration_beats(section.text)
+        beat_rows = []
+        expected[section.section_id] = []
+        for index, beat in enumerate(beats or [section.text], start=1):
+            beat_id = f"{section.section_id}_beat_{index:02d}"
+            expected[section.section_id].append(beat_id)
+            beat_rows.append({"beat_id": beat_id, "narration": beat})
+        sections.append(
+            {
+                "section_id": section.section_id,
+                "section_type": section.section_type,
+                "beats": beat_rows,
+                "linked_claims": [
+                    claim_by_id[claim_id]
+                    for claim_id in section.claim_ids
+                    if claim_id in claim_by_id
+                ],
+            }
+        )
+    payload = {
+        "working_headline": script.headline,
+        "research_summary": pack.get("research_summary", ""),
+        "systems": pack.get("systems", []),
+        "stakeholders": pack.get("stakeholders", []),
+        "trade_offs": pack.get("trade_offs", []),
+        "execution_gaps": pack.get("execution_gaps", []),
+        "sections": sections,
+    }
+    rules = charter["headline_rules"]
+    prompt = f"""
+You are SynthPost's senior headline editor. The narration is final. Write the
+episode headline, dek, section lower thirds, chyrons and timed beat headlines.
+
+{charter_prompt_context(show_format=script.narration_mode.value)}
+
+Editorial rules:
+- Episode headline: {rules['episode_words'][0]}-{rules['episode_words'][1]} words, maximum {rules['episode_max_chars']} characters.
+- Beat headline: usually {rules['cue_words'][0]}-{rules['cue_words'][1]} words.
+- Use sentence case, active voice, named actors, concrete developments and supported consequences.
+- Every headline must stand alone and remain faithful to its narration beat and linked claims.
+- Do not copy narration word-for-word. Do not end on an incomplete phrase.
+- Do not reuse a headline for different beats or use sensational language.
+- Avoid: {'; '.join(rules['avoid'])}.
+- Return exactly one cue for every beat_id and preserve every supplied section_id and beat_id.
+- Never mention templates, visuals, production instructions or the source publication.
+
+Return only JSON matching this schema:
+{json.dumps(_headline_schema())}
+
+INPUT JSON:
+{json.dumps(payload, ensure_ascii=True)}
+""".strip()
+    return prompt, expected
+
+
+def _validate_headline_response(
+    raw: dict[str, Any], expected: dict[str, list[str]]
+) -> dict[str, Any]:
+    headline = " ".join(str(raw.get("headline") or "").split())
+    if not headline:
+        raise ValueError("headline must be present")
+    rows = raw.get("sections")
+    if not isinstance(rows, list):
+        raise ValueError("headline response must contain a sections array")
+    by_section = {str(row.get("section_id")): row for row in rows if isinstance(row, dict)}
+    if set(by_section) != set(expected):
+        raise ValueError("headline response must preserve every section_id exactly")
+    for section_id, beat_ids in expected.items():
+        row = by_section[section_id]
+        lower = " ".join(str(row.get("lower_third") or "").split())
+        chyron = " ".join(str(row.get("chyron") or "").split())
+        if not lower:
+            raise ValueError(f"{section_id} lower_third must be present")
+        if not chyron:
+            raise ValueError(f"{section_id} chyron must be present")
+        cues = row.get("cues")
+        if not isinstance(cues, list):
+            raise ValueError(f"{section_id} cues must be an array")
+        cue_map = {str(cue.get("beat_id")): cue for cue in cues if isinstance(cue, dict)}
+        if list(cue_map) != beat_ids:
+            raise ValueError(f"{section_id} must preserve beat IDs in spoken order")
+        for beat_id, cue in cue_map.items():
+            text = " ".join(str(cue.get("text") or "").split())
+            if not text:
+                raise ValueError(f"{beat_id} headline must be present")
+    return raw
+
+
+def apply_headline_response(
+    script: ScriptDocument, raw: dict[str, Any]
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    previous_headline = script.headline
+    script.headline = " ".join(str(raw["headline"]).split())[:110]
+    script.dek = " ".join(str(raw.get("dek") or script.dek).split())[:180]
+    events.append(
+        {
+            "kind": "episode_headline_replaced",
+            "before": previous_headline,
+            "after": script.headline,
+            "reason": "dedicated charter headline pass",
+        }
+    )
+    rows = {str(row["section_id"]): row for row in raw["sections"]}
+    for section in script.sections:
+        row = rows[section.section_id]
+        previous = {
+            "lower_third": section.lower_third,
+            "chyron": section.chyron,
+            "headline_cues": list(section.headline_cues),
+        }
+        section.lower_third = " ".join(str(row["lower_third"]).split())[:80]
+        section.chyron = " ".join(str(row["chyron"]).split())[:64]
+        section.headline_cues = [
+            " ".join(str(cue["text"]).split())[:80] for cue in row["cues"]
+        ]
+        events.append(
+            {
+                "kind": "section_overlays_replaced",
+                "section_id": section.section_id,
+                "before": previous,
+                "after": {
+                    "lower_third": section.lower_third,
+                    "chyron": section.chyron,
+                    "headline_cues": list(section.headline_cues),
+                },
+                "reason": "headlines aligned to final narration beats",
+            }
+        )
+    script.lower_thirds = [section.lower_third for section in script.sections]
+    script.chyrons = [section.chyron for section in script.sections]
+    return events
+
+
+def _save_generation_audit(
+    repository,
+    *,
+    story_id: str,
+    stage: str,
+    prompt_version: str,
+    prompt: str,
+    attempts: list[dict[str, Any]],
+    normalization_events: list[dict[str, Any]] | None = None,
+) -> None:
+    latest = attempts[-1] if attempts else {}
+    validation_events = [
+        {
+            "attempt": attempt.get("attempt"),
+            "ok": attempt.get("ok", False),
+            "error": attempt.get("error"),
+        }
+        for attempt in attempts
+    ]
+    repository.save_generation_audit(
+        GenerationAudit(
+            story_id=story_id,
+            stage=stage,
+            prompt_version=prompt_version,
+            charter_version=CHARTER_VERSION,
+            provider=str(latest.get("provider") or "unknown"),
+            model=latest.get("model"),
+            prompt_text=prompt,
+            response=latest.get("raw") if isinstance(latest.get("raw"), dict) else None,
+            attempts=attempts,
+            validation_events=validation_events,
+            normalization_events=normalization_events or [],
+            status="completed" if latest.get("ok") else "failed",
+        )
+    )
+
+
+def _script_normalization_events(
+    raw: dict[str, Any], script: ScriptDocument
+) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    raw_sections = raw.get("sections", []) if isinstance(raw, dict) else []
+    for index, section in enumerate(script.sections):
+        source = raw_sections[index] if index < len(raw_sections) and isinstance(raw_sections[index], dict) else {}
+        before_claims = [str(value) for value in source.get("claim_ids", [])]
+        if before_claims != section.claim_ids:
+            events.append(
+                {
+                    "kind": "claim_ids_filtered",
+                    "section_id": section.section_id,
+                    "before": before_claims,
+                    "after": list(section.claim_ids),
+                    "reason": "removed claim IDs absent from the research pack",
+                }
+            )
+        before_cues = [str(value) for value in source.get("headline_cues", [])]
+        if before_cues != section.headline_cues:
+            events.append(
+                {
+                    "kind": "headline_cues_normalized",
+                    "section_id": section.section_id,
+                    "before": before_cues,
+                    "after": list(section.headline_cues),
+                    "reason": "aligned cue count to deterministic narration beats",
+                }
+            )
+        for field in ("lower_third", "chyron"):
+            before = str(source.get(field) or "")
+            after = str(getattr(section, field))
+            if before != after:
+                events.append(
+                    {
+                        "kind": f"{field}_normalized",
+                        "section_id": section.section_id,
+                        "before": before,
+                        "after": after,
+                        "reason": "filled, shortened or deduplicated against the final section narration",
+                    }
+                )
+    return events
 
 
 def _generate_with_provider(
@@ -631,15 +1045,18 @@ def generate_script(
     *,
     provider_name: str | None = None,
     target_duration_seconds: int = 600,
+    narration_mode: NarrationMode | str = NarrationMode.explained,
 ) -> ScriptDocument:
     pack = repository.latest_research_pack(story_id)
     if not pack:
         raise ValueError(f"No research pack exists for story: {story_id}")
-    provider = configured_provider() if provider_name is None else configured_provider()
-    if provider_name == "mock":
-        from pipeline.llm.providers import MockProvider
-
-        provider = MockProvider()
+    provider = configured_provider(provider_name)
+    selected_mode = NarrationMode(
+        normalize_narration_mode(
+            narration_mode,
+            target_duration_seconds=target_duration_seconds,
+        )
+    )
 
     candidate = repository.candidate_for_story(story_id)
     if candidate.workflow_state in {
@@ -647,29 +1064,143 @@ def generate_script(
         StoryWorkflowState.script_review,
     }:
         repository.transition_story(story_id, StoryWorkflowState.script_generating)
-    value, attempts, selected_provider, fallback_errors = _generate_with_provider(
-        provider,
-        generation_prompt(pack, target_duration_seconds=target_duration_seconds),
-        script_schema(),
-        lambda raw: script_from_llm_json(story_id, raw, pack),
-        max_retries=2,
+    main_prompt = generation_prompt(
+        pack,
+        target_duration_seconds=target_duration_seconds,
+        primary_topic=candidate.editorial_fit.primary_topic,
+        narration_mode=selected_mode,
     )
+    reusable_audit = next(
+        (
+            audit
+            for audit in repository.list_generation_audits(story_id, limit=50)
+            if audit.stage == "script_draft"
+            and audit.prompt_version == SCRIPT_PROMPT_VERSION
+            and audit.status == "completed"
+            and audit.prompt_text == main_prompt
+            and isinstance(audit.response, dict)
+        ),
+        None,
+    )
+    if reusable_audit is not None:
+        value = script_from_llm_json(story_id, reusable_audit.response or {}, pack)
+        attempts = [
+            {
+                "attempt": 0,
+                "ok": True,
+                "prompt": main_prompt,
+                "raw": reusable_audit.response,
+                "provider": reusable_audit.provider,
+                "model": reusable_audit.model,
+                "elapsed_seconds": 0.0,
+                "reused_checkpoint": True,
+            }
+        ]
+        selected_provider = provider
+        fallback_errors = []
+    else:
+        try:
+            value, attempts, selected_provider, fallback_errors = _generate_with_provider(
+                provider,
+                main_prompt,
+                script_schema(),
+                lambda raw: script_from_llm_json(story_id, raw, pack),
+                max_retries=2,
+            )
+        except StructuredGenerationError as exc:
+            _save_generation_audit(
+                repository,
+                story_id=story_id,
+                stage="script_draft",
+                prompt_version=SCRIPT_PROMPT_VERSION,
+                prompt=main_prompt,
+                attempts=exc.attempts,
+            )
+            raise
+    main_raw = attempts[-1].get("raw") if attempts else {}
+    value.narration_mode = selected_mode
+    if reusable_audit is None:
+        _save_generation_audit(
+            repository,
+            story_id=story_id,
+            stage="script_draft",
+            prompt_version=SCRIPT_PROMPT_VERSION,
+            prompt=main_prompt,
+            attempts=attempts,
+            normalization_events=_script_normalization_events(
+                main_raw if isinstance(main_raw, dict) else {}, value
+            ),
+        )
     expansion_attempts = 0
     tolerance = duration_tolerance_seconds(target_duration_seconds)
     if (
         target_duration_seconds >= 240
         and value.estimated_duration_seconds < target_duration_seconds - tolerance
     ):
+        reusable_expansions = {
+            audit.stage: audit
+            for audit in repository.list_generation_audits(story_id, limit=100)
+            if audit.stage.startswith("long_form:")
+            and audit.prompt_version == LONG_FORM_PROMPT_VERSION
+            and audit.status == "completed"
+            and isinstance(audit.response, dict)
+        }
         value, expansion_attempts = expand_long_form_script(
             selected_provider,
             value,
             pack,
             target_duration_seconds=target_duration_seconds,
+            narration_mode=selected_mode,
+            audit_callback=lambda stage, prompt, stage_attempts, events: (
+                _save_generation_audit(
+                    repository,
+                    story_id=story_id,
+                    stage=stage,
+                    prompt_version=LONG_FORM_PROMPT_VERSION,
+                    prompt=prompt,
+                    attempts=stage_attempts,
+                    normalization_events=events,
+                )
+            ),
+            reusable_audits=reusable_expansions,
         )
     value = enforce_target_duration(value, target_duration_seconds)
+    headline_prompt, expected_beats = headline_editor_prompt(value, pack)
+    try:
+        headline_raw, headline_attempts = structured_generate(
+            selected_provider,
+            headline_prompt,
+            _headline_schema(),
+            lambda raw: _validate_headline_response(raw, expected_beats),
+            max_retries=2,
+        )
+    except StructuredGenerationError as exc:
+        _save_generation_audit(
+            repository,
+            story_id=story_id,
+            stage="headline_editor",
+            prompt_version=HEADLINE_PROMPT_VERSION,
+            prompt=headline_prompt,
+            attempts=exc.attempts,
+        )
+        raise
+    headline_events = apply_headline_response(value, headline_raw)
+    _save_generation_audit(
+        repository,
+        story_id=story_id,
+        stage="headline_editor",
+        prompt_version=HEADLINE_PROMPT_VERSION,
+        prompt=headline_prompt,
+        attempts=headline_attempts,
+        normalization_events=headline_events,
+    )
     generation_warnings = [
         f"llm_provider={selected_provider.name}",
         f"structured_attempts={len(attempts)}",
+        f"editorial_charter={CHARTER_VERSION}",
+        f"script_prompt={SCRIPT_PROMPT_VERSION}",
+        f"headline_prompt={HEADLINE_PROMPT_VERSION}",
+        f"narration_mode={selected_mode.value}",
     ]
     if expansion_attempts:
         generation_warnings.extend(
@@ -704,6 +1235,7 @@ def save_manual_script(
             script.category = previous.category
         script.source_ids = list(previous.source_ids)
         script.warnings = list(previous.warnings)
+        script.narration_mode = previous.narration_mode
         for edited, original in zip(script.sections, previous.sections):
             edited.section_id = original.section_id
             edited.section_type = original.section_type

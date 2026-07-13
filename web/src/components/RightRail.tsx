@@ -7,7 +7,6 @@ import type {
   RenderJob,
   ScriptDocument,
   TimelinePlan,
-  VisualCandidate,
 } from "../contracts";
 
 export const RightRail: React.FC<{
@@ -35,25 +34,21 @@ export const RightRail: React.FC<{
   );
   const recentJobs = contextJobs.slice(0, 5);
   const [script, setScript] = React.useState<ScriptDocument | null>(null);
-  const [visuals, setVisuals] = React.useState<VisualCandidate[]>([]);
   const [timeline, setTimeline] = React.useState<TimelinePlan | null>(null);
 
   React.useEffect(() => {
     if (!studio.selectedStoryId) {
       setScript(null);
-      setVisuals([]);
       setTimeline(null);
       return;
     }
     let cancelled = false;
     void Promise.all([
       api.readScript(studio.selectedStoryId).catch(() => null),
-      api.listVisuals(studio.selectedStoryId).catch(() => []),
       api.readTimeline(studio.selectedStoryId).catch(() => null),
-    ]).then(([nextScript, nextVisuals, nextTimeline]) => {
+    ]).then(([nextScript, nextTimeline]) => {
       if (cancelled) return;
       setScript(nextScript);
-      setVisuals(nextVisuals);
       setTimeline(nextTimeline);
     });
     return () => {
@@ -75,40 +70,6 @@ export const RightRail: React.FC<{
       blockers.push("No script is ready yet");
     } else if (script && script.status !== "approved") {
       blockers.push("Script awaiting approval");
-    }
-
-    const unapprovedVisuals = visuals.filter(
-      (visual) =>
-        !["approved", "manual_approved", "rejected", "blocked"].includes(
-          visual.review_status,
-        ),
-    );
-    const redVisuals = visuals.filter(
-      (visual) =>
-        visual.rights_tier === "red" &&
-        !["rejected", "blocked"].includes(visual.review_status),
-    );
-    const yellowVisuals = visuals.filter(
-      (visual) =>
-        visual.rights_tier === "yellow" &&
-        !["manual_approved", "rejected", "blocked"].includes(
-          visual.review_status,
-        ),
-    );
-    if (unapprovedVisuals.length > 0) {
-      blockers.push(
-        `${unapprovedVisuals.length} visual${unapprovedVisuals.length === 1 ? "" : "s"} awaiting approval`,
-      );
-    }
-    if (redVisuals.length > 0) {
-      blockers.push(
-        `${redVisuals.length} red-rights visual${redVisuals.length === 1 ? "" : "s"} need rejection or replacement`,
-      );
-    }
-    if (yellowVisuals.length > 0) {
-      blockers.push(
-        `${yellowVisuals.length} yellow-rights visual${yellowVisuals.length === 1 ? "" : "s"} need manual rights approval`,
-      );
     }
 
     if (timeline) {

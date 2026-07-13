@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -24,6 +25,18 @@ class LLMProvider(Protocol):
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]: ...
+
+
+class StructuredGenerationError(ValueError):
+    def __init__(self, message: str, attempts: list[dict[str, Any]]):
+        super().__init__(message)
+        self.attempts = attempts
+
+
+class ProviderRateLimitError(ValueError):
+    def __init__(self, message: str, *, retry_after_seconds: float = 60.0):
+        super().__init__(message)
+        self.retry_after_seconds = max(0.0, retry_after_seconds)
 
 
 def groq_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
@@ -93,6 +106,9 @@ class GroqProvider:
     timeout_seconds: float = float(
         os.environ.get("SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS", "45")
     )
+    max_completion_tokens: int = int(
+        os.environ.get("SYNTHPOST_GROQ_MAX_COMPLETION_TOKENS", "2300")
+    )
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
@@ -124,6 +140,9 @@ class GroqProvider:
                 }
             ],
             "temperature": temp,
+            "max_completion_tokens": self.max_completion_tokens,
+            # Script generation needs the token budget for the long structured
+            # answer, rather than an invisible reasoning trace.
             "reasoning_effort": "low",
             "include_reasoning": False,
             "response_format": {
@@ -147,7 +166,16 @@ class GroqProvider:
             with urlopen(req, timeout=self.timeout_seconds) as response:
                 result = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
+            # urllib otherwise hides the provider's useful JSON error body behind
+            # a generic message such as "HTTP Error 413: Payload Too Large".
             body = exc.read().decode("utf-8", errors="replace").strip()
+            if exc.code == 429:
+                match = re.search(r"try again in\s+([\d.]+)s", body, re.IGNORECASE)
+                retry_after = float(match.group(1)) if match else 60.0
+                raise ProviderRateLimitError(
+                    f"Groq HTTP {exc.code}: {body or exc.reason}",
+                    retry_after_seconds=retry_after,
+                ) from exc
             raise ValueError(f"Groq HTTP {exc.code}: {body or exc.reason}") from exc
 
         content = result["choices"][0]["message"]["content"]
@@ -159,18 +187,40 @@ class HostedFallbackProvider:
     primary: LLMProvider
     fallback: LLMProvider
     name: str = "groq_then_gemini"
+    last_provider: str | None = None
+    last_model: str | None = None
+    last_primary_error: str | None = None
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]:
         try:
-            return self.primary.generate_json(prompt, schema, temperature=temperature)
+            value = self.primary.generate_json(prompt, schema, temperature=temperature)
+            self.last_provider = self.primary.name
+            self.last_model = getattr(self.primary, "last_model", None)
+            return value
+        except ProviderRateLimitError:
+            # A temporary primary-provider token window is not a reason to burn
+            # fallback quota. structured_generate will honor its retry delay.
+            raise
         except Exception as exc:
+            self.last_primary_error = str(exc)
             print(
                 f"[HostedFallbackProvider] Primary {self.primary.name} failed: "
                 f"{exc}. Falling back to hosted provider {self.fallback.name}."
             )
-            return self.fallback.generate_json(prompt, schema, temperature=temperature)
+            try:
+                value = self.fallback.generate_json(
+                    prompt, schema, temperature=temperature
+                )
+            except Exception as fallback_exc:
+                raise ValueError(
+                    f"Primary {self.primary.name} failed: {exc}; "
+                    f"fallback {self.fallback.name} failed: {fallback_exc}"
+                ) from fallback_exc
+            self.last_provider = self.fallback.name
+            self.last_model = getattr(self.fallback, "last_model", None)
+            return value
 
 
 @dataclass
@@ -219,6 +269,30 @@ class MockProvider:
                     f"{topic} official raw footage",
                 ],
                 "suggested_template_ids": ["split_anchor_visual"],
+            }
+        if "senior headline editor" in prompt.lower():
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            output_sections = []
+            for section in payload.get("sections", []):
+                section_label = str(section.get("section_type") or "story").replace("_", " ")
+                cues = []
+                for beat in section.get("beats", []):
+                    words = str(beat.get("narration") or section_label).split()
+                    text = " ".join(words[:10]).rstrip(".,:;!?") or section_label.title()
+                    cues.append({"beat_id": beat["beat_id"], "text": text[:80]})
+                output_sections.append(
+                    {
+                        "section_id": section["section_id"],
+                        "lower_third": f"{section_label.title()}: Evidence and consequences"[:80],
+                        "chyron": f"{section_label.title()} explained"[:64],
+                        "cues": cues,
+                    }
+                )
+            return {
+                "headline": "India-rooted systems briefing explains evidence, stakes and execution gaps",
+                "dek": str(payload.get("research_summary") or "A grounded SynthPost explanation.")[:180],
+                "sections": output_sections,
             }
         if "visual search keyword planner" in prompt.lower():
             marker = "INPUT JSON:\n"
@@ -345,26 +419,55 @@ def structured_generate(
                 {
                     "attempt": attempt + 1,
                     "ok": True,
+                    "prompt": current_prompt,
                     "raw": raw,
+                    "provider": getattr(provider, "last_provider", None)
+                    or provider.name,
+                    "model": getattr(provider, "last_model", None),
                     "elapsed_seconds": round(time.time() - started, 3),
                 }
             )
             return value, attempts
+        except ProviderRateLimitError as exc:
+            attempts.append(
+                {
+                    "attempt": attempt + 1,
+                    "ok": False,
+                    "prompt": current_prompt,
+                    "error": str(exc),
+                    "provider": getattr(provider, "last_provider", None)
+                    or provider.name,
+                    "model": getattr(provider, "last_model", None),
+                    "elapsed_seconds": round(time.time() - started, 3),
+                    "retry_after_seconds": exc.retry_after_seconds,
+                }
+            )
+            if attempt < max_retries:
+                time.sleep(min(65.0, exc.retry_after_seconds + 1.0))
+                current_prompt = prompt
+                continue
         except Exception as exc:
             attempts.append(
                 {
                     "attempt": attempt + 1,
                     "ok": False,
+                    "prompt": current_prompt,
                     "error": str(exc),
+                    "provider": getattr(provider, "last_provider", None)
+                    or provider.name,
+                    "model": getattr(provider, "last_model", None),
                     "elapsed_seconds": round(time.time() - started, 3),
                 }
             )
+            if "request too large" in str(exc).casefold():
+                break
             current_prompt = (
                 prompt
                 + "\n\nYour previous response failed validation with this error:\n"
                 + str(exc)
                 + "\nReturn only corrected JSON."
             )
-    raise ValueError(
-        f"Structured generation failed after {max_retries + 1} attempts: {attempts[-1].get('error')}"
+    raise StructuredGenerationError(
+        f"Structured generation failed after {max_retries + 1} attempts: {attempts[-1].get('error')}",
+        attempts,
     )

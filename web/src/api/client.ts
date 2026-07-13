@@ -1,5 +1,7 @@
 import type {
   Episode,
+  GenerationAudit,
+  NarrationMode,
   Project,
   RenderJob,
   ResearchPack,
@@ -50,6 +52,7 @@ export const api = {
   health: () =>
     request<{ ok: boolean; name: string; version: string }>("/api/health"),
   templates: () => request<Array<Record<string, unknown>>>("/api/templates"),
+  editorialCharter: () => request<Record<string, unknown>>("/api/editorial/charter"),
 
   listProjects: () => request<Project[]>("/api/projects"),
   createProject: (title: string) =>
@@ -181,14 +184,19 @@ export const api = {
     storyId: string,
     provider?: string,
     target_duration_seconds = 600,
+    narration_mode: NarrationMode = "explained",
   ) =>
     request<RenderJob>(`/api/stories/${storyId}/script/generate`, {
       method: "POST",
-      body: JSON.stringify({ provider, target_duration_seconds }),
+      body: JSON.stringify({ provider, target_duration_seconds, narration_mode }),
     }),
   readScript: (storyId: string, approved = false) =>
     request<ScriptDocument | null>(
       `/api/stories/${storyId}/script${approved ? "?approved=true" : ""}`,
+    ),
+  listGenerationAudits: (storyId: string, limit = 50) =>
+    request<GenerationAudit[]>(
+      `/api/stories/${storyId}/generation-audits?limit=${limit}`,
     ),
   saveManualScript: (
     storyId: string,

@@ -19,12 +19,15 @@ from pipeline.discovery.discover import (
     add_custom_url,
     add_manual_story,
     discover_from_source,
+    rescore_existing_candidates,
 )
 from pipeline.discovery.seeds import seed_sources
+from pipeline.editorial.charter import load_editorial_charter
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.models import (
     ContentRole,
     JobStatus,
+    NarrationMode,
     ReviewStatus,
     RightsTier,
     ScriptDocument,
@@ -79,6 +82,7 @@ def startup() -> None:
     repository = repo()
     try:
         seed_sources(repository)
+        rescore_existing_candidates(repository)
     finally:
         repository.close()
 
@@ -162,7 +166,8 @@ class ManualScript(BaseModel):
 
 class GenerateScriptRequest(BaseModel):
     provider: str | None = None
-    target_duration_seconds: int = Field(default=600, ge=60, le=900)
+    target_duration_seconds: int = Field(default=600, ge=60, le=7200)
+    narration_mode: NarrationMode = NarrationMode.explained
 
 
 class VisualStageRequest(BaseModel):
@@ -198,6 +203,11 @@ def health() -> dict[str, Any]:
 @app.get("/api/templates")
 def templates() -> list[dict[str, Any]]:
     return template_registry_json()
+
+
+@app.get("/api/editorial/charter")
+def editorial_charter() -> dict[str, Any]:
+    return load_editorial_charter()
 
 
 @app.get("/api/projects")
@@ -495,6 +505,18 @@ def read_script(story_id: str, approved: bool = False) -> dict[str, Any] | None:
     try:
         script = repository.latest_script(story_id, approved=approved)
         return script.model_dump(mode="json") if script else None
+    finally:
+        repository.close()
+
+
+@app.get("/api/stories/{story_id}/generation-audits")
+def generation_audits(story_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    repository = repo()
+    try:
+        return [
+            audit.model_dump(mode="json")
+            for audit in repository.list_generation_audits(story_id, limit=limit)
+        ]
     finally:
         repository.close()
 

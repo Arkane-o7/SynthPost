@@ -39,6 +39,19 @@ export type SourceDefinition = {
 
 export type StoryScores = Record<'importance' | 'freshness' | 'public_interest' | 'visual_potential' | 'explainability' | 'source_reliability' | 'format_suitability' | 'originality', number>;
 
+export type EditorialFitAssessment = {
+  charter_version: string;
+  score: number;
+  eligible: boolean;
+  primary_topic: string;
+  matched_criteria: string[];
+  strengths: string[];
+  penalties: string[];
+  rejection_signals: string[];
+  india_relevance: number;
+  reasons: string[];
+};
+
 export type StoryCandidate = {
   candidate_id: string;
   title: string;
@@ -53,6 +66,7 @@ export type StoryCandidate = {
   language: string;
   discovered_at: string;
   scores: StoryScores;
+  editorial_fit: EditorialFitAssessment;
   final_score: number;
   score_reasons: string[];
   selection_status: 'suggested' | 'selected' | 'rejected' | 'duplicate';
@@ -117,6 +131,12 @@ export type ResearchPack = {
   dates: string[];
   contradictions: string[];
   uncertainties: string[];
+  systems: string[];
+  stakeholders: string[];
+  trade_offs: string[];
+  execution_gaps: string[];
+  editorial_questions: string[];
+  charter_version: string;
   research_summary: string;
   status?: string;
   created_at?: string;
@@ -140,12 +160,15 @@ export type ScriptSection = {
   locked?: boolean;
 };
 
+export type NarrationMode = 'signal' | 'explained' | 'deep_dive' | 'india_builds';
+
 export type ScriptDocument = {
   script_id: string;
   story_id: string;
   headline: string;
   dek: string;
   category: string;
+  narration_mode: NarrationMode;
   estimated_duration_seconds: number;
   version: number;
   status: string;
@@ -279,6 +302,24 @@ export type RenderJob = {
   payload?: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
+};
+
+export type GenerationAudit = {
+  audit_id: string;
+  story_id: string;
+  job_id: string | null;
+  stage: string;
+  prompt_version: string;
+  charter_version: string;
+  provider: string;
+  model: string | null;
+  prompt_text: string;
+  response: Record<string, unknown> | null;
+  attempts: Array<Record<string, unknown>>;
+  validation_events: Array<Record<string, unknown>>;
+  normalization_events: Array<Record<string, unknown>>;
+  status: string;
+  created_at: string;
 };
 
 export type ArtifactRecord = {

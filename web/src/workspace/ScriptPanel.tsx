@@ -3,7 +3,99 @@ import { api } from "../api/client";
 import { useStudio } from "../state/useStudio";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import type { ScriptDocument } from "../contracts";
+import type { GenerationAudit, NarrationMode, ScriptDocument } from "../contracts";
+
+const NARRATION_MODES: Array<{
+  id: NarrationMode;
+  label: string;
+  range: string;
+  minSeconds: number;
+  maxSeconds: number;
+  marker: string;
+  description: string;
+}> = [
+  {
+    id: "signal",
+    label: "Signal",
+    range: "3–5 min",
+    minSeconds: 180,
+    maxSeconds: 300,
+    marker: "01",
+    description: "Fast, decisive: what happened, why now, who is affected, what comes next.",
+  },
+  {
+    id: "explained",
+    label: "Explained",
+    range: "8–12 min",
+    minSeconds: 480,
+    maxSeconds: 720,
+    marker: "02",
+    description: "The main format: event, context, system, consequences and uncertainty.",
+  },
+  {
+    id: "deep_dive",
+    label: "Deep Dive",
+    range: "15–25 min",
+    minSeconds: 900,
+    maxSeconds: 1500,
+    marker: "03",
+    description: "Patient and investigative: evidence, stakeholders, trade-offs and scenarios.",
+  },
+  {
+    id: "india_builds",
+    label: "India Builds",
+    range: "30–120 min",
+    minSeconds: 1800,
+    maxSeconds: 7200,
+    marker: "04",
+    description: "Documentary systems narration for infrastructure, industry and national capability.",
+  },
+];
+
+const NarrationModeSelector: React.FC<{
+  value: NarrationMode;
+  durationSeconds: number;
+  disabled?: boolean;
+  onChange: (mode: NarrationMode) => void;
+}> = ({ value, durationSeconds, disabled, onChange }) => {
+  const selected = NARRATION_MODES.find((mode) => mode.id === value)!;
+  const outsideRange =
+    durationSeconds < selected.minSeconds || durationSeconds > selected.maxSeconds;
+
+  return (
+    <fieldset className="narration-mode-fieldset" disabled={disabled}>
+      <legend>
+        <span>Narration format</span>
+        <small>Independent from runtime</small>
+      </legend>
+      <div className="narration-mode-grid">
+        {NARRATION_MODES.map((mode) => (
+          <button
+            key={mode.id}
+            type="button"
+            data-narration-mode={mode.id}
+            className={`narration-mode-card ${value === mode.id ? "is-selected" : ""}`}
+            aria-pressed={value === mode.id}
+            onClick={() => onChange(mode.id)}
+          >
+            <span className="narration-mode-marker">{mode.marker}</span>
+            <span className="narration-mode-copy">
+              <strong>SynthPost {mode.label}</strong>
+              <small>{mode.range}</small>
+              <em>{mode.description}</em>
+            </span>
+            <span className="narration-mode-check" aria-hidden="true">✓</span>
+          </button>
+        ))}
+      </div>
+      <p className={`narration-mode-guidance ${outsideRange ? "is-warning" : ""}`}>
+        {outsideRange
+          ? `${selected.label} is designed for ${selected.range}; your custom runtime will still be respected.`
+          : `${selected.label} pacing matches the selected ${Math.round(durationSeconds / 60)}-minute runtime.`}
+      </p>
+    </fieldset>
+  );
+};
 
 export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const studio = useStudio();
@@ -11,7 +103,9 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const [headline, setHeadline] = React.useState("");
   const [text, setText] = React.useState("");
   const [targetDurationSeconds, setTargetDurationSeconds] = React.useState(600);
+  const [narrationMode, setNarrationMode] = React.useState<NarrationMode>("explained");
   const [busy, setBusy] = React.useState(false);
+  const [audits, setAudits] = React.useState<GenerationAudit[]>([]);
 
   const story = studio.candidates.find(
     (candidate) => candidate.story_id === storyId,
@@ -26,6 +120,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const latestRequestedDuration = Number(
     latestScriptJob?.payload?.target_duration_seconds,
   );
+  const latestRequestedMode = latestScriptJob?.payload?.narration_mode;
   const isGenerating = busy || Boolean(activeScriptJob);
   const providerWarning = script?.warnings?.find((warning) =>
     warning.startsWith("llm_provider="),
@@ -61,6 +156,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         setScript(s);
         setHeadline(s?.headline ?? "");
         setText(s?.sections.map((sec) => sec.text).join("\n\n") ?? "");
+        if (s?.narration_mode) setNarrationMode(s.narration_mode);
       })
       .catch(() => setScript(null));
   }, [storyId, studio.lastJobEventTimestamp]);
@@ -70,16 +166,29 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   }, [load]);
 
   React.useEffect(() => {
+    void api
+      .listGenerationAudits(storyId)
+      .then(setAudits)
+      .catch(() => setAudits([]));
+  }, [storyId, studio.lastJobEventTimestamp]);
+
+  React.useEffect(() => {
     if (Number.isFinite(latestRequestedDuration)) {
       setTargetDurationSeconds(
-        Math.max(60, Math.min(900, Math.round(latestRequestedDuration))),
+        Math.max(60, Math.min(7200, Math.round(latestRequestedDuration))),
       );
     }
   }, [latestRequestedDuration]);
 
+  React.useEffect(() => {
+    if (NARRATION_MODES.some((mode) => mode.id === latestRequestedMode)) {
+      setNarrationMode(latestRequestedMode as NarrationMode);
+    }
+  }, [latestRequestedMode]);
+
   const normalizedTargetDuration = Math.max(
     60,
-    Math.min(900, Math.round(Number(targetDurationSeconds) || 600)),
+    Math.min(7200, Math.round(Number(targetDurationSeconds) || 600)),
   );
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -114,13 +223,19 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           }
         >
           <div className="stack" style={{ alignItems: "center" }}>
+            <NarrationModeSelector
+              value={narrationMode}
+              durationSeconds={normalizedTargetDuration}
+              disabled={isGenerating}
+              onChange={setNarrationMode}
+            />
             <label style={{ minWidth: 260, textAlign: "left" }}>
               Target video length
               <div className="row-tight">
                 <input
                   type="number"
                   min={60}
-                  max={900}
+                  max={7200}
                   step={5}
                   value={targetDurationSeconds}
                   onChange={(e) =>
@@ -142,6 +257,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                       storyId,
                       undefined,
                       normalizedTargetDuration,
+                      narrationMode,
                     ),
                   )
                 }
@@ -249,7 +365,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             <input
               type="number"
               min={60}
-              max={900}
+              max={7200}
               step={5}
               value={targetDurationSeconds}
               onChange={(e) => setTargetDurationSeconds(Number(e.target.value))}
@@ -259,6 +375,12 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             </span>
           </div>
         </label>
+        <NarrationModeSelector
+          value={narrationMode}
+          durationSeconds={normalizedTargetDuration}
+          disabled={isGenerating}
+          onChange={setNarrationMode}
+        />
         <div className="row">
           <button
             disabled={busy}
@@ -279,6 +401,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                   storyId,
                   undefined,
                   normalizedTargetDuration,
+                  narrationMode,
                 ),
               )
             }
@@ -351,6 +474,66 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         <div className="text-muted" style={{ fontSize: 12, marginTop: 8 }}>
           Approved scripts are immutable. Saving creates a new revision.
         </div>
+      </div>
+
+      <div className="card stack generation-ledger">
+        <div className="row-between">
+          <div>
+            <div className="generation-ledger-kicker">Inspectable AI</div>
+            <h2>Generation Ledger</h2>
+          </div>
+          <span className="generation-ledger-count">{audits.length} records</span>
+        </div>
+        <p className="text-muted" style={{ fontSize: 12 }}>
+          Every stored prompt, model response, validation attempt and normalization
+          decision for this story. New records use editorial charter v1.
+        </p>
+        {audits.length === 0 ? (
+          <div className="generation-ledger-empty">
+            Existing scripts predate prompt auditing. Regenerate to create the first record.
+          </div>
+        ) : (
+          <div className="generation-ledger-list">
+            {audits.map((audit) => (
+              <details key={audit.audit_id} className="generation-audit-record">
+                <summary>
+                  <span>
+                    <b>{audit.stage.replace(/_/g, " ")}</b>
+                    <small>{audit.prompt_version}</small>
+                  </span>
+                  <span>
+                    <b>{audit.provider}</b>
+                    <small>{audit.model || "model unavailable"}</small>
+                  </span>
+                  <StatusBadge status={audit.status}>{audit.status}</StatusBadge>
+                </summary>
+                <div className="generation-audit-body">
+                  <div className="generation-audit-meta">
+                    <span>Charter {audit.charter_version}</span>
+                    <span>{audit.attempts.length} attempt{audit.attempts.length === 1 ? "" : "s"}</span>
+                    <span>{audit.normalization_events.length} normalization decision{audit.normalization_events.length === 1 ? "" : "s"}</span>
+                  </div>
+                  <details>
+                    <summary>Exact prompt</summary>
+                    <pre>{audit.prompt_text}</pre>
+                  </details>
+                  <details>
+                    <summary>Raw model response</summary>
+                    <pre>{JSON.stringify(audit.response, null, 2)}</pre>
+                  </details>
+                  <details>
+                    <summary>Validation attempts</summary>
+                    <pre>{JSON.stringify(audit.validation_events, null, 2)}</pre>
+                  </details>
+                  <details>
+                    <summary>Normalization decisions</summary>
+                    <pre>{JSON.stringify(audit.normalization_events, null, 2)}</pre>
+                  </details>
+                </div>
+              </details>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

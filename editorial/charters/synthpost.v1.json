@@ -1,0 +1,153 @@
+{
+  "charter_id": "synthpost",
+  "version": "1.1.0",
+  "effective_date": "2026-07-12",
+  "editorial_promise": "SynthPost explains the systems shaping India's future—and India's place in the world.",
+  "positioning": "A premium, India-first visual explainer publication about technology, science, infrastructure, business, internet culture, policy and power.",
+  "lens": "Explain where technology meets people, institutions, money, internet culture and power.",
+  "editorial_influence": {
+    "verge_editorial_model": 0.5,
+    "aim_subject_focus": 0.3,
+    "firstpost_video_presentation": 0.2
+  },
+  "audience": {
+    "primary": [
+      "Indian professionals aged 20–40",
+      "Developers, founders, analysts and students",
+      "Globally curious viewers who follow technology and public policy",
+      "Viewers who want more depth than a short and less time commitment than a podcast"
+    ],
+    "secondary": [
+      "International viewers interested in India",
+      "The Indian diaspora",
+      "Business and policy audiences"
+    ]
+  },
+  "tone": [
+    "Intelligent without sounding academic",
+    "Confident without manufacturing certainty",
+    "Curious rather than cynical",
+    "Visually sophisticated",
+    "India-rooted but not nationalistic",
+    "Analytical without becoming partisan",
+    "Comfortable stating what remains unknown"
+  ],
+  "narration_principles": [
+    "Open with a concrete scene, consequential fact or contradiction within the first 60 words",
+    "Write for the ear with mostly short and medium sentences, then use an occasional longer sentence to connect systems",
+    "Translate every important number into scale, consequence or comparison",
+    "Place India inside the relevant global system without boosterism or imported framing",
+    "Use direct address only when it clarifies the viewer's stake",
+    "Use rhetorical questions selectively and answer them with evidence",
+    "Move with clear spoken pivots such as but, now and so without turning them into verbal tics",
+    "Follow confident claims with attribution, evidence or an explicit boundary on what is known",
+    "End sections by advancing the argument rather than recapping the previous paragraph"
+  ],
+  "narration_avoid": [
+    "Like-share-subscribe interruptions",
+    "Breathless breaking-news language",
+    "Triumphalism, nationalism or corporate promotion",
+    "Academic throat-clearing and unexplained jargon",
+    "Strings of statistics without interpretation",
+    "Manufactured conflict, certainty or suspense",
+    "Repeated rhetorical questions",
+    "Generic scene-setting that delays the central development"
+  ],
+  "priority_verticals": {
+    "technology": ["technology", "digital", "platform", "internet", "cybersecurity", "telecom", "software", "computing"],
+    "artificial_intelligence": ["artificial intelligence", "ai", "machine learning", "model", "agent", "data centre", "data center"],
+    "science": ["science", "research", "space", "satellite", "rocket", "health research", "climate science"],
+    "infrastructure": ["infrastructure", "rail", "metro", "port", "airport", "road", "water", "factory", "manufacturing", "semiconductor", "supply chain"],
+    "energy": ["energy", "power", "electricity", "solar", "wind", "nuclear", "battery", "hydrogen", "grid", "oil", "gas"],
+    "business": ["business", "economy", "market", "trade", "investment", "industry", "startup", "company", "jobs"],
+    "geopolitics_and_power": ["geopolitics", "sanctions", "trade war", "export controls", "national security", "defence technology", "defense technology", "economic corridor", "strategic autonomy"],
+    "policy": ["technology policy", "ai regulation", "digital regulation", "competition policy", "industrial policy", "climate policy", "energy policy", "data protection", "antitrust", "export controls", "technical standards"]
+  },
+  "assignment_desk": {
+    "required_scope": "A globally consequential technology, science, business, infrastructure, energy or power shift with a concrete or developable India angle.",
+    "strategic_signals": ["artificial intelligence", " ai ", "openai", "anthropic", "deepmind", "machine learning", "foundation model", "large language model", "semiconductor", "chip", "data centre", "data center", "cloud computing", "cybersecurity", "telecom", "satellite", "space mission", "rocket", "launch vehicle", "robotics", "quantum", "platform regulation", "social media platform", "digital payments", "digital public infrastructure", "supply chain", "advanced manufacturing", "electric vehicle", "battery", "nuclear energy", "renewable energy", "green hydrogen", "power grid", "climate technology", "biotechnology", "trade war", "export controls", "sanctions", "antitrust", "strategic autonomy", "strait of hormuz", "shipping route", "oil supply"],
+    "system_scale_signals": ["global", "worldwide", "international", "industry", "market", "economy", "supply chain", "regulation", "policy", "standards", "ban", "export controls", "investment", "billion", "trillion", "million users", "workers", "jobs", "national", "cross-border", "infrastructure", "capacity", "adoption", "competition", "security", "public infrastructure", "data centre", "data center", "openai", "anthropic", "google", "meta", "microsoft", "apple", "amazon", "nvidia", "space industry", "commercial deployment", "record profit", "record revenue", "demand", "strait of hormuz", "shipping route", "oil supply"],
+    "india_impact_signals": ["india", "indian", "rbi", "isro", "upi", "aadhaar", "meity", "sebi", "nasscom", "reliance", "jio", "tata", "infosys", "tcs", "wipro", "bengaluru", "hyderabad", "chennai", "mumbai", "delhi"],
+    "global_context_signals": ["global", "world", "international", "united states", " u.s. ", "china", "europe", "european union", "japan", "south korea", "taiwan", "middle east", "g7", "g20", "brics", "cross-border", "geopolitics", "trade war", "sanctions", "export controls"],
+    "automatic_rejections": {
+      "local_crime_or_accident": ["murder", "murdered", "killed", "rape", "robbery", "road accident", "crime", "arrested for", "police complaint", "missing person"],
+      "ceremonial_or_personnel": ["inaugurates", "inaugurated", "foundation stone", "flagged off", "named head of", "appointed as", "takes charge", "felicitates", "attends event", "birthday", "anniversary"],
+      "local_political_churn": ["chief minister said", "cm said", "slams", "hits out", "demands apology", "reacts to remarks", "party spokesperson", "campaign rally", "assembly bypoll"],
+      "institutional_housekeeping": ["court complex", "bar room", "transferred judge", "administrative reshuffle", "department chair", "university appointment"]
+    }
+  },
+  "eligibility_criteria": [
+    {"id": "system_change", "label": "Changes how a consequential system works"},
+    {"id": "meaningful_impact", "label": "Affects a meaningful number of people"},
+    {"id": "india_connection", "label": "Has an India connection"},
+    {"id": "tradeoff_or_uncertainty", "label": "Contains a conflict, trade-off or uncertainty"},
+    {"id": "visual_explainability", "label": "Can be explained visually"},
+    {"id": "credible_evidence", "label": "Has credible, inspectable evidence"},
+    {"id": "beyond_announcement", "label": "Has implications beyond the original announcement"},
+    {"id": "durable_value", "label": "Will still be useful several days after publication"}
+  ],
+  "minimum_eligibility_matches": 3,
+  "reject_patterns": {
+    "shopping": ["best ", "buying guide", "deal", "discount", "coupon", "gift guide", "prime day", "black friday", "under $", "under ₹"],
+    "product_list": ["top 10", "top 15", "top 20", "best of", "products of", "must-have"],
+    "hiring": ["is hiring", "we're hiring", "job opening", "apply now", "vacancy"],
+    "celebrity": ["celebrity", "bollywood", "actor", "actress", "dating", "wedding", "box office", "red carpet"],
+    "routine_politics": ["slams", "hits out", "demands apology", "reacts to remarks", "party spokesperson", "campaign rally"],
+    "routine_announcement": ["press release", "sponsored", "announces partnership", "signs mou", "launches campaign", "hosts event", "webinar", "meetup", "conference registration"],
+    "empty_breaking_churn": ["breaking:", "live:", "latest updates", "minute-by-minute"]
+  },
+  "research_lens": [
+    "What system is changing?",
+    "Who are the stakeholders and who bears the consequences?",
+    "What evidence supports the central development?",
+    "What are the trade-offs?",
+    "Where are the execution gaps, bottlenecks or unknowns?",
+    "What is specifically relevant to India?",
+    "What should viewers watch next?"
+  ],
+  "headline_rules": {
+    "episode_words": [8, 16],
+    "cue_words": [4, 10],
+    "episode_max_chars": 110,
+    "lower_third_max_chars": 80,
+    "chyron_max_chars": 64,
+    "prefer": ["Named actors", "Concrete developments", "Supported consequences", "Active voice", "Sentence case"],
+    "avoid": ["What you need to know", "A closer look", "What this means", "Faces setback", "Raises questions", "Candidate issues", "The future of", "Unnecessary colons", "Sensational adjectives"]
+  },
+  "visual_preferences": [
+    "Maps and geographic context",
+    "Diagrams that explain systems and flows",
+    "Data visualizations grounded in sourced numbers",
+    "Infrastructure and industrial processes",
+    "Primary documents and records",
+    "Authentic event footage from official or primary sources",
+    "Product demonstrations and real interfaces",
+    "People only when they are central actors rather than generic decoration"
+  ],
+  "show_formats": {
+    "signal": {
+      "label": "SynthPost Signal",
+      "duration_minutes": [3, 5],
+      "structure": ["What happened", "Why now", "Who is affected", "What happens next"],
+      "narration": ["Fast, presenter-led and decisive", "Prefer 9-12 words per sentence", "Open on the development, not background", "Use at most two rhetorical questions in the entire script", "Give one number and immediately explain why it matters"]
+    },
+    "explained": {
+      "label": "SynthPost Explained",
+      "duration_minutes": [8, 12],
+      "structure": ["Cold open", "Verified development", "Context", "How the system works", "Consequences", "Uncertainty", "What to watch"],
+      "narration": ["Conversational but information-dense", "Prefer 11-15 words per sentence", "Define technical terms in plain language at first use", "Alternate evidence with interpretation", "Use clean pivots to move from event to system to consequence"]
+    },
+    "deep_dive": {
+      "label": "SynthPost Deep Dive",
+      "duration_minutes": [15, 25],
+      "structure": ["Central question", "System map", "Evidence", "Stakeholders", "Trade-offs", "Execution gaps", "Scenarios", "What to watch"],
+      "narration": ["Investigative, patient and thesis-driven", "Prefer 13-18 words per sentence with short emphasis lines", "Build causal chains instead of chronological lists", "Test the strongest claim against counter-evidence", "Distinguish the base case, competing scenarios and unknowns"]
+    },
+    "india_builds": {
+      "label": "India Builds",
+      "duration_minutes": [30, 120],
+      "structure": ["What is being built", "The physical and institutional system", "Why India needs it", "History and current capacity", "Money and stakeholders", "Execution bottlenecks", "Comparable global systems", "What success would change"],
+      "narration": ["Documentary, physical and systems-oriented", "Prefer 12-16 words per sentence", "Describe how infrastructure, institutions and supply chains work", "Translate capacity, cost and timelines into human scale", "Balance national ambition with execution evidence", "Use chapters and forward references to sustain long-form attention"]
+    }
+  }
+}

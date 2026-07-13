@@ -53,6 +53,41 @@ export const ResearchPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
 
   return (
     <div className="grid grid-3 animate-fade-in" style={{ alignItems: 'start' }}>
+      <div className="card stack research-lens-card">
+        <div className="row-between">
+          <div>
+            <div className="generation-ledger-kicker">Charter research lens</div>
+            <h2>System, stakes and execution</h2>
+          </div>
+          <StatusBadge tone="blue">v{pack.charter_version ?? 'legacy'}</StatusBadge>
+        </div>
+        <div className="research-lens-grid">
+          <div>
+            <h3>Systems</h3>
+            <div className="row-tight">
+              {(pack.systems ?? []).map((item) => <StatusBadge key={item} tone="blue">{item}</StatusBadge>)}
+            </div>
+          </div>
+          <div>
+            <h3>Stakeholders</h3>
+            <div className="row-tight">
+              {(pack.stakeholders ?? []).map((item) => <StatusBadge key={item}>{item}</StatusBadge>)}
+            </div>
+          </div>
+          <div>
+            <h3>Trade-offs</h3>
+            {(pack.trade_offs ?? []).length ? (
+              <ul>{pack.trade_offs.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>
+            ) : <p className="text-muted">No explicit trade-off found in the available evidence.</p>}
+          </div>
+          <div>
+            <h3>Execution gaps</h3>
+            {(pack.execution_gaps ?? []).length ? (
+              <ul>{pack.execution_gaps.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>
+            ) : <p className="text-muted">No execution gap has been evidenced yet.</p>}
+          </div>
+        </div>
+      </div>
       {/* Summary column */}
       <div className="card stack">
         <h2>Summary</h2>

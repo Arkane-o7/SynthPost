@@ -81,8 +81,11 @@ trap cleanup EXIT INT TERM
 
 "${PYTHON_CMD[@]}" -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 &
 api_pid=$!
-"${PYTHON_CMD[@]}" -m pipeline.jobs.worker &
-worker_pid=$!
+start_worker() {
+  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker &
+  worker_pid=$!
+}
+start_worker
 
 for _ in {1..40}; do
   if curl -fsS http://127.0.0.1:8765/api/health >/dev/null 2>&1; then
@@ -99,4 +102,12 @@ echo "SynthPost Remote Studio is live inside your private tailnet:"
 echo
 echo "Open the HTTPS URL above on your phone. Press Ctrl+C to stop the Studio and remove remote access."
 
-wait "$api_pid" "$worker_pid"
+while kill -0 "$api_pid" >/dev/null 2>&1; do
+  if ! kill -0 "$worker_pid" >/dev/null 2>&1; then
+    wait "$worker_pid" >/dev/null 2>&1 || true
+    echo "SynthPost worker stopped unexpectedly; restarting it." >&2
+    start_worker
+  fi
+  sleep 2
+done
+wait "$api_pid" >/dev/null 2>&1 || true

@@ -52,7 +52,7 @@
     },
     "StoryCandidate": {
       "type": "object",
-      "required": ["candidate_id", "title", "canonical_url", "source_id", "source_name", "published_at", "author", "category", "summary", "thumbnail_url", "language", "discovered_at", "scores", "final_score", "score_reasons", "selection_status", "rejection_reasons", "duplicate_group_id"],
+      "required": ["candidate_id", "title", "canonical_url", "source_id", "source_name", "published_at", "author", "category", "summary", "thumbnail_url", "language", "discovered_at", "scores", "editorial_fit", "final_score", "score_reasons", "selection_status", "rejection_reasons", "duplicate_group_id"],
       "properties": {
         "candidate_id": {"type": "string"},
         "title": {"type": "string"},
@@ -67,11 +67,28 @@
         "language": {"type": "string"},
         "discovered_at": {"type": "string"},
         "scores": {"type": "object"},
+        "editorial_fit": {"$ref": "#/$defs/EditorialFitAssessment"},
         "final_score": {"type": "number"},
         "score_reasons": {"type": "array", "items": {"type": "string"}},
         "selection_status": {"type": "string"},
         "rejection_reasons": {"type": "array", "items": {"type": "string"}},
         "duplicate_group_id": {"type": ["string", "null"]}
+      }
+    },
+    "EditorialFitAssessment": {
+      "type": "object",
+      "required": ["charter_version", "score", "eligible", "primary_topic", "matched_criteria", "strengths", "penalties", "rejection_signals", "india_relevance", "reasons"],
+      "properties": {
+        "charter_version": {"type": "string"},
+        "score": {"type": "number"},
+        "eligible": {"type": "boolean"},
+        "primary_topic": {"type": "string"},
+        "matched_criteria": {"type": "array", "items": {"type": "string"}},
+        "strengths": {"type": "array", "items": {"type": "string"}},
+        "penalties": {"type": "array", "items": {"type": "string"}},
+        "rejection_signals": {"type": "array", "items": {"type": "string"}},
+        "india_relevance": {"type": "number"},
+        "reasons": {"type": "array", "items": {"type": "string"}}
       }
     },
     "SourceDocument": {
@@ -99,7 +116,7 @@
     },
     "ResearchPack": {
       "type": "object",
-      "required": ["research_pack_id", "story_id", "documents", "research_queries", "claims", "timeline_events", "people", "organizations", "locations", "numbers", "dates", "contradictions", "uncertainties", "research_summary"],
+      "required": ["research_pack_id", "story_id", "documents", "research_queries", "claims", "timeline_events", "people", "organizations", "locations", "numbers", "dates", "contradictions", "uncertainties", "systems", "stakeholders", "trade_offs", "execution_gaps", "editorial_questions", "charter_version", "research_summary"],
       "properties": {
         "research_pack_id": {"type": "string"},
         "story_id": {"type": "string"},
@@ -115,6 +132,12 @@
         "dates": {"type": "array", "items": {"type": "string"}},
         "contradictions": {"type": "array", "items": {"type": "string"}},
         "uncertainties": {"type": "array", "items": {"type": "string"}},
+        "systems": {"type": "array", "items": {"type": "string"}},
+        "stakeholders": {"type": "array", "items": {"type": "string"}},
+        "trade_offs": {"type": "array", "items": {"type": "string"}},
+        "execution_gaps": {"type": "array", "items": {"type": "string"}},
+        "editorial_questions": {"type": "array", "items": {"type": "string"}},
+        "charter_version": {"type": "string"},
         "research_summary": {"type": "string"}
       }
     },
@@ -133,13 +156,14 @@
     },
     "ScriptDocument": {
       "type": "object",
-      "required": ["script_id", "story_id", "headline", "dek", "category", "estimated_duration_seconds", "version", "status", "sections", "lower_thirds", "chyrons", "source_ids", "created_at", "updated_at"],
+      "required": ["script_id", "story_id", "headline", "dek", "category", "narration_mode", "estimated_duration_seconds", "version", "status", "sections", "lower_thirds", "chyrons", "source_ids", "created_at", "updated_at"],
       "properties": {
         "script_id": {"type": "string"},
         "story_id": {"type": "string"},
         "headline": {"type": "string"},
         "dek": {"type": "string"},
         "category": {"type": "string"},
+        "narration_mode": {"enum": ["signal", "explained", "deep_dive", "india_builds"]},
         "estimated_duration_seconds": {"type": "number"},
         "version": {"type": "integer"},
         "status": {"type": "string"},
@@ -260,6 +284,27 @@
         "output_paths": {"type": "object"},
         "log_path": {"type": ["string", "null"]},
         "error": {"type": ["string", "null"]}
+      }
+    },
+    "GenerationAudit": {
+      "type": "object",
+      "required": ["audit_id", "story_id", "job_id", "stage", "prompt_version", "charter_version", "provider", "model", "prompt_text", "response", "attempts", "validation_events", "normalization_events", "status", "created_at"],
+      "properties": {
+        "audit_id": {"type": "string"},
+        "story_id": {"type": "string"},
+        "job_id": {"type": ["string", "null"]},
+        "stage": {"type": "string"},
+        "prompt_version": {"type": "string"},
+        "charter_version": {"type": "string"},
+        "provider": {"type": "string"},
+        "model": {"type": ["string", "null"]},
+        "prompt_text": {"type": "string"},
+        "response": {"type": ["object", "null"]},
+        "attempts": {"type": "array"},
+        "validation_events": {"type": "array"},
+        "normalization_events": {"type": "array"},
+        "status": {"type": "string"},
+        "created_at": {"type": "string"}
       }
     },
     "ArtifactRecord": {

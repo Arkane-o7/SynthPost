@@ -16,9 +16,15 @@ from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pipeline import config
-from pipeline.llm.providers import configured_provider, structured_generate
+from pipeline.llm.providers import (
+    StructuredGenerationError,
+    configured_provider,
+    structured_generate,
+)
+from pipeline.editorial.charter import CHARTER_VERSION, charter_prompt_context, show_format_for
 from pipeline.models import (
     ContentRole,
+    GenerationAudit,
     MediaType,
     ReviewStatus,
     RightsTier,
@@ -814,13 +820,18 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
             for section in script.sections
         ],
     }
+    editorial_fit = getattr(candidate, "editorial_fit", None)
+    primary_topic = getattr(editorial_fit, "primary_topic", script.category)
     prompt = f"""
 You are SynthPost's visual search keyword planner.
 Turn the supplied news topic and section narration into search-engine keyword phrases for SearXNG.
 
+{charter_prompt_context(show_format=script.narration_mode.value)}
+
 For every section return exactly one image_query and one distinct video_query.
 - Ground both queries in concrete verified names, organizations, objects, events, places, and dates present in the input.
-- image_query should seek an authentic editorial photo, diagram, map, document, or data visual appropriate to the section.
+- image_query should favor a map, system diagram, sourced data visual, infrastructure,
+  primary document, authentic editorial photograph, product demonstration or real interface.
 - video_query should seek the original event/person/place from an official primary source and use "official video", "raw footage", "B-roll", or "press footage".
 - Never ask for "news coverage", "breaking news", "explainer", "news report", or a finished broadcaster package.
 - Prefer named primary sources such as the responsible ministry, agency, organization, event operator, or official press office.
@@ -835,20 +846,62 @@ For every section return exactly one image_query and one distinct video_query.
 INPUT JSON:
 {json.dumps(prompt_input, ensure_ascii=True)}
 """.strip()
-    plans, _attempts = structured_generate(
-        provider,
-        prompt,
-        _visual_query_schema(),
-        lambda raw: _validate_ai_visual_plan(
-            raw,
-            section_ids={section.section_id for section in script.sections},
-            provider_name=provider.name,
-            supported_years=set(
-                re.findall(r"\b(?:19|20)\d{2}\b", json.dumps(prompt_input))
+    generation_error: StructuredGenerationError | None = None
+    try:
+        plans, _attempts = structured_generate(
+            provider,
+            prompt,
+            _visual_query_schema(),
+            lambda raw: _validate_ai_visual_plan(
+                raw,
+                section_ids={section.section_id for section in script.sections},
+                provider_name=provider.name,
+                supported_years=set(
+                    re.findall(r"\b(?:19|20)\d{2}\b", json.dumps(prompt_input))
+                ),
             ),
-        ),
-        max_retries=2,
-    )
+            max_retries=2,
+        )
+    except StructuredGenerationError as exc:
+        plans = []
+        _attempts = exc.attempts
+        generation_error = exc
+    latest_attempt = _attempts[-1] if _attempts else {}
+    audit_saver = getattr(repository, "save_generation_audit", None)
+    if audit_saver:
+        audit_saver(GenerationAudit(
+            story_id=story_id,
+            stage="visual_query_planner",
+            prompt_version="synthpost.visual-query.v2",
+            charter_version=CHARTER_VERSION,
+            provider=str(latest_attempt.get("provider") or provider.name),
+            model=latest_attempt.get("model"),
+            prompt_text=prompt,
+            response=latest_attempt.get("raw") if isinstance(latest_attempt.get("raw"), dict) else None,
+            attempts=_attempts,
+            validation_events=[
+                {
+                    "attempt": attempt.get("attempt"),
+                    "ok": attempt.get("ok", False),
+                    "error": attempt.get("error"),
+                }
+                for attempt in _attempts
+            ],
+            normalization_events=(
+                [
+                    {
+                        "kind": "visual_query_plan_validated",
+                        "section_count": len(plans),
+                        "reason": "preserved section IDs and verified date constraints",
+                    }
+                ]
+                if not generation_error
+                else []
+            ),
+            status="failed" if generation_error else "completed",
+        ))
+    if generation_error:
+        raise generation_error
     return plans
 
 

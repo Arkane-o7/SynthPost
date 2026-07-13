@@ -25,6 +25,7 @@ from pipeline.models import (
     timed_section_headline_cues,
 )
 from pipeline.provenance import ffprobe_summary
+from pipeline.storage import resolve_project_path
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import broadcast_media_fit
 
@@ -215,18 +216,25 @@ def select_template(
 
 
 def _is_approved_visual(visual: VisualCandidate) -> bool:
-    """Return True if the visual passes rights/review gates for timeline use."""
+    """Return True when an editor explicitly pinned a renderable visual."""
     if visual.review_status not in {
         ReviewStatus.approved,
         ReviewStatus.manual_approved,
     }:
         return False
-    if visual.rights_tier == RightsTier.red:
+    return _is_renderable_visual(visual)
+
+
+def _is_renderable_visual(visual: VisualCandidate) -> bool:
+    """Check technical usability without requiring an editorial approval click."""
+
+    if visual.review_status in {ReviewStatus.rejected, ReviewStatus.blocked}:
         return False
-    if (
-        visual.rights_tier == RightsTier.yellow
-        and visual.review_status != ReviewStatus.manual_approved
-    ):
+    if _is_fallback_visual(visual):
+        return True
+    if not visual.download_path:
+        return False
+    if not resolve_project_path(visual.download_path).is_file():
         return False
     if visual.media_type in {MediaType.image, MediaType.video} and config.env_bool(
         "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
@@ -236,29 +244,36 @@ def _is_approved_visual(visual: VisualCandidate) -> bool:
         )
         if not eligible:
             return False
-    if visual.media_type in {MediaType.image, MediaType.video}:
-        if visual.content_cleanliness_status != "passed" or visual.approval_blockers:
-            return False
     return True
 
 
 def approved_visuals_by_section(
     visuals: list[VisualCandidate],
 ) -> dict[str, VisualCandidate]:
+    """Select one visual per section.
+
+    Explicit approval pins a real visual. With no pinned choice, the highest
+    relevance/quality renderable suggestion wins. Synthetic/presenter fallback
+    is considered only after every real candidate has been excluded.
+    """
+
     result: dict[str, VisualCandidate] = {}
     ranked = sorted(
         visuals,
         key=lambda visual: (
-            visual.content_role == ContentRole.fallback
-            or visual.media_type == MediaType.fallback
-            or visual.provider
-            in {"generated_visual_card", "synthpost_anchor_fallback"},
-            visual.review_status != ReviewStatus.manual_approved,
-            -(visual.relevance_score + visual.visual_quality_score),
+            _is_fallback_visual(visual),
+            0
+            if visual.review_status == ReviewStatus.manual_approved
+            else 1
+            if visual.review_status == ReviewStatus.approved
+            else 2,
+            -visual.relevance_score,
+            -visual.visual_quality_score,
+            -visual.source_authority,
         ),
     )
     for visual in ranked:
-        if not _is_approved_visual(visual):
+        if not _is_renderable_visual(visual):
             continue
         for section_id in visual.section_ids:
             result.setdefault(section_id, visual)
@@ -270,7 +285,7 @@ def distribute_unassigned_visuals(
     section_ids: list[str],
     already_assigned: dict[str, VisualCandidate],
 ) -> dict[str, VisualCandidate]:
-    """Distribute approved visuals that have no section_ids across unserved sections.
+    """Distribute renderable unassigned visuals across unserved sections.
 
     When visuals are uploaded or staged via the UI/drop-folder without explicit
     section_id bindings, they end up with ``section_ids == []``.  Without this
@@ -284,13 +299,21 @@ def distribute_unassigned_visuals(
     unassigned = [
         visual
         for visual in visuals
-        if _is_approved_visual(visual) and not visual.section_ids
+        if _is_renderable_visual(visual)
+        and not _is_fallback_visual(visual)
+        and not visual.section_ids
     ]
     if not unassigned:
         return result
     # Prefer higher-quality / more-relevant visuals first
     unassigned.sort(
-        key=lambda v: (v.relevance_score + v.visual_quality_score), reverse=True
+        key=lambda v: (
+            v.review_status in {ReviewStatus.approved, ReviewStatus.manual_approved},
+            v.relevance_score,
+            v.visual_quality_score,
+            v.source_authority,
+        ),
+        reverse=True,
     )
     open_sections = [sid for sid in section_ids if sid not in result]
     if not open_sections:
@@ -395,7 +418,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         raise ValueError(f"No script exists for story: {story_id}")
     visuals = repository.list_visuals(story_id)
     by_section = approved_visuals_by_section(visuals)
-    # Auto-distribute approved visuals that were staged without explicit
+    # Auto-distribute renderable visuals that were staged without explicit
     # section_id bindings (common for UI uploads and drop-folder scans).
     all_section_ids = [section.section_id for section in script.sections]
     by_section = distribute_unassigned_visuals(visuals, all_section_ids, by_section)

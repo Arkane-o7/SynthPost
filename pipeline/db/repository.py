@@ -8,6 +8,7 @@ from pipeline.db.sqlite import connect, dumps, init_db, loads, row_data, rows_da
 from pipeline.models import (
     Episode,
     EpisodeStatus,
+    GenerationAudit,
     JobStatus,
     Project,
     RenderJob,
@@ -466,6 +467,48 @@ class Repository:
                 (story_id,),
             )
         )
+
+    def save_generation_audit(self, audit: GenerationAudit) -> GenerationAudit:
+        data = audit.model_dump(mode="json")
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO generation_audits(
+                  audit_id, story_id, job_id, stage, prompt_version,
+                  charter_version, provider, model, status, data, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(audit_id) DO UPDATE SET
+                  status=excluded.status, data=excluded.data
+                """,
+                (
+                    audit.audit_id,
+                    audit.story_id,
+                    audit.job_id,
+                    audit.stage,
+                    audit.prompt_version,
+                    audit.charter_version,
+                    audit.provider,
+                    audit.model,
+                    audit.status,
+                    dumps(data),
+                    audit.created_at,
+                ),
+            )
+        return audit
+
+    def list_generation_audits(
+        self, story_id: str, *, limit: int = 50
+    ) -> list[GenerationAudit]:
+        return [
+            GenerationAudit.model_validate(data)
+            for data in rows_data(
+                self._many(
+                    "SELECT data FROM generation_audits "
+                    "WHERE story_id = ? ORDER BY created_at DESC LIMIT ?",
+                    (story_id, max(1, min(200, limit))),
+                )
+            )
+        ]
 
     def save_script(self, script: ScriptDocument) -> ScriptDocument:
         existing_versions = [

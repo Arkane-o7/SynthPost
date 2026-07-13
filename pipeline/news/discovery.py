@@ -98,7 +98,13 @@ def research_queries(candidate: StoryCandidate) -> list[str]:
         return []
     title_terms = significant_terms(title)
     summary_terms = significant_terms(candidate.summary)
-    category_terms = significant_terms(candidate.category.replace("_", " "))
+    editorial_topic = getattr(candidate, "editorial_fit", None)
+    topic_name = (
+        editorial_topic.primary_topic
+        if editorial_topic and editorial_topic.primary_topic != "general"
+        else candidate.category
+    )
+    category_terms = significant_terms(topic_name.replace("_", " "))
     focused_terms = [*title_terms[:8]]
     for term in summary_terms:
         if term not in focused_terms and len(focused_terms) < 10:
@@ -109,6 +115,7 @@ def research_queries(candidate: StoryCandidate) -> list[str]:
         title,
         " ".join(focused_terms),
         " ".join(dict.fromkeys(topic_terms)),
+        " ".join(dict.fromkeys([*title_terms[:6], "India", "impact", "industry"])),
     ]
     queries: list[str] = []
     seen: set[str] = set()

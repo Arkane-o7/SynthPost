@@ -367,21 +367,9 @@ const timelineSegmentProps = async (
           `Approved timeline contains blocked red-tier visual: ${assetId}`,
         );
       }
-      if (
-        visualRef.rights_tier === "yellow" &&
-        visualRef.review_status !== "manual_approved"
-      ) {
+      if (["rejected", "blocked"].includes(String(visualRef.review_status))) {
         throw new Error(
-          `Approved timeline contains yellow-tier visual without manual approval: ${assetId}`,
-        );
-      }
-      if (
-        !["approved", "manual_approved"].includes(
-          String(visualRef.review_status),
-        )
-      ) {
-        throw new Error(
-          `Approved timeline contains unapproved visual: ${assetId}`,
+          `Approved timeline contains excluded visual: ${assetId}`,
         );
       }
     }

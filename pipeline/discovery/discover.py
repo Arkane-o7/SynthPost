@@ -4,6 +4,8 @@ import hashlib
 import html
 import os
 import re
+import shutil
+import subprocess
 import time
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -19,9 +21,11 @@ from pipeline.models import (
     SourceDefinition,
     SourceType,
     StoryCandidate,
+    StorySelectionStatus,
     StoryScores,
     now_iso,
 )
+from pipeline.editorial.charter import CHARTER_VERSION, assess_editorial_fit
 from pipeline.storage import PROJECT_ROOT
 
 CACHE_DIR = PROJECT_ROOT / ".synthpost" / "cache" / "feeds"
@@ -173,20 +177,23 @@ def score_candidate(
 ) -> tuple[StoryScores, float, list[str]]:
     text = f"{title} {summary}".lower()
     importance_terms = [
-        "breaking",
         "major",
         "first",
         "historic",
-        "government",
-        "court",
-        "election",
-        "war",
         "billion",
         "trillion",
         "climate",
         "energy",
         "ai",
         "chip",
+        "semiconductor",
+        "cybersecurity",
+        "data center",
+        "export controls",
+        "sanctions",
+        "supply chain",
+        "regulation",
+        "global",
         "market",
         "economy",
         "security",
@@ -221,13 +228,20 @@ def score_candidate(
         "format_suitability": 0.07,
         "originality": 0.03,
     }
-    final = sum(getattr(scores, key) * weight for key, weight in weights.items())
+    signal_score = sum(
+        getattr(scores, key) * weight for key, weight in weights.items()
+    )
+    editorial_fit = assess_editorial_fit(source, title, summary)
+    final = signal_score * 0.32 + editorial_fit.score * 0.68
+    if not editorial_fit.eligible:
+        final = min(final, 0.39 if not editorial_fit.rejection_signals else 0.18)
     reasons = [
         f"importance={scores.importance:.2f}",
         f"freshness={scores.freshness:.2f}",
         f"visual_potential={scores.visual_potential:.2f}",
         f"explainability={scores.explainability:.2f}",
         f"source_reliability={scores.source_reliability:.2f}",
+        *editorial_fit.reasons,
     ]
     if duplicate_seen:
         reasons.append("near duplicate of an earlier candidate")
@@ -255,17 +269,48 @@ def fetch_feed(url: str, *, timeout: float = 12.0, max_age_seconds: int = 900) -
                 headers["If-None-Match"] = line.removeprefix("ETag: ")
             if line.startswith("Last-Modified: "):
                 headers["If-Modified-Since"] = line.removeprefix("Last-Modified: ")
-    request = Request(url, headers=headers)
     try:
-        with urlopen(request, timeout=timeout) as response:
-            body = response.read()
-            cache_path.write_bytes(body)
-            etag = response.headers.get("ETag") or ""
-            last_modified = response.headers.get("Last-Modified") or ""
-            meta_path.write_text(
-                f"ETag: {etag}\nLast-Modified: {last_modified}\n", encoding="utf-8"
+        curl = shutil.which("curl")
+        if curl:
+            command = [
+                curl,
+                "--location",
+                "--silent",
+                "--show-error",
+                "--fail",
+                "--compressed",
+                "--connect-timeout",
+                str(max(1, min(5, int(timeout)))),
+                "--max-time",
+                str(max(1, int(timeout))),
+                "--user-agent",
+                headers["User-Agent"],
+            ]
+            for name, value in headers.items():
+                if name != "User-Agent":
+                    command.extend(["--header", f"{name}: {value}"])
+            command.append(url)
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                timeout=timeout + 3,
             )
-            return body
+            body = result.stdout
+        else:
+            request = Request(url, headers=headers)
+            with urlopen(request, timeout=timeout) as response:
+                body = response.read()
+                etag = response.headers.get("ETag") or ""
+                last_modified = response.headers.get("Last-Modified") or ""
+                meta_path.write_text(
+                    f"ETag: {etag}\nLast-Modified: {last_modified}\n",
+                    encoding="utf-8",
+                )
+        if not body:
+            raise ValueError(f"Feed returned an empty response: {url}")
+        cache_path.write_bytes(body)
+        return body
     except Exception:
         if cache_path.exists():
             return cache_path.read_bytes()
@@ -292,6 +337,7 @@ def candidate_from_feed_entry(
     scores, final_score, reasons = score_candidate(
         source, title, summary, published_at, duplicate_seen
     )
+    editorial_fit = assess_editorial_fit(source, title, summary)
     thumbnail_url = None
     media_thumbnail = getattr(entry, "media_thumbnail", None)
     if media_thumbnail and isinstance(media_thumbnail, list) and media_thumbnail:
@@ -312,6 +358,7 @@ def candidate_from_feed_entry(
         thumbnail_url=thumbnail_url,
         language=detect_language(title + " " + summary),
         scores=scores,
+        editorial_fit=editorial_fit,
         final_score=final_score,
         score_reasons=reasons,
         duplicate_group_id=group,
@@ -365,6 +412,47 @@ def discover(
     return sorted(candidates, key=lambda item: item.final_score, reverse=True)
 
 
+def rescore_existing_candidates(repository) -> int:
+    """Apply the current charter to legacy inbox rows after a code upgrade."""
+
+    count = 0
+    for candidate in repository.list_candidates(limit=5000):
+        if (
+            candidate.editorial_fit.charter_version == CHARTER_VERSION
+            and candidate.editorial_fit.reasons
+        ):
+            continue
+        try:
+            source = repository.get_source(candidate.source_id) if candidate.source_id else None
+        except Exception:
+            source = None
+        if source is None:
+            source = SourceDefinition(
+                source_id=candidate.source_id or "src_legacy",
+                name=candidate.source_name,
+                source_type=SourceType.manual_story,
+                category=candidate.category,
+                reliability_score=candidate.scores.source_reliability or 0.6,
+                custom=True,
+            )
+        scores, final, reasons = score_candidate(
+            source,
+            candidate.title,
+            candidate.summary,
+            candidate.published_at,
+            candidate.selection_status == StorySelectionStatus.duplicate,
+        )
+        candidate.scores = scores
+        candidate.editorial_fit = assess_editorial_fit(
+            source, candidate.title, candidate.summary
+        )
+        candidate.final_score = final
+        candidate.score_reasons = reasons
+        repository.upsert_candidate(candidate)
+        count += 1
+    return count
+
+
 def add_custom_topic(
     repository,
     *,
@@ -384,6 +472,7 @@ def add_custom_topic(
         custom=True,
     )
     scores, final, reasons = score_candidate(source, title, summary, None)
+    editorial_fit = assess_editorial_fit(source, title, summary)
     candidate = StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
@@ -397,6 +486,7 @@ def add_custom_topic(
         summary=summary,
         language=detect_language(title + " " + summary),
         scores=scores,
+        editorial_fit=editorial_fit,
         final_score=final,
         score_reasons=[*reasons, "manual topic entered by editor"],
         duplicate_group_id=duplicate_group(title, None),
@@ -429,6 +519,7 @@ def add_custom_url(
         custom=True,
     )
     scores, final, reasons = score_candidate(source, display_title, summary, None)
+    editorial_fit = assess_editorial_fit(source, display_title, summary)
     candidate = StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
@@ -442,6 +533,7 @@ def add_custom_url(
         summary=summary,
         language=detect_language(display_title + " " + summary),
         scores=scores,
+        editorial_fit=editorial_fit,
         final_score=final,
         score_reasons=[*reasons, "custom URL entered by editor"],
         duplicate_group_id=duplicate_group(display_title, canonical),
@@ -471,6 +563,7 @@ def add_manual_story(
         custom=True,
     )
     scores, final, reasons = score_candidate(source, title, summary, None)
+    editorial_fit = assess_editorial_fit(source, title, summary)
     candidate = StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
@@ -483,6 +576,7 @@ def add_manual_story(
         summary=summary,
         language=detect_language(title + " " + body),
         scores=scores,
+        editorial_fit=editorial_fit,
         final_score=final,
         score_reasons=[*reasons, "manual story pasted by editor"],
         duplicate_group_id=duplicate_group(title, None),

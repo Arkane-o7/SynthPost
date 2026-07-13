@@ -281,6 +281,9 @@ const SectionVisualRow: React.FC<{
           <div>
             <span className="visual-carousel-eyebrow">Recommended media</span>
             <strong>{visuals.length ? "Choose the shot that carries this beat" : "No candidates linked to this section"}</strong>
+            {visuals.length ? (
+              <small>Highest-fit local candidate is automatic. Approve one to pin it.</small>
+            ) : null}
           </div>
           {visuals.length > 1 && (
             <div className="visual-carousel-controls" aria-label="Section visual actions">
@@ -422,7 +425,14 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       setBusy(true);
       await fn();
       await load();
-      await studio.refreshAll();
+      // Do not call refreshAll() here. It sets the entire Studio to its loading
+      // state, unmounting this panel and resetting the page/carousel scroll
+      // positions after every approve or reject action. These scoped refreshes
+      // keep the Visuals workspace mounted while still updating shared state.
+      await Promise.all([
+        studio.refreshCandidates(),
+        studio.refreshJobs(),
+      ]);
     } catch (err) {
       studio.setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -496,6 +506,8 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
           Episode media inbox: <code>{localFolder || "Loading…"}</code>
           <br />Only files placed in this project and episode are scanned.
+          <br />Visual approval is optional: SynthPost automatically uses the most relevant
+          renderable candidate per section. Approving a visual overrides and pins that choice.
         </div>
         <div className="row">
           <input
@@ -567,7 +579,8 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             ))}
           </div>
           <p>
-            Local media is ready for your editorial decision. Search leads are references that were not downloaded.
+            Local media is eligible for automatic selection. Approve to pin a choice, reject to
+            exclude it. Search leads are references until they are downloaded.
           </p>
         </div>
       ) : null}

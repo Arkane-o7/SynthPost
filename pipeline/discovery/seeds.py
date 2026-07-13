@@ -38,22 +38,22 @@ SEED_SOURCES: list[SourceDefinition] = [
     ),
     SourceDefinition(
         source_id="src_the_hindu",
-        name="The Hindu",
+        name="The Hindu Science & Technology",
         source_type=SourceType.rss,
-        category="india",
-        homepage_url="https://www.thehindu.com/",
-        feed_url="https://www.thehindu.com/news/national/feeder/default.rss",
+        category="science",
+        homepage_url="https://www.thehindu.com/sci-tech/",
+        feed_url="https://www.thehindu.com/sci-tech/feeder/default.rss",
         country="in",
         priority=82,
         reliability_score=0.82,
     ),
     SourceDefinition(
         source_id="src_indian_express",
-        name="Indian Express",
+        name="Indian Express Explained: Sci-Tech",
         source_type=SourceType.rss,
-        category="india",
-        homepage_url="https://indianexpress.com/",
-        feed_url="https://indianexpress.com/section/india/feed/",
+        category="science",
+        homepage_url="https://indianexpress.com/section/explained/explained-sci-tech/",
+        feed_url="https://indianexpress.com/section/explained/explained-sci-tech/feed/",
         country="in",
         priority=80,
         reliability_score=0.8,
@@ -79,6 +79,39 @@ SEED_SOURCES: list[SourceDefinition] = [
         country="us",
         priority=74,
         reliability_score=0.74,
+    ),
+    SourceDefinition(
+        source_id="src_firstpost_lens",
+        name="Firstpost Technology & Geopolitics",
+        source_type=SourceType.rss,
+        category="geopolitics",
+        homepage_url="https://www.firstpost.com/",
+        feed_url="https://news.google.com/rss/search?q=site%3Afirstpost.com+(technology+OR+AI+OR+geopolitics)&hl=en-IN&gl=IN&ceid=IN:en",
+        country="in",
+        priority=86,
+        reliability_score=0.78,
+    ),
+    SourceDefinition(
+        source_id="src_aim_lens",
+        name="Analytics India Magazine",
+        source_type=SourceType.rss,
+        category="artificial_intelligence",
+        homepage_url="https://analyticsindiamag.com/",
+        feed_url="https://news.google.com/rss/search?q=site%3Aanalyticsindiamag.com+(AI+OR+technology)&hl=en-IN&gl=IN&ceid=IN:en",
+        country="in",
+        priority=88,
+        reliability_score=0.76,
+    ),
+    SourceDefinition(
+        source_id="src_rest_of_world",
+        name="Rest of World",
+        source_type=SourceType.rss,
+        category="technology",
+        homepage_url="https://restofworld.org/",
+        feed_url="https://restofworld.org/feed/latest/",
+        country="global",
+        priority=84,
+        reliability_score=0.82,
     ),
     SourceDefinition(
         source_id="src_mit_ai",
@@ -183,10 +216,16 @@ SEED_SOURCES: list[SourceDefinition] = [
 
 
 def seed_sources(repository) -> int:
-    existing = {source.source_id for source in repository.list_sources()}
+    existing = {source.source_id: source for source in repository.list_sources()}
     count = 0
     for source in SEED_SOURCES:
-        if source.source_id not in existing:
-            repository.upsert_source(source)
+        current = existing.get(source.source_id)
+        synced = source
+        if current is None:
             count += 1
+        else:
+            # Keep the editor's enable/disable choice while synchronizing the
+            # curated desk's section, feed URL, reliability and priority.
+            synced = source.model_copy(update={"enabled": current.enabled})
+        repository.upsert_source(synced)
     return count

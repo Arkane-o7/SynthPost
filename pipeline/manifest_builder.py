@@ -12,7 +12,6 @@ from pipeline.models import (
     ContentRole,
     MediaType,
     ReviewStatus,
-    RightsTier,
     TimelinePlan,
     TimelineStatus,
 )
@@ -77,10 +76,37 @@ def hydrate_timeline_visuals(
 
     hydrated = plan.model_copy(deep=True)
     by_id = {visual.asset_id: visual for visual in visuals}
+
+    def use_fallback(segment) -> None:
+        segment.visual.asset_id = None
+        segment.visual.path = None
+        segment.visual.media_type = MediaType.fallback
+        segment.visual.content_role = ContentRole.fallback
+        segment.visual.source = "SynthPost"
+        segment.visual.source_url = None
+        segment.visual.attribution_text = ""
+        segment.visual.review_status = ReviewStatus.approved
+        segment.visual.audio_mode = "muted"
+        segment.visual.has_audio = False
+        if segment.template.template_id not in {
+            "fullscreen_anchor",
+            "fallback_anchor",
+        }:
+            segment.template.template_id = "fallback_anchor"
+        segment.anchor.visible = True
+        segment.anchor.speaking = True
+        segment.audio.mode = "narration"
+        segment.audio.narration_volume = 1.0
+        segment.audio.source_volume = 0.0
+        segment.overlays.attribution = ""
+        segment.overlays.document_source = ""
+
     for segment in hydrated.segments:
         asset_id = segment.visual.asset_id
         current = by_id.get(asset_id) if asset_id else None
         if current is None:
+            if asset_id:
+                use_fallback(segment)
             continue
         if (
             current.content_role == ContentRole.fallback
@@ -88,21 +114,14 @@ def hydrate_timeline_visuals(
             or current.provider
             in {"generated_visual_card", "synthpost_anchor_fallback"}
         ):
-            segment.visual.asset_id = None
-            segment.visual.path = None
-            segment.visual.media_type = MediaType.fallback
-            segment.visual.content_role = ContentRole.fallback
-            segment.visual.source = "SynthPost"
-            segment.visual.source_url = None
-            segment.visual.attribution_text = ""
-            if segment.template.template_id not in {
-                "fullscreen_anchor",
-                "fallback_anchor",
-            }:
-                segment.template.template_id = "fallback_anchor"
-            segment.anchor.visible = True
-            segment.overlays.attribution = ""
-            segment.overlays.document_source = ""
+            use_fallback(segment)
+            continue
+        if (
+            current.review_status in {ReviewStatus.rejected, ReviewStatus.blocked}
+            or not current.download_path
+            or not resolve_project_path(current.download_path).is_file()
+        ):
+            use_fallback(segment)
             continue
         segment.visual.path = current.download_path
         segment.visual.media_type = current.media_type
@@ -152,11 +171,15 @@ def build_story_manifest(
         "composited_TEST_MODE.mp4" if test_mode else "composited.mp4"
     )
     preview_path = story_path.with_name("preview.png")
-    approved_visuals = [
+    selected_asset_ids = {
+        segment.visual.asset_id
+        for segment in timeline.segments
+        if segment.visual.asset_id and segment.visual.path
+    }
+    renderer_visuals = [
         visual
         for visual in visuals
-        if visual.review_status in {ReviewStatus.approved, ReviewStatus.manual_approved}
-        and visual.rights_tier != RightsTier.red
+        if visual.asset_id in selected_asset_ids
     ]
     manifest: dict[str, Any] = {
         "contract_version": "synthpost.v2.renderer_manifest",
@@ -200,7 +223,7 @@ def build_story_manifest(
                 "motion": visual.motion,
                 "has_audio": visual.has_audio,
             }
-            for visual in approved_visuals
+            for visual in renderer_visuals
             if visual.download_path
         ],
         "points": [

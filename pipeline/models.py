@@ -86,6 +86,13 @@ class ScriptStatus(str, Enum):
     rejected = "rejected"
 
 
+class NarrationMode(str, Enum):
+    signal = "signal"
+    explained = "explained"
+    deep_dive = "deep_dive"
+    india_builds = "india_builds"
+
+
 class ApprovalStatus(str, Enum):
     draft = "draft"
     review = "review"
@@ -210,6 +217,19 @@ class StoryScores(StrictModel):
     originality: float = 0.0
 
 
+class EditorialFitAssessment(StrictModel):
+    charter_version: str = "1.0.0"
+    score: float = 0.0
+    eligible: bool = False
+    primary_topic: str = "general"
+    matched_criteria: list[str] = Field(default_factory=list)
+    strengths: list[str] = Field(default_factory=list)
+    penalties: list[str] = Field(default_factory=list)
+    rejection_signals: list[str] = Field(default_factory=list)
+    india_relevance: float = 0.0
+    reasons: list[str] = Field(default_factory=list)
+
+
 class StoryCandidate(StrictModel):
     candidate_id: str = Field(default_factory=lambda: new_id("cand"))
     title: str
@@ -224,6 +244,9 @@ class StoryCandidate(StrictModel):
     language: str = "unknown"
     discovered_at: str = Field(default_factory=now_iso)
     scores: StoryScores = Field(default_factory=StoryScores)
+    editorial_fit: EditorialFitAssessment = Field(
+        default_factory=EditorialFitAssessment
+    )
     final_score: float = 0.0
     score_reasons: list[str] = Field(default_factory=list)
     selection_status: StorySelectionStatus = StorySelectionStatus.suggested
@@ -288,6 +311,12 @@ class ResearchPack(StrictModel):
     dates: list[str] = Field(default_factory=list)
     contradictions: list[str] = Field(default_factory=list)
     uncertainties: list[str] = Field(default_factory=list)
+    systems: list[str] = Field(default_factory=list)
+    stakeholders: list[str] = Field(default_factory=list)
+    trade_offs: list[str] = Field(default_factory=list)
+    execution_gaps: list[str] = Field(default_factory=list)
+    editorial_questions: list[str] = Field(default_factory=list)
+    charter_version: str = "1.0.0"
     research_summary: str = ""
     status: ApprovalStatus = ApprovalStatus.review
     created_at: str = Field(default_factory=now_iso)
@@ -330,6 +359,7 @@ class ScriptDocument(StrictModel):
     headline: str
     dek: str = ""
     category: str = "general"
+    narration_mode: NarrationMode = NarrationMode.explained
     estimated_duration_seconds: float = 0.0
     version: int = 1
     status: ScriptStatus = ScriptStatus.review
@@ -767,6 +797,24 @@ class RenderJob(StrictModel):
     max_attempts: int = 2
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
+
+
+class GenerationAudit(StrictModel):
+    audit_id: str = Field(default_factory=lambda: new_id("audit"))
+    story_id: str
+    job_id: str | None = None
+    stage: str
+    prompt_version: str
+    charter_version: str
+    provider: str
+    model: str | None = None
+    prompt_text: str
+    response: dict[str, Any] | None = None
+    attempts: list[dict[str, Any]] = Field(default_factory=list)
+    validation_events: list[dict[str, Any]] = Field(default_factory=list)
+    normalization_events: list[dict[str, Any]] = Field(default_factory=list)
+    status: str = "completed"
+    created_at: str = Field(default_factory=now_iso)
 
 
 class ArtifactRecord(StrictModel):

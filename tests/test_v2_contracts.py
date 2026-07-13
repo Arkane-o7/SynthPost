@@ -20,12 +20,14 @@ class V2ContractTests(unittest.TestCase):
             "Episode",
             "SourceDefinition",
             "StoryCandidate",
+            "EditorialFitAssessment",
             "SourceDocument",
             "ResearchPack",
             "ScriptDocument",
             "VisualCandidate",
             "TimelinePlan",
             "RenderJob",
+            "GenerationAudit",
             "ArtifactRecord",
         ]:
             self.assertIn(name, defs)
@@ -40,12 +42,14 @@ class V2ContractTests(unittest.TestCase):
             "Episode",
             "SourceDefinition",
             "StoryCandidate",
+            "EditorialFitAssessment",
             "SourceDocument",
             "ResearchPack",
             "ScriptDocument",
             "VisualCandidate",
             "TimelinePlan",
             "RenderJob",
+            "GenerationAudit",
             "ArtifactRecord",
         ]:
             self.assertIn(f"export type {name}", ts)
@@ -67,6 +71,25 @@ class V2ContractTests(unittest.TestCase):
         self.assertIn("lower_third: string", ts)
         self.assertIn("chyron: string", ts)
         self.assertIn("headline_cues: string[]", ts)
+
+    def test_script_contract_exposes_independent_narration_mode(self) -> None:
+        schema = json.loads(
+            (ROOT / "contracts" / "schemas" / "synthpost.v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        script = schema["$defs"]["ScriptDocument"]
+        ts = (ROOT / "contracts" / "typescript" / "index.ts").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("narration_mode", script["required"])
+        self.assertEqual(
+            script["properties"]["narration_mode"]["enum"],
+            ["signal", "explained", "deep_dive", "india_builds"],
+        )
+        self.assertIn("export type NarrationMode", ts)
+        self.assertIn("narration_mode: NarrationMode", ts)
 
     def test_job_event_stream_uses_unambiguous_static_route(self) -> None:
         api = (ROOT / "pipeline" / "api" / "main.py").read_text(encoding="utf-8")

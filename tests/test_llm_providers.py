@@ -9,8 +9,10 @@ from pipeline.llm.providers import (
     GeminiProvider,
     GroqProvider,
     HostedFallbackProvider,
+    ProviderRateLimitError,
     configured_provider,
     groq_strict_schema,
+    structured_generate,
 )
 
 
@@ -84,14 +86,31 @@ class LLMProviderTests(unittest.TestCase):
         )
         body = json.loads(request.data.decode("utf-8"))
         self.assertEqual(body["response_format"]["type"], "json_schema")
+        self.assertEqual(body["max_completion_tokens"], 2300)
+        self.assertEqual(
+            body["response_format"]["json_schema"]["schema"]["type"], "object"
+        )
         self.assertTrue(body["response_format"]["json_schema"]["strict"])
 
     def test_groq_strict_schema_requires_all_declared_fields(self) -> None:
         schema = groq_strict_schema(
-            {"type": "object", "properties": {"name": {"type": "string"}}}
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"id": {"type": "string"}},
+                        },
+                    },
+                },
+            }
         )
-        self.assertEqual(schema["required"], ["name"])
+        self.assertEqual(schema["required"], ["name", "items"])
         self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(schema["properties"]["items"]["items"]["required"], ["id"])
 
     def test_groq_client_reports_http_error_body(self) -> None:
         error = HTTPError(
@@ -107,6 +126,37 @@ class LLMProviderTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "TPM limit 8000"):
                 GroqProvider().generate_json("large prompt", {"type": "object"})
+
+    def test_temporary_groq_limit_waits_without_consuming_fallback_quota(self) -> None:
+        primary = _Provider(
+            "groq",
+            error=ProviderRateLimitError("temporary limit", retry_after_seconds=2),
+        )
+        fallback = _Provider("gemini")
+        provider = HostedFallbackProvider(primary, fallback)
+
+        with patch("pipeline.llm.providers.time.sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "temporary limit"):
+                structured_generate(
+                    provider,
+                    "original prompt",
+                    {"type": "object"},
+                    lambda value: value,
+                    max_retries=1,
+                )
+
+        sleep.assert_called_once_with(3.0)
+        self.assertIsNone(provider.last_provider)
+
+    def test_hosted_fallback_reports_both_provider_errors(self) -> None:
+        provider = HostedFallbackProvider(
+            _Provider("groq", error=RuntimeError("groq limit")),
+            _Provider("gemini", error=RuntimeError("gemini quota")),
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Primary groq failed: groq limit; fallback gemini failed"
+        ):
+            provider.generate_json("prompt", {"type": "object"})
 
 
 if __name__ == "__main__":

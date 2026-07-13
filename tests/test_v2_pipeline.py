@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,15 +13,21 @@ from pipeline.discovery.discover import (
     add_manual_story,
     canonicalize_url,
     duplicate_group,
+    fetch_feed,
     normalize_title,
     score_candidate,
 )
+from pipeline.editorial.charter import CHARTER_VERSION, assess_editorial_fit
 from pipeline.manifest_builder import build_story_manifest, hydrate_timeline_visuals
 from pipeline.models import (
     AudioMode,
     ContentRole,
     JobStatus,
     MediaType,
+    NarrationMode,
+    Claim,
+    ResearchPack,
+    ReviewStatus,
     RightsTier,
     ScriptDocument,
     ScriptSection,
@@ -45,7 +53,9 @@ from pipeline.scripts.generation import approve_script, save_manual_script
 from pipeline.scripts.generation import (
     compact_research_pack_for_prompt,
     expand_long_form_script,
+    generation_prompt,
     section_word_targets,
+    generate_script,
 )
 from pipeline.llm.providers import MockProvider
 from pipeline.storage import (
@@ -73,10 +83,51 @@ from pipeline.visuals.providers import (
     stage_local_visual,
 )
 from pipeline.workflow import assert_transition, can_transition
+from pipeline.jobs.worker import recover_stale_jobs
 from assembly.stitch_episode import story_manifests
 
 
 class V2WorkflowAndPipelineTests(unittest.TestCase):
+    def test_feed_fetch_enforces_a_hard_curl_deadline(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch(
+            "pipeline.discovery.discover.CACHE_DIR", Path(temp)
+        ), patch(
+            "pipeline.discovery.discover.shutil.which", return_value="/usr/bin/curl"
+        ), patch(
+            "pipeline.discovery.discover.subprocess.run",
+            side_effect=subprocess.TimeoutExpired("curl", 2),
+        ):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                fetch_feed("https://hung-feed.example/rss", timeout=2)
+
+    def test_worker_recovers_abandoned_running_jobs(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "stale-jobs.sqlite3")
+        try:
+            job = repository.create_job("discovery")
+            job.status = JobStatus.running
+            job.stage = "loading sources"
+            job.updated_at = "2020-01-01T00:00:00Z"
+            data = job.model_dump(mode="json")
+            repository.connection.execute(
+                "UPDATE render_jobs SET status = ?, stage = ?, data = ?, updated_at = ? WHERE job_id = ?",
+                (
+                    "running",
+                    job.stage,
+                    json.dumps(data),
+                    job.updated_at,
+                    job.job_id,
+                ),
+            )
+
+            self.assertEqual(recover_stale_jobs(repository), 1)
+            recovered = repository.get_job(job.job_id)
+            self.assertEqual(recovered.status, JobStatus.failed)
+            self.assertEqual(recovered.stage, "failed_stale_worker")
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_paused_job_stays_out_of_worker_queue_until_resumed(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "paused-job.sqlite3")
@@ -291,6 +342,18 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             [section.chyron for section in expanded.sections],
         )
 
+    def test_narration_mode_is_independent_from_duration(self) -> None:
+        prompt = generation_prompt(
+            {"story_id": "story_mode", "claims": [], "evidence": []},
+            target_duration_seconds=600,
+            narration_mode=NarrationMode.signal,
+        )
+
+        self.assertIn("Format: SynthPost Signal", prompt)
+        self.assertIn("Fast, presenter-led and decisive", prompt)
+        self.assertIn("Target duration: 600 seconds", prompt)
+        self.assertNotIn("Format: SynthPost Explained", prompt)
+
     def test_legacy_static_overlays_are_backfilled_from_each_section(self) -> None:
         script = ScriptDocument(
             story_id="story_legacy_overlays",
@@ -466,6 +529,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             content_role=ContentRole.context,
             rights_tier=RightsTier.green,
             review_status="approved",
+            download_path=__file__,
             relevance_score=0.6,
             width=1920,
             height=1080,
@@ -488,6 +552,85 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertEqual(
             selected_without_hd["sec_context"].asset_id, "visual_fallback"
         )
+
+    def test_timeline_auto_selects_best_suggestion_and_approval_pins_choice(self) -> None:
+        fallback = VisualCandidate(
+            asset_id="visual_auto_fallback",
+            story_id="story_auto_visual",
+            section_ids=["sec_context"],
+            provider="synthpost_anchor_fallback",
+            media_type=MediaType.fallback,
+            content_role=ContentRole.fallback,
+            rights_tier=RightsTier.green,
+            review_status="approved",
+        )
+        strongest = VisualCandidate(
+            asset_id="visual_auto_strongest",
+            story_id="story_auto_visual",
+            section_ids=["sec_context"],
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.image,
+            content_role=ContentRole.context,
+            rights_tier=RightsTier.yellow,
+            review_status="suggested",
+            relevance_score=0.94,
+            visual_quality_score=0.75,
+            width=1920,
+            height=1080,
+        )
+        weaker = strongest.model_copy(
+            update={
+                "asset_id": "visual_auto_weaker",
+                "relevance_score": 0.62,
+                "visual_quality_score": 0.61,
+            }
+        )
+
+        automatic = approved_visuals_by_section([fallback, weaker, strongest])
+        self.assertEqual(automatic["sec_context"].asset_id, strongest.asset_id)
+
+        pinned = weaker.model_copy(
+            update={
+                "rights_tier": RightsTier.green,
+                "review_status": ReviewStatus.approved,
+            }
+        )
+        explicit = approved_visuals_by_section([fallback, strongest, pinned])
+        self.assertEqual(explicit["sec_context"].asset_id, pinned.asset_id)
+
+    def test_suggested_visual_is_valid_for_render_without_approval(self) -> None:
+        plan = TimelinePlan(
+            story_id="story_auto_render",
+            status="review",
+            segments=[
+                TimelineSegment(
+                    segment_id="seg_001",
+                    section_id="sec_context",
+                    start_time=0,
+                    end_time=5,
+                    duration=5,
+                    script_text="A section with an automatically selected visual.",
+                    visual=SegmentVisual(
+                        asset_id="visual_suggested",
+                        path=__file__,
+                        media_type=MediaType.image,
+                        content_role=ContentRole.context,
+                        rights_tier=RightsTier.yellow,
+                        review_status=ReviewStatus.suggested,
+                        attribution_text="Unit source",
+                        content_cleanliness_status="not_scanned",
+                        approval_blockers=["legacy classifier warning"],
+                    ),
+                    template=SegmentTemplate(template_id="split_anchor_visual"),
+                    overlays=SegmentOverlays(attribution="Unit source"),
+                )
+            ],
+        )
+
+        errors, warnings = validate_timeline(plan, check_media_exists=True)
+        self.assertEqual(errors, [])
+        self.assertTrue(any("selected automatically" in item for item in warnings))
 
     def test_manifest_replaces_legacy_generated_card_with_anchor_fallback(self) -> None:
         plan = TimelinePlan(
@@ -626,7 +769,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             asset_id="visual_current",
             story_id="story_attribution",
             provider="searxng:images",
-            download_path="current.jpg",
+            download_path=__file__,
             attribution_text="Corrected source",
             media_type="image",
             rights_tier="yellow",
@@ -635,7 +778,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
 
         hydrated = hydrate_timeline_visuals(plan, [current])
 
-        self.assertEqual(hydrated.segments[0].visual.path, "current.jpg")
+        self.assertEqual(hydrated.segments[0].visual.path, __file__)
         self.assertEqual(
             hydrated.segments[0].visual.attribution_text, "Corrected source"
         )
@@ -643,6 +786,57 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             hydrated.segments[0].overlays.attribution, "Corrected source"
         )
         self.assertEqual(plan.segments[0].visual.attribution_text, "Old label")
+
+    def test_manifest_uses_fallback_only_when_selected_media_becomes_unusable(self) -> None:
+        plan = TimelinePlan(
+            story_id="story_missing_selected_visual",
+            status="approved",
+            segments=[
+                TimelineSegment(
+                    segment_id="seg_001",
+                    section_id="sec_context",
+                    start_time=0,
+                    end_time=5,
+                    duration=5,
+                    script_text="A visual-led section.",
+                    anchor=SegmentAnchor(visible=False, speaking=False),
+                    visual=SegmentVisual(
+                        asset_id="visual_missing",
+                        path="previous.mp4",
+                        media_type=MediaType.video,
+                        content_role=ContentRole.primary_footage,
+                        review_status=ReviewStatus.suggested,
+                        audio_mode="original",
+                    ),
+                    template=SegmentTemplate(template_id="fullscreen_news_visual"),
+                    audio=SegmentAudio(
+                        mode=AudioMode.source,
+                        narration_volume=0,
+                        source_volume=1,
+                    ),
+                    overlays=SegmentOverlays(attribution="Source: unit"),
+                )
+            ],
+        )
+        missing = VisualCandidate(
+            asset_id="visual_missing",
+            story_id=plan.story_id,
+            provider="unit",
+            download_path="definitely-missing.mp4",
+            media_type=MediaType.video,
+            content_role=ContentRole.primary_footage,
+            rights_tier=RightsTier.yellow,
+            review_status=ReviewStatus.suggested,
+        )
+
+        hydrated = hydrate_timeline_visuals(plan, [missing])
+        segment = hydrated.segments[0]
+        self.assertIsNone(segment.visual.asset_id)
+        self.assertEqual(segment.visual.media_type, MediaType.fallback)
+        self.assertEqual(segment.template.template_id, "fallback_anchor")
+        self.assertTrue(segment.anchor.visible)
+        self.assertTrue(segment.anchor.speaking)
+        self.assertEqual(segment.audio.mode, AudioMode.narration)
 
     def test_visual_search_filters_unrelated_engine_results(self) -> None:
         from pipeline.search.searxng_client import SearXNGResult
@@ -908,7 +1102,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         self.assertNotIn("notes", compact["claims"][0])
         self.assertNotIn("url", compact["evidence"][0])
-        self.assertEqual(len(compact["evidence"][0]["excerpt"]), 280)
+        self.assertEqual(len(compact["evidence"][0]["excerpt"]), 180)
 
     def test_workflow_blocks_invalid_transition(self) -> None:
         self.assertTrue(
@@ -951,6 +1145,151 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             None,
         )
         self.assertEqual(a, b)
+
+    def test_editorial_charter_prioritizes_systems_and_rejects_shopping(self) -> None:
+        source = SourceDefinition(
+            name="India Systems Desk",
+            source_id="src_charter",
+            source_type=SourceType.rss,
+            feed_url="https://example.com/rss",
+            country="in",
+            reliability_score=0.9,
+        )
+        infrastructure = assess_editorial_fit(
+            source,
+            "India expands semiconductor manufacturing capacity despite power constraints",
+            "The policy affects supply chains, factory jobs and electricity infrastructure.",
+        )
+        shopping = assess_editorial_fit(
+            source,
+            "The 10 best AI laptops to buy under ₹80,000",
+            "A shopping guide with discounts and deals.",
+        )
+
+        self.assertEqual(infrastructure.charter_version, CHARTER_VERSION)
+        self.assertTrue(infrastructure.eligible)
+        self.assertGreaterEqual(len(infrastructure.matched_criteria), 3)
+        self.assertFalse(shopping.eligible)
+        self.assertIn("shopping", shopping.rejection_signals)
+
+    def test_global_assignment_desk_rejects_local_churn_and_personnel_news(self) -> None:
+        india_source = SourceDefinition(
+            name="India General Desk",
+            source_id="src_india_general",
+            source_type=SourceType.rss,
+            feed_url="https://example.com/india.xml",
+            country="in",
+            reliability_score=0.9,
+        )
+        global_ai_source = SourceDefinition(
+            name="Global AI Desk",
+            source_id="src_global_ai",
+            source_type=SourceType.rss,
+            feed_url="https://example.com/ai.xml",
+            category="artificial_intelligence",
+            country="us",
+            reliability_score=0.9,
+        )
+
+        courthouse = assess_editorial_fit(
+            india_source,
+            "CJI inaugurates Gurugram's Tower of Justice",
+            "The new court complex includes bar rooms and childcare facilities.",
+        )
+        local_crime = assess_editorial_fit(
+            india_source,
+            "Law student plotted her mother's murder as a road accident in Jaipur",
+            "Police arrested the student after investigating the local crime.",
+        )
+        appointment = assess_editorial_fit(
+            global_ai_source,
+            "Jinhua Zhao named head of the Department of Urban Studies and Planning",
+            "The university appointment combines behavioural science with AI policy.",
+        )
+
+        self.assertFalse(courthouse.eligible)
+        self.assertIn("ceremonial_or_personnel", courthouse.rejection_signals)
+        self.assertFalse(local_crime.eligible)
+        self.assertIn("local_crime_or_accident", local_crime.rejection_signals)
+        self.assertFalse(appointment.eligible)
+        self.assertIn("ceremonial_or_personnel", appointment.rejection_signals)
+
+    def test_global_assignment_desk_accepts_global_shift_with_india_angle(self) -> None:
+        source = SourceDefinition(
+            name="Global Technology Desk",
+            source_id="src_global_technology",
+            source_type=SourceType.rss,
+            feed_url="https://example.com/technology.xml",
+            category="technology",
+            country="us",
+            reliability_score=0.9,
+        )
+        candidate = assess_editorial_fit(
+            source,
+            "New US export controls reshape the global AI chip market",
+            "The regulation changes semiconductor supply chains, data-centre investment and competition, with consequences for India's AI industry.",
+        )
+
+        self.assertTrue(candidate.eligible)
+        self.assertIn(candidate.primary_topic, {"artificial_intelligence", "business"})
+        self.assertIn("system_change", candidate.matched_criteria)
+        self.assertIn("india_connection", candidate.matched_criteria)
+
+    def test_script_generation_persists_prompts_responses_and_normalization(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "generation-audit.sqlite3")
+        try:
+            project = repository.create_project("Editorial audit")
+            episode = repository.create_episode(project.project_id, "Charter test")
+            candidate = add_manual_story(
+                repository,
+                title="India tests a new hydrogen rail system",
+                body="India is testing hydrogen rail infrastructure. The pilot has documented capacity constraints.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(candidate.candidate_id, episode.episode_id)
+            assert selected.story_id
+            repository.upsert_research_pack(
+                ResearchPack(
+                    story_id=selected.story_id,
+                    claims=[
+                        Claim(
+                            claim_id="claim_001",
+                            claim_text="India is testing hydrogen rail infrastructure.",
+                            supported=True,
+                        )
+                    ],
+                    systems=["infrastructure", "rail", "energy"],
+                    stakeholders=["passengers", "rail operators"],
+                    execution_gaps=["The pilot has documented capacity constraints."],
+                    research_summary="A documented Indian hydrogen rail pilot.",
+                )
+            )
+            with patch(
+                "pipeline.scripts.generation.config.env_bool", return_value=False
+            ):
+                script = generate_script(
+                    repository,
+                    selected.story_id,
+                    provider_name="mock",
+                    target_duration_seconds=60,
+                    narration_mode="deep_dive",
+                )
+
+            audits = repository.list_generation_audits(selected.story_id)
+            self.assertEqual({audit.stage for audit in audits}, {"script_draft", "headline_editor"})
+            self.assertTrue(all(audit.prompt_text for audit in audits))
+            self.assertTrue(all(audit.response for audit in audits))
+            self.assertTrue(any(audit.normalization_events for audit in audits))
+            self.assertIn(f"editorial_charter={CHARTER_VERSION}", script.warnings)
+            self.assertEqual(script.narration_mode, NarrationMode.deep_dive)
+            self.assertIn("narration_mode=deep_dive", script.warnings)
+            script_audit = next(audit for audit in audits if audit.stage == "script_draft")
+            self.assertIn("Format: SynthPost Deep Dive", script_audit.prompt_text)
+            self.assertTrue(all(section.headline_cues for section in script.sections))
+        finally:
+            repository.close()
+            temp.cleanup()
 
     def test_rights_validation_blocks_red_asset(self) -> None:
         with self.assertRaises(ValueError):

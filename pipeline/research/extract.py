@@ -15,6 +15,7 @@ from pipeline.models import (
     StoryWorkflowState,
 )
 from pipeline.news.discovery import diversified_articles, discover_news
+from pipeline.editorial.charter import CHARTER_VERSION, load_editorial_charter
 
 
 class ReadableHTMLParser(HTMLParser):
@@ -368,6 +369,54 @@ def build_research_pack(repository, story_id: str) -> ResearchPack:
     people, organizations, locations = extract_entities(combined_text)
     numbers = extract_numbers(combined_text)
     dates = extract_dates(combined_text)
+    charter = load_editorial_charter()
+    system_terms = [
+        phrase
+        for phrases in charter["priority_verticals"].values()
+        for phrase in phrases
+        if re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", combined_text, re.I)
+    ]
+    systems = list(
+        dict.fromkeys(
+            [
+                candidate.editorial_fit.primary_topic.replace("_", " "),
+                *system_terms,
+                *organizations[:5],
+            ]
+        )
+    )[:10]
+    stakeholder_terms = [
+        label
+        for label in [
+            "government", "regulators", "companies", "workers", "consumers",
+            "citizens", "students", "farmers", "patients", "investors",
+            "researchers", "local communities",
+        ]
+        if label.rstrip("s") in combined_text.casefold()
+    ]
+    stakeholders = list(
+        dict.fromkeys([*people[:8], *organizations[:8], *stakeholder_terms])
+    )[:16]
+
+    all_sentences = sentence_split(combined_text)
+
+    def matching_sentences(pattern: str, limit: int = 8) -> list[str]:
+        return [
+            sentence[:500]
+            for sentence in all_sentences
+            if re.search(pattern, sentence, re.I)
+        ][:limit]
+
+    trade_offs = matching_sentences(
+        r"\b(?:but|however|while|despite|versus|risk|cost|trade-?off|concern|tension)\b"
+    )
+    execution_gaps = matching_sentences(
+        r"\b(?:gap|delay|challenge|shortfall|bottleneck|lack|failure|failed|capacity|constraint|uncertain|pending)\b"
+    )
+    editorial_questions = [
+        question.replace("What system", f"What {systems[0]} system" if systems else "What system")
+        for question in charter["research_lens"]
+    ]
     lead_sentences = sentence_split(lead_document.content_text)
     summary_sentences = lead_sentences[:4] or [candidate.summary or candidate.title]
     uncertainties = list(search_warnings)
@@ -394,6 +443,12 @@ def build_research_pack(repository, story_id: str) -> ResearchPack:
         dates=dates,
         contradictions=[],
         uncertainties=uncertainties,
+        systems=systems,
+        stakeholders=stakeholders,
+        trade_offs=trade_offs,
+        execution_gaps=execution_gaps,
+        editorial_questions=editorial_questions,
+        charter_version=CHARTER_VERSION,
         research_summary=(" ".join(summary_sentences) + source_note)[:1200],
     )
     repository.upsert_research_pack(pack)
