@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline import config
+from pipeline.observability import safe_text
 from pipeline.provenance import artifact_record, record_episode_artifact
 from pipeline.render_profiles import profile_record, resolve_profile
 from pipeline.storage import (
@@ -28,7 +29,7 @@ FINAL_AUDIO_FILTER = (
 
 
 def run(command: list[str]) -> None:
-    print("[assembly] " + " ".join(command))
+    print(safe_text("[assembly] " + " ".join(command)))
     subprocess.run(command, check=True)
 
 
@@ -436,7 +437,7 @@ def stitch_episode(
         ),
         runtime=runtime,
     )
-    print(f"[assembly] Final episode: {final_path}")
+    print(safe_text(f"[assembly] Final episode: {final_path}"))
     return final_path
 
 

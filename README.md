@@ -1,378 +1,127 @@
 # SynthPost Studio
 
-SynthPost Studio is a local-first newsroom and video-production editor rebuilt around the retained SynthPost rendering shell.
+SynthPost is a local-first, AI-assisted newsroom and video-production system for researching stories, editing scripts and visuals, planning a timeline, rendering an avatar-led composition, and exporting a finished episode. Editorial state and job queues stay on the Mac in SQLite; render inputs and outputs remain inspectable local files.
 
-The repository keeps the working render infrastructure:
+## Current capabilities
 
-- `avatar-engine/` as an external dependency
-- `pipeline/direction/avatar.py` avatar job integration
-- `pipeline/compositor.py` Remotion render boundary
-- `pipeline/run_story.py` low-level story render entry point
-- `compositor/remotion_renderer/` templates/components/styles
-- `assembly/stitch_episode.py` ffmpeg episode assembly with static brand intro/outro
-- `assets/brand/` brand clips/placeholders
+- Projects, episodes, RSS/Atom sources, discovery, ranking, and assignment desk
+- Multi-source research packs with evidence and claims
+- Structured Groq/Gemini script generation plus manual revisions and approvals
+- Episode-isolated media inbox, SearXNG image/video discovery, rights review, and safe fallbacks
+- Editable, validated multi-template timelines
+- Local avatar/TTS/lip-sync rendering through the retained Avatar Engine
+- Remotion composition and FFmpeg episode assembly
+- React Studio with job progress, logs, retries, previews, and mobile/private Tailscale access
+- Deterministic offline tests and a lightweight `TEST_MODE` smoke render
 
-The old newsroom pipeline was **not restored**. V2 is built with new contracts, SQLite workflow state, reproducible JSON artifacts, and a React editor called **SynthPost Studio**.
+## System requirements
 
-## What works now
+- macOS on Apple Silicon (primary supported development platform)
+- Python 3.11 or newer
+- Node.js 20+ and npm
+- FFmpeg/ffprobe
+- Optional by feature: Docker Desktop (bundled SearXNG), Tesseract, yt-dlp, Blender, Rhubarb, Tailscale
 
-The current V2 implementation supports a real local vertical slice:
+Run `make doctor` after setup for an exact required/optional/configured report.
 
-1. Create a project and episode.
-2. Seed/list/edit news sources.
-3. Discover RSS/Atom candidates or add a custom topic, URL, or manual story.
-4. Select a story into an episode.
-5. Build a multi-source research pack from the lead story plus related SearXNG news coverage.
-6. Generate a script via a configured hosted Groq or Gemini provider.
-7. Save manual script revisions and approve the script.
-8. Search the active episode's isolated media inbox and SearXNG image/video sources, or upload media manually.
-9. Approve or reject visuals with rights checks.
-10. Generate a multi-template timeline.
-11. Edit/reorder timeline segments in SynthPost Studio.
-12. Validate and approve the timeline.
-13. Build a deterministic renderer `story.json` manifest from approved state.
-14. Render through the retained Remotion package.
-15. Assemble `final.mp4` / `final_TEST_MODE.mp4` with ffmpeg and brand assets.
-16. Track jobs, logs, artifacts, and generated files.
-
-## Architecture
-
-```text
-contracts/                         Canonical V2 JSON Schema + TypeScript contracts
-pipeline/models.py                 Pydantic models for contracts
-pipeline/workflow.py               Explicit story workflow state machine
-pipeline/db/                       SQLite migrations and repository layer
-pipeline/discovery/                Source registry, RSS/Atom discovery, ranking
-pipeline/search/                   SearXNG JSON client and result normalization
-pipeline/news/                     Related-news coverage discovery
-pipeline/research/                 Multi-source extraction and research-pack generation
-pipeline/llm/                      Hosted Groq/Gemini structured-generation providers
-pipeline/scripts/                  Script generation/editing/grounding checks
-pipeline/visuals/                  Local + SearXNG visual discovery, download, and rights review
-pipeline/timeline/                 Template registry, timeline generation, validation
-pipeline/jobs/                     SQLite-backed queue lanes, workers, and retry policy
-pipeline/api/                      FastAPI backend
-pipeline/manifest_builder.py       Approved Studio state → renderer story.json
-pipeline/run_episode.py            High-level demo/smoke orchestration
-web/                               SynthPost Studio React/Vite frontend
-compositor/remotion_renderer/      Retained Remotion renderer + formalized templates
-assembly/stitch_episode.py         FFmpeg final assembly
-```
-
-## Local setup
+## Quick start
 
 ```bash
+git clone https://github.com/Arkane-o7/SynthPost.git
+cd SynthPost
+cp .env.example .env
 make setup
-```
-
-This installs Python requirements, Remotion dependencies, and SynthPost Studio frontend dependencies.
-
-## Development
-
-Run the full local Studio stack:
-
-```bash
+make doctor
 make dev
 ```
 
-This starts:
+Open `http://127.0.0.1:5173`. Add the API key for the selected LLM provider in `.env`; use `SYNTHPOST_LLM_PROVIDER=mock` only for tests and smoke/demo runs.
 
-- FastAPI backend on `http://127.0.0.1:8765`
-- Three SQLite-backed workers: editorial, media, and render
-- SynthPost Studio Vite app on `http://127.0.0.1:5173`
+`make dev` starts FastAPI on port 8765, editorial/media/render workers, and Vite on port 5173. Run components separately with `make backend`, `make worker LANE=editorial`, `make workers`, and `make web`.
 
-You can also run services separately:
+## Basic workflow
 
-```bash
-make backend
-make workers
-make web
-```
+1. Create a project and episode.
+2. Configure sources and discover or add a story.
+3. Select the story and create its research pack.
+4. Generate/edit/approve the script.
+5. discover, download/upload, review, and approve visual media.
+6. Generate/edit/validate/approve the timeline.
+7. Build the renderer manifest and render the avatar/composition.
+8. Assemble and review the finished episode.
 
-The lanes are independent: long avatar/composition jobs cannot block discovery,
-research, scripts, visual acquisition, or timeline work. For debugging, run one
-lane with `make worker LANE=editorial`, `LANE=media`, or `LANE=render`.
+The Studio exposes these actions in order. The executable stage registry is `pipeline/stages.py`; renderers do not perform hidden editorial work.
 
-Transient rate-limit, timeout, network, and subprocess failures are requeued
-automatically with exponential backoff. The Jobs page shows the queue lane,
-attempt budget, last failure, and scheduled retry. Validation and configuration
-errors fail immediately because they require an editor or setup change.
+## Run the pipeline
 
-## Private phone access
-
-SynthPost can keep all processing on the laptop while exposing the command UI
-privately to your phone through [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
-This uses an encrypted tailnet URL and does not make the Studio public on the
-internet.
-
-One-time setup:
-
-1. Install Tailscale on the Mac and phone and sign both into the same account.
-2. On macOS, use Tailscale's standalone package if you need the CLI in your
-   terminal: <https://tailscale.com/docs/install/mac>.
-3. Start the laptop-hosted remote Studio:
-
-```bash
-make remote
-```
-
-The command builds the mobile UI, starts FastAPI and all three workers on localhost,
-and prints a private HTTPS `*.ts.net` address. Open that address on the phone.
-Press Ctrl+C to stop the services and remove the Serve mapping. You can inspect
-or disable the mapping separately with `make remote-status` and
-`make remote-off`.
-
-Do not replace Serve with Tailscale Funnel for this application: Funnel creates
-a public internet endpoint, while SynthPost's remote production controls should
-remain limited to authenticated devices in the private tailnet.
-
-If Tailscale was installed with Homebrew and its system tunnel is unavailable,
-the launcher automatically uses Tailscale's userspace networking mode. Its
-login state and socket are stored under `~/.synthpost`; no `sudo` daemon is
-required.
-
-## SearXNG research and visual search
-
-SynthPost includes a localhost-only SearXNG container configured to expose the
-JSON search API:
-
-```bash
-make searxng-up
-curl 'http://127.0.0.1:8888/search?q=world+news&categories=news&format=json'
-```
-
-If Docker Desktop is installed on macOS but another context is selected, use
-`DOCKER_CONTEXT=desktop-linux make searxng-up`.
-
-Then set this in `.env`:
-
-```bash
-SYNTHPOST_SEARXNG_URL=http://127.0.0.1:8888
-```
-
-Research jobs retain the selected story as the lead document and add related
-news results up to `SYNTHPOST_RESEARCH_MAX_DOCUMENTS`. Visual jobs derive search
-queries through the configured structured AI provider immediately before
-SearXNG. The AI receives the topic, headline, section narration, claim IDs, and
-visual direction, then returns one grounded still-image query and one distinct
-footage query per section. The deterministic script-query planner is used only
-when `SYNTHPOST_AI_VISUAL_QUERY_PLANNING=0`.
-
-`SYNTHPOST_SEARXNG_VISUAL_MAX_QUERIES` is a hard cap on the number of actual
-image/video search requests sent to SearXNG per visual job. The default of 12
-supports one image plus one video query for a typical six-section story. When
-the cap is smaller, the allocator covers each section's preferred media type
-before spending remaining requests on its secondary media type.
-
-Supported images are downloaded directly. Set
-`SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS=1` to let the worker use `yt-dlp` for eligible
-video pages. `SYNTHPOST_SEARXNG_VIDEO_DOWNLOAD_LIMIT` caps downloads per job and
-`SYNTHPOST_SEARXNG_VIDEO_CLIP_SECONDS` limits each research clip.
-
-Render-ready visual media must also pass the broadcast-fit gate. By default it
-must be at least 1920×1080, horizontal, and close to either the 1300×860 split
-visual panel (~3:2) or the 1920×1080 fullscreen visual (16:9). The AI explicitly
-requests landscape 1080p media, `yt-dlp` filters formats before download, and
-downloaded images/videos are probed again before staging. Portrait, undersized,
-or extreme-aspect media remains a review lead without a renderable local file.
-Tune this using `SYNTHPOST_VISUAL_MIN_WIDTH`, `SYNTHPOST_VISUAL_MIN_HEIGHT`, and
-`SYNTHPOST_VISUAL_ASPECT_TOLERANCE`; approval enforces the same gate.
-
-### Video source and editorial-cleanliness quarantine
-
-Visual video queries request official video, raw footage, B-roll, or press
-footage rather than finished news coverage. Before a video download, `yt-dlp`
-performs a metadata-only preflight and records the channel/uploader identity.
-Known competing news publishers are blocked before download. Editor-maintained
-channel IDs and source-name fragments can be configured with
-`SYNTHPOST_VIDEO_APPROVED_CHANNEL_IDS`,
-`SYNTHPOST_VIDEO_APPROVED_SOURCE_NAMES`, and
-`SYNTHPOST_VIDEO_BLOCKED_SOURCE_NAMES`.
-
-Every technically valid downloaded image/video enters content quarantine. For
-video, SynthPost samples seven timestamps across the clip; images use one frame.
-Tesseract OCR identifies known publisher brands and persistent screen-fixed text
-in corner, lower-third, and ticker regions. A structured AI classifier then
-reviews only the source metadata and deterministic evidence—it cannot override
-a deterministic publisher/overlay blocker. The result is persisted as one of
-`not_scanned`, `needs_review`, `passed`, or `rejected`, with timestamps, OCR
-findings, a contact sheet, evidence, and approval blockers.
-
-Only `passed` media receives or retains `download_path`. Uncertain or rejected
-files retain a `quarantine_path` for evidence review but cannot be approved,
-selected by the timeline planner, or rendered. Studio shows the contact sheet,
-source identity, detected brands, clean-B-roll score, flags, reasons, and an
-Analyze action. A human still confirms relevance and usage rights for clean
-yellow-tier media; content cleanliness is not a licence grant.
-
-Every web result is yellow-tier because search discovery does not establish a
-license. The editor must verify ownership/license, attribution, and editorial-use
-basis before manual approval. A result without a local `download_path` cannot be
-approved or placed on the render timeline.
-
-## Testing and validation
-
-```bash
-make test
-make typecheck
-```
-
-Current validation covers:
-
-- Existing avatar direction tests
-- Existing retained Remotion surface tests
-- V2 contract drift checks
-- Workflow transitions
-- URL canonicalization and duplicate grouping
-- Deterministic story scoring
-- Rights-tier enforcement
-- Timeline validation
-- Manifest building vertical slice
-- Python compile checks
-- Remotion TypeScript typecheck
-- SynthPost Studio TypeScript typecheck
-
-## Smoke render
-
-Create a deterministic local test episode, render with a placeholder anchor in `TEST_MODE`, and assemble a validation video:
+For normal work, use the Studio. For a deterministic local smoke:
 
 ```bash
 make smoke
 ```
 
-The smoke command writes ignored local artifacts under:
+To render an approved manifest directly:
+
+```bash
+.venv/bin/python -m pipeline.run_story \
+  episodes/<episode_id>/stories/<story_id>/story.json \
+  --render-profile preview --skip-avatar-render
+```
+
+`TEST_MODE` outputs and placeholder anchors are never production deliverables.
+
+## Generated files
 
 ```text
+.synthpost/
+  synthpost.sqlite3           # authoritative workflow state
+  jobs/<job_id>.log           # contextual worker logs
+projects/<project_id>/episodes/<episode_id>/media_inbox/
 episodes/<episode_id>/
-  stories/<story_id>/story.json
-  stories/<story_id>/preview.png
-  stories/<story_id>/composited_TEST_MODE.mp4
-  final_TEST_MODE.mp4
+  episode.json
+  stories/<story_id>/
+    source_documents.json
+    research_pack.json
+    scripts/
+    timelines/
+    visuals/
+    story.json                # versioned renderer manifest
+    preview.png
+    composited*.mp4
+  final.mp4                   # production output
+  final_TEST_MODE.mp4         # smoke output
 ```
 
-`TEST_MODE` outputs are explicitly not production outputs.
+Episode/project data is ignored by Git and is not removed by normal setup or checks.
 
-## Real demo render
+## Common commands
 
-Create a deterministic local demo episode and render a non-`TEST_MODE` demo MP4:
+| Command | Purpose |
+|---|---|
+| `make help` | Discover the command surface |
+| `make setup` | Install Python, Remotion, and Studio dependencies |
+| `make dev` | Start the full local stack |
+| `make backend` / `make workers` / `make web` | Start individual services |
+| `make searxng-up` / `make searxng-down` | Manage the local SearXNG container |
+| `make test` | Run deterministic Python tests |
+| `make test-avatar` | Run Avatar Engine unit tests without rendering |
+| `make typecheck` | Compile Python and type-check Studio/Remotion |
+| `make build` | Build the Studio production bundle |
+| `make config-check` / `make doctor` | Validate settings / diagnose local dependencies |
+| `make check` | Run the default quality gate |
+| `make smoke` | Run the lightweight TEST_MODE render smoke |
+| `make remote` | Serve the built Studio privately through Tailscale |
 
-```bash
-make render-demo
-```
+## Documentation
 
-This writes:
+- [Architecture](docs/ARCHITECTURE.md)
+- [Pipeline](docs/PIPELINE.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Development](docs/DEVELOPMENT.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Contributing](CONTRIBUTING.md)
+- [Avatar Engine](avatar-engine/README.md)
 
-```text
-episodes/<episode_id>/
-  stories/<story_id>/story.json
-  stories/<story_id>/preview.png
-  stories/<story_id>/composited.mp4
-  final.mp4
-```
+## Safety and compatibility
 
-By default this does not mutate or install anything inside `avatar-engine/`; if Avatar Engine is not already set up, use the existing placeholder-anchor fallback. For a real avatar render, set up Avatar Engine and run `python3 -m pipeline.run_episode <episode_id> --with-avatar`.
-
-## Render a pre-authored story manifest
-
-The retained low-level render entry point still works:
-
-```bash
-python3 -m pipeline.run_story episodes/<episode_id>/stories/<story_id>/story.json \
-  --skip-avatar-render \
-  --force-composite \
-  --render-profile preview
-```
-
-Render with Avatar Engine:
-
-```bash
-SYNTHPOST_AVATAR_RENDERER=rocketbox \
-python3 -m pipeline.run_story episodes/<episode_id>/stories/<story_id>/story.json \
-  --force-avatar \
-  --force-composite \
-  --render-profile production
-```
-
-Assemble all story clips in an episode:
-
-```bash
-python3 assembly/stitch_episode.py <episode_id> --render-profile production
-```
-
-## Hosted LLM configuration
-
-Production generation uses an explicitly selected hosted provider:
-
-```bash
-SYNTHPOST_LLM_PROVIDER=groq
-GROQ_API_KEY=replace_with_your_groq_api_key
-SYNTHPOST_GROQ_MODEL=openai/gpt-oss-120b
-```
-
-Gemini can be selected explicitly with `SYNTHPOST_LLM_PROVIDER=gemini`. An
-explicit `hosted_fallback` option uses Groq first and Gemini second; it never
-invokes a local model. Provider errors otherwise fail visibly. The deterministic
-mock provider is reserved for automated tests and smoke demos, not production
-script generation.
-
-For deterministic tests only:
-
-```bash
-SYNTHPOST_LLM_PROVIDER=mock
-```
-
-## Avatar Engine notes
-
-`avatar-engine/` remains an external dependency and was not rewritten by V2.
-
-One-time setup, if you want real avatar rendering:
-
-```bash
-python3.11 -m venv avatar-engine/.venv
-avatar-engine/.venv/bin/pip install -r avatar-engine/requirements.txt
-npm --prefix avatar-engine/web_avatar_runtime install
-```
-
-Expected local licensed avatar asset:
-
-```text
-avatar-engine/assets/avatars/synthpost_anchor_v1/anchor.glb
-```
-
-Useful environment overrides:
-
-```bash
-SYNTHPOST_AVATAR_ENGINE_PATH=/absolute/path/to/Avatar-Engine
-SYNTHPOST_AVATAR_RENDERER=rocketbox
-SYNTHPOST_AVATAR_ASSET_PATH=assets/avatars/synthpost_anchor_v1/anchor.glb
-SYNTHPOST_AVATAR_META_PATH=assets/avatars/synthpost_anchor_v1/avatar.json
-SYNTHPOST_AVATAR_RENDER_BACKGROUND=charcoal
-SYNTHPOST_AVATAR_VOICE_ID=af_heart
-SYNTHPOST_AVATAR_VOICE_SPEED=1.10
-```
-
-## Production safety rules implemented
-
-- Red-tier assets cannot be approved or rendered.
-- Yellow-tier assets require manual approval before timeline approval/rendering.
-- Approved timeline is the rendering source of truth.
-- The manifest builder refuses to render without approved script and approved timeline.
-- Timeline validation checks media existence, timing, overlaps, rights, approval state, template compatibility, trim ranges, and attribution warnings.
-- AI structured output is parsed/validated/retried rather than blindly accepted.
-- TEST_MODE outputs are labeled and separated.
-
-## Known limitations
-
-This is a working V2 foundation and manual vertical slice, not the final newsroom product. Important next work:
-
-- SearXNG video results often point to watch pages rather than direct media.
-  Optional `yt-dlp` acquisition makes them previewable, but semantic/editorial
-  fitness and usage rights still require review before approval.
-- Stronger article extraction for difficult publisher pages.
-- More robust NLP/entity extraction and claim contradiction checks.
-- Section-level regeneration and richer approval history in the UI.
-- Remotion Player embedded directly in Studio for interactive playback; current Studio consumes generated preview/render artifacts.
-- Full timeline-aligned avatar/source-audio pause synthesis. The explicit `audio_plan` exists, but the retained Avatar Engine is still invoked as a story-level render by default.
-- Multi-story episode editing UI beyond assembling the selected episode story list.
-
-See `docs/rebuild-baseline.md`, `docs/v2-architecture.md`, and `docs/rebuild-final-report.md` for implementation details.
+Visual search results are leads, not proof of usage rights. Yellow-tier media needs explicit manual approval; red-tier media cannot be approved. Secrets belong only in ignored `.env` files and are redacted from structured logs. SQLite migrations, strict boundary models, versioned renderer manifests, and compatibility aliases preserve existing V2 projects while allowing contracts to evolve deliberately.

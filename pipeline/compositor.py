@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config
+from .observability import safe_text
 from .provenance import artifact_record, record_story_artifact
 from .render_profiles import resolve_profile
 from .storage import output_is_fresh, read_manifest, resolve_project_path
@@ -68,7 +69,7 @@ def render_story(
     inputs.extend(_visual_input_paths(manifest))
 
     if output_is_fresh(output_path, inputs) and not force:
-        print(f"[compositor] Reusing fresh render: {output_path}")
+        print(safe_text(f"[compositor] Reusing fresh render: {output_path}"))
         record_story_artifact(
             story_json_path,
             "composited_video",
@@ -102,7 +103,7 @@ def render_story(
         command.append("--force")
     if test_mode:
         print("[TEST_MODE] WARNING: Remotion composition is using TEST_MODE inputs.")
-    print(f"[compositor] Running Remotion renderer: {' '.join(command)}")
+    print(safe_text(f"[compositor] Running Remotion renderer: {' '.join(command)}"))
     try:
         subprocess.run(
             command, cwd=remotion_dir, check=True, capture_output=True, text=True

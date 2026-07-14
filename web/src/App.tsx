@@ -1,6 +1,7 @@
 import React from "react";
 import { StudioProvider, useStudio } from "./state/useStudio";
 import { AppShell } from "./components/AppShell";
+import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import type { Page } from "./components/LeftRail";
 import { CommandCenter } from "./pages/CommandCenter";
 import { SourcesPage } from "./pages/SourcesPage";
@@ -47,8 +48,10 @@ const Main: React.FC = () => {
 
 export default function App() {
   return (
-    <StudioProvider>
-      <Main />
-    </StudioProvider>
+    <AppErrorBoundary>
+      <StudioProvider>
+        <Main />
+      </StudioProvider>
+    </AppErrorBoundary>
   );
 }

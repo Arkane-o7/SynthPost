@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+import time
 from pathlib import Path
 
 from assembly.stitch_episode import stitch_episode
@@ -11,9 +12,11 @@ from pipeline.discovery.discover import add_manual_story
 from pipeline.discovery.seeds import seed_sources
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.models import ContentRole, EpisodeStatus, RightsTier
+from pipeline.observability import safe_text
 from pipeline.research.extract import build_research_pack
 from pipeline.scripts.generation import approve_script, save_manual_script
 from pipeline.storage import PROJECT_ROOT, story_manifest_path
+from pipeline.stages import PipelineRunSummary, StageOutcome
 from pipeline.timeline.planner import approve_timeline, generate_timeline
 from pipeline.visuals.providers import approve_visual, stage_local_visual
 
@@ -149,27 +152,56 @@ def run_episode(
     test_mode: bool = False,
     skip_avatar_render: bool = True,
 ) -> Path:
+    summary = PipelineRunSummary()
+
+    def run_step(stage: str, operation):
+        started_at = time.monotonic()
+        try:
+            result = operation()
+        except Exception as exc:
+            summary.add(stage, StageOutcome.failed, started_at, str(exc))
+            print(summary.render_text())
+            raise
+        summary.add(stage, StageOutcome.completed, started_at)
+        return result
+
     repository = get_repository()
     try:
         episode = repository.get_episode(episode_id)
         for story_id in episode.story_ids:
-            build_story_manifest(
-                repository, story_id, render_profile=render_profile, test_mode=test_mode
+            run_step(
+                f"manifest:{story_id}",
+                lambda story_id=story_id: build_story_manifest(
+                    repository,
+                    story_id,
+                    render_profile=render_profile,
+                    test_mode=test_mode,
+                ),
             )
-            render_story_only(
+            run_step(
+                f"render:{story_id}",
+                lambda story_id=story_id: render_story_only(
+                    episode_id,
+                    story_id,
+                    render_profile=render_profile,
+                    force=force,
+                    test_mode=test_mode,
+                    skip_avatar_render=skip_avatar_render,
+                ),
+            )
+        final = run_step(
+            "assembly",
+            lambda: stitch_episode(
                 episode_id,
-                story_id,
-                render_profile=render_profile,
                 force=force,
                 test_mode=test_mode,
-                skip_avatar_render=skip_avatar_render,
-            )
-        final = stitch_episode(
-            episode_id, force=force, test_mode=test_mode, render_profile=render_profile
+                render_profile=render_profile,
+            ),
         )
         episode.final_output_path = str(final.relative_to(PROJECT_ROOT))
         episode.status = EpisodeStatus.completed
         repository.upsert_episode(episode)
+        print(summary.render_text())
         return final
     finally:
         repository.close()
@@ -220,7 +252,7 @@ def main() -> None:
             test_mode=args.test_mode or args.smoke,
             skip_avatar_render=not args.with_avatar,
         )
-        print(f"[run_episode] Final episode: {final}")
+        print(safe_text(f"[run_episode] Final episode: {final}"))
 
 
 if __name__ == "__main__":

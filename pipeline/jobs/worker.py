@@ -15,6 +15,7 @@ from typing import Callable
 from datetime import datetime, timezone
 
 from assembly.stitch_episode import stitch_episode
+from pipeline import config
 from pipeline.db.repository import Repository, get_repository
 from pipeline.db.sqlite import database_path
 from pipeline.discovery.discover import discover
@@ -27,12 +28,14 @@ from pipeline.models import (
     StoryWorkflowState,
     now_iso,
 )
+from pipeline.observability import LogContext, safe_text, write_event
 from pipeline.jobs.policy import classify_failure, retry_time
 from pipeline.research.extract import build_research_pack
 from pipeline.scripts.generation import generate_script
 from pipeline.storage import PROJECT_ROOT, project_relative, story_manifest_path
 from pipeline.timeline.planner import generate_timeline
 from pipeline.visuals.providers import search_visuals
+from pipeline.stages import contract_for
 
 
 class JobCancelled(RuntimeError):
@@ -50,14 +53,33 @@ class JobContext:
         self._stop_heartbeat = threading.Event()
         self._cancelled = threading.Event()
         self._heartbeat_thread: threading.Thread | None = None
+        self.log_context = LogContext(
+            episode_id=job.episode_id,
+            story_id=job.story_id,
+            job_id=job.job_id,
+            stage=job.job_type,
+        )
         if not self.repository.update_job_if_status(self.job, JobStatus.running):
             raise JobCancelled(f"job {job.job_id} was cancelled before it started")
 
-    def log(self, message: str) -> None:
-        line = f"[{now_iso()}] {message}\n"
+    def log(
+        self,
+        message: str,
+        *,
+        event: str = "job_message",
+        level: str = "INFO",
+        fields: dict[str, object] | None = None,
+    ) -> None:
         with self.log_path.open("a", encoding="utf-8") as handle:
-            handle.write(line)
-        print(line, end="")
+            line = write_event(
+                handle,
+                event,
+                message,
+                level=level,
+                context=self.log_context,
+                fields=fields,
+            )
+        print(line, flush=True)
 
     def progress(self, progress: float, stage: str) -> None:
         self.raise_if_cancelled()
@@ -66,12 +88,14 @@ class JobContext:
         if not self.repository.update_job_if_status(self.job, JobStatus.running):
             self._cancelled.set()
             raise JobCancelled(f"job {self.job.job_id} was cancelled")
-        self.log(f"{self.job.progress:.0f}% {stage}")
+        self.log(
+            f"{self.job.progress:.0f}% {stage}",
+            event="stage_progress",
+            fields={"progress": round(self.job.progress, 2)},
+        )
 
     def start_heartbeat(self) -> None:
-        interval = max(
-            1.0, float(os.environ.get("SYNTHPOST_JOB_HEARTBEAT_SECONDS", "5"))
-        )
+        interval = config.get_settings().jobs.heartbeat_seconds
 
         def heartbeat() -> None:
             repository = Repository(self.repository.db_path)
@@ -80,7 +104,11 @@ class JobContext:
                     try:
                         status = repository.heartbeat_job(self.job.job_id)
                     except Exception as exc:
-                        self.log(f"heartbeat warning: {exc}")
+                        self.log(
+                            f"heartbeat warning: {exc}",
+                            event="job_heartbeat_failed",
+                            level="WARNING",
+                        )
                         continue
                     if status != JobStatus.running:
                         self._cancelled.set()
@@ -300,8 +328,13 @@ def handle_assemble_episode(ctx: JobContext) -> dict[str, str]:
                     ctx.repository.transition_story(
                         story_id, StoryWorkflowState.completed
                     )
-            except Exception:
-                pass
+            except Exception as exc:
+                ctx.log(
+                    f"Could not advance story completion state: {exc}",
+                    event="workflow_transition_skipped",
+                    level="WARNING",
+                    fields={"affected_story_id": story_id},
+                )
     ctx.progress(100, "episode assembly completed")
     return {"final_output_path": project_relative(output)}
 
@@ -443,10 +476,15 @@ def run_one(
         repository.update_job_if_status(job, JobStatus.running)
         return True
     try:
+        contract = contract_for(job.job_type)
+        # Handlers retain their legacy field checks because historical queues may
+        # contain partially denormalized jobs. Output validation is enforced here.
+        started_at = time.monotonic()
         ctx.start_heartbeat()
         ctx.progress(1, "running")
         with job_deadline(job.job_type):
             outputs = handler(ctx)
+        contract.validate_outputs(outputs)
         ctx.raise_if_cancelled()
         job.output_paths.update(outputs)
         job.status = JobStatus.completed
@@ -454,15 +492,22 @@ def run_one(
         job.stage = "completed"
         job.completed_at = now_iso()
         if repository.update_job_if_status(job, JobStatus.running):
-            ctx.log("completed")
+            ctx.log(
+                "completed",
+                event="stage_completed",
+                fields={
+                    "elapsed_seconds": round(time.monotonic() - started_at, 3),
+                    "outputs": sorted(outputs),
+                },
+            )
         else:
             ctx.log("completion discarded because the job was cancelled")
     except JobCancelled as exc:
         ctx.log(str(exc))
     except Exception as exc:
         decision = classify_failure(job.job_type, job.attempts, exc)
-        job.error = str(exc)
-        job.last_error = str(exc)
+        job.error = safe_text(exc)
+        job.last_error = job.error
         job.failure_kind = decision.kind
         job.traceback = traceback_module.format_exc()
         if decision.retryable and job.attempts < job.max_attempts:
@@ -480,13 +525,21 @@ def run_one(
             if job.status == JobStatus.queued:
                 ctx.log(
                     f"RETRY: attempt {job.attempts}/{job.max_attempts} failed "
-                    f"({decision.kind}); next attempt at {job.available_at}"
+                    f"({decision.kind}); next attempt at {job.available_at}",
+                    event="stage_retry_scheduled",
+                    level="WARNING",
+                    fields={"failure_kind": decision.kind},
                 )
-                ctx.log(str(exc))
+                ctx.log(str(exc), event="stage_failure", level="WARNING")
             else:
                 _restore_script_state_after_terminal_failure(repository, job)
-                ctx.log("FAILED: " + str(exc))
-                ctx.log(job.traceback or "")
+                ctx.log(
+                    "FAILED: " + str(exc),
+                    event="stage_failed",
+                    level="ERROR",
+                    fields={"failure_kind": decision.kind},
+                )
+                ctx.log(job.traceback or "", event="stage_traceback", level="ERROR")
         else:
             ctx.log("failure discarded because the job was cancelled")
     finally:

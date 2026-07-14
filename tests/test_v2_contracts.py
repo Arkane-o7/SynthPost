@@ -109,11 +109,13 @@ class V2ContractTests(unittest.TestCase):
         self.assertIn("source_clip: SourceClipCue | null", ts)
 
     def test_job_event_stream_uses_unambiguous_static_route(self) -> None:
-        api = (ROOT / "pipeline" / "api" / "main.py").read_text(encoding="utf-8")
-        studio = (ROOT / "web" / "src" / "state" / "useStudio.tsx").read_text(
+        jobs_api = (
+            ROOT / "pipeline" / "api" / "routes" / "jobs.py"
+        ).read_text(encoding="utf-8")
+        studio = (ROOT / "web" / "src" / "state" / "useJobEvents.ts").read_text(
             encoding="utf-8"
         )
-        self.assertIn('@app.get("/api/job-events")', api)
+        self.assertIn('@router.get("/job-events")', jobs_api)
         self.assertIn('new EventSource("/api/job-events")', studio)
         self.assertNotIn('new EventSource("/api/jobs/events")', studio)
 

@@ -11,42 +11,39 @@ import type {
   TimelinePlan,
   VisualCandidate,
 } from "../contracts";
+import { request } from "./http";
 
-export const API_BASE = "";
+export { ApiError, API_BASE } from "./http";
 
-export class ApiError extends Error {
-  status: number;
-  body: unknown;
-  constructor(status: number, message: string, body: unknown) {
-    super(message);
-    this.status = status;
-    this.body = body;
-  }
-}
-
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body instanceof Uint8Array
-        ? {}
-        : { "Content-Type": "application/json" }),
-      ...(options.headers ?? {}),
-    },
-  });
-  const contentType = response.headers.get("content-type") ?? "";
-  const body = contentType.includes("application/json")
-    ? await response.json()
-    : await response.text();
-  if (!response.ok) {
-    const message =
-      typeof body === "object" && body && "error" in body
-        ? String((body as { error?: { message?: string } }).error?.message)
-        : response.statusText;
-    throw new ApiError(response.status, message, body);
-  }
-  return body as T;
-}
+type ProjectPatch = Partial<
+  Pick<Project, "title" | "default_category" | "default_render_profile" | "status">
+>;
+type EpisodePatch = Partial<Pick<Episode, "title" | "render_profile" | "status">>;
+type SourcePatch = Partial<
+  Pick<
+    SourceDefinition,
+    | "name"
+    | "source_type"
+    | "category"
+    | "homepage_url"
+    | "feed_url"
+    | "country"
+    | "enabled"
+    | "priority"
+    | "reliability_score"
+  >
+>;
+type VisualPatch = Partial<
+  Pick<
+    VisualCandidate,
+    | "attribution_text"
+    | "trim_start"
+    | "trim_end"
+    | "motion"
+    | "section_ids"
+    | "content_role"
+  >
+>;
 
 export const api = {
   health: () =>
@@ -60,7 +57,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ title }),
     }),
-  updateProject: (projectId: string, patch: Partial<Project>) =>
+  updateProject: (projectId: string, patch: ProjectPatch) =>
     request<Project>(`/api/projects/${projectId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -81,7 +78,7 @@ export const api = {
     }),
   readEpisode: (episodeId: string) =>
     request<Episode>(`/api/episodes/${episodeId}`),
-  updateEpisode: (episodeId: string, patch: Partial<Episode>) =>
+  updateEpisode: (episodeId: string, patch: EpisodePatch) =>
     request<Episode>(`/api/episodes/${episodeId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -98,7 +95,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  updateSource: (sourceId: string, patch: Partial<SourceDefinition>) =>
+  updateSource: (sourceId: string, patch: SourcePatch) =>
     request<SourceDefinition>(`/api/sources/${sourceId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -275,7 +272,7 @@ export const api = {
     request<VisualCandidate>(`/api/visuals/${assetId}/reject`, {
       method: "POST",
     }),
-  updateVisual: (assetId: string, patch: Partial<VisualCandidate>) =>
+  updateVisual: (assetId: string, patch: VisualPatch) =>
     request<VisualCandidate>(`/api/visuals/${assetId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),

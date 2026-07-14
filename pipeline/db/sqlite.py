@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import fcntl
 from pathlib import Path
 from typing import Any, Iterable
 
+from pipeline import config
 from pipeline.models import now_iso
 from pipeline.storage import PROJECT_ROOT, resolve_project_path
 
@@ -15,7 +15,7 @@ MIGRATIONS_DIR = PROJECT_ROOT / "pipeline" / "migrations"
 
 
 def database_path(value: str | Path | None = None) -> Path:
-    configured = value or os.environ.get("SYNTHPOST_DB_PATH") or DEFAULT_DB_PATH
+    configured = value or config.get_settings().storage.database_path or DEFAULT_DB_PATH
     return resolve_project_path(configured)
 
 

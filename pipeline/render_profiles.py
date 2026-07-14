@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import os
 from dataclasses import asdict, dataclass
 from typing import Any
+
+from pipeline import config
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ PROFILES: dict[str, RenderProfile] = {
 
 
 def resolve_profile(name: str | None = None) -> RenderProfile:
-    selected = (name or os.environ.get("SYNTHPOST_RENDER_PROFILE") or "production").strip().lower()
+    selected = (name or config.get_settings().render.profile).strip().lower()
     if selected not in PROFILES:
         allowed = ", ".join(sorted(PROFILES))
         raise ValueError(f"Unknown render profile `{selected}`. Expected one of: {allowed}.")

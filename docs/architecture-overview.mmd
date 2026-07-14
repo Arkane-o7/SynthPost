@@ -1,0 +1,20 @@
+flowchart LR
+  U[Editor] --> Studio[React Studio]
+  Studio --> API[FastAPI API]
+  API --> DB[(SQLite)]
+  API --> Queue[Queue jobs]
+  Queue --> Editorial[Editorial worker]
+  Queue --> Media[Media worker]
+  Queue --> Render[Render worker]
+  Editorial --> Providers[LLM + RSS + SearXNG]
+  Media --> Providers
+  Media --> Files[Episode artifacts]
+  Render --> Avatar[Avatar Engine]
+  Render --> Remotion[Remotion]
+  Render --> FFmpeg[FFmpeg assembly]
+  Editorial --> DB
+  Media --> DB
+  Render --> DB
+  Avatar --> Files
+  Remotion --> Files
+  FFmpeg --> Files

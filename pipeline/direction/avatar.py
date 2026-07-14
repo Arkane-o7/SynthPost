@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import config
+from ..observability import safe_text
 from ..provenance import artifact_record, record_story_artifact
 from ..render_profiles import resolve_profile
 from ..storage import (
@@ -63,9 +64,9 @@ DEFAULT_AVATAR_BACKGROUND = "charcoal"
 
 
 def avatar_python() -> str:
-    configured = os.environ.get("SYNTHPOST_AVATAR_PYTHON")
+    configured = config.get_settings().avatar.python_path
     if configured:
-        return configured
+        return str(configured)
     candidate = config.avatar_engine_dir() / ".venv" / "bin" / "python"
     if candidate.exists():
         return str(candidate)
@@ -74,8 +75,8 @@ def avatar_python() -> str:
 
 def avatar_renderer() -> str:
     renderer = (
-        os.environ.get("SYNTHPOST_AVATAR_RENDERER")
-        or os.environ.get("AVATAR_ENGINE_RENDERER")
+        config.get_settings().avatar.renderer
+        or config.env("AVATAR_ENGINE_RENDERER")
         or DEFAULT_BROWSER_RENDERER
     )
     renderer = renderer.strip().lower()
@@ -101,33 +102,26 @@ def avatar_runtime(renderer: str | None) -> str:
 
 
 def avatar_asset_path() -> str:
-    return (
-        os.environ.get("SYNTHPOST_AVATAR_ASSET_PATH", DEFAULT_AVATAR_ASSET_PATH).strip()
-        or DEFAULT_AVATAR_ASSET_PATH
-    )
+    return config.get_settings().avatar.asset_path.strip() or DEFAULT_AVATAR_ASSET_PATH
 
 
 def avatar_metadata_path() -> str:
     return (
-        os.environ.get(
-            "SYNTHPOST_AVATAR_META_PATH", DEFAULT_AVATAR_METADATA_PATH
-        ).strip()
+        config.get_settings().avatar.metadata_path.strip()
         or DEFAULT_AVATAR_METADATA_PATH
     )
 
 
 def avatar_render_background() -> str:
     return (
-        os.environ.get(
-            "SYNTHPOST_AVATAR_RENDER_BACKGROUND", DEFAULT_AVATAR_BACKGROUND
-        ).strip()
+        (config.env("SYNTHPOST_AVATAR_RENDER_BACKGROUND", DEFAULT_AVATAR_BACKGROUND) or "").strip()
         or DEFAULT_AVATAR_BACKGROUND
     )
 
 
 def avatar_body_form() -> str:
     return (
-        os.environ.get("SYNTHPOST_AVATAR_BODY_FORM", DEFAULT_AVATAR_BODY_FORM).strip()
+        (config.env("SYNTHPOST_AVATAR_BODY_FORM", DEFAULT_AVATAR_BODY_FORM) or "").strip()
         or DEFAULT_AVATAR_BODY_FORM
     )
 
@@ -208,10 +202,10 @@ def gesture_events_for(script: str, duration: float) -> list[dict[str, Any]]:
 def voice_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     settings: dict[str, Any] = {
         "engine": "kokoro",
-        "voice_id": os.environ.get("SYNTHPOST_AVATAR_VOICE_ID") or "af_heart",
-        "speed": float(os.environ.get("SYNTHPOST_AVATAR_VOICE_SPEED") or "1.10"),
+        "voice_id": config.get_settings().avatar.voice_id,
+        "speed": config.get_settings().avatar.voice_speed,
         "sample_rate": 24000,
-        "lang_code": os.environ.get("SYNTHPOST_AVATAR_LANG_CODE") or "a",
+        "lang_code": config.get_settings().avatar.language_code,
     }
     if overrides:
         settings.update(
@@ -384,7 +378,7 @@ def browser_avatar_job_from_manifest(
             "asset_path": avatar_asset_path(),
             "metadata_path": avatar_metadata_path(),
             "asset_id": Path(avatar_asset_path()).parent.name or "synthpost_anchor_v1",
-            "style": os.environ.get("SYNTHPOST_AVATAR_STYLE", DEFAULT_AVATAR_STYLE),
+            "style": config.env("SYNTHPOST_AVATAR_STYLE", DEFAULT_AVATAR_STYLE),
             "face_type": "3d",
             "body_form": avatar_body_form(),
             "requires_3d_lips": True,
@@ -792,7 +786,7 @@ def _trim_process_output(value: str | None, *, limit: int = 6000) -> str:
 def run_avatar_subprocess(
     command: list[str], *, engine_dir: Path, renderer: str
 ) -> None:
-    print(f"[direction] Running Avatar-Engine: {' '.join(command)}")
+    print(safe_text(f"[direction] Running Avatar-Engine: {' '.join(command)}"))
     result = subprocess.run(
         command,
         cwd=engine_dir,
@@ -803,9 +797,9 @@ def run_avatar_subprocess(
     stdout = _trim_process_output(result.stdout)
     stderr = _trim_process_output(result.stderr)
     if stdout:
-        print(stdout)
+        print(safe_text(stdout))
     if stderr:
-        print(stderr)
+        print(safe_text(stderr))
     if result.returncode != 0:
         details = [
             "Avatar-Engine command failed",
@@ -848,7 +842,7 @@ def prepare_browser_avatar_inputs(
         run_avatar_subprocess(tts_cmd, engine_dir=engine_dir, renderer=renderer)
         commands.append(tts_cmd)
     else:
-        print(f"[tts] Reusing fresh Avatar-Engine audio: {audio_path}")
+        print(safe_text(f"[tts] Reusing fresh Avatar-Engine audio: {audio_path}"))
 
     lipsync_inputs = [audio_path, config_path]
     if force or not path_is_fresh(viseme_path, lipsync_inputs):
@@ -865,7 +859,7 @@ def prepare_browser_avatar_inputs(
         run_avatar_subprocess(lipsync_cmd, engine_dir=engine_dir, renderer=renderer)
         commands.append(lipsync_cmd)
     else:
-        print(f"[lipsync] Reusing fresh Avatar-Engine mouth cues: {viseme_path}")
+        print(safe_text(f"[lipsync] Reusing fresh Avatar-Engine mouth cues: {viseme_path}"))
 
     duration = wav_duration(audio_path)
     job = read_avatar_job(job_path)
@@ -1092,7 +1086,7 @@ def run_browser_avatar_engine(
         and path_is_fresh(output_path, initial_inputs)
         and not force
     ):
-        print(f"[direction] Reusing fresh browser avatar render: {output_path}")
+        print(safe_text(f"[direction] Reusing fresh browser avatar render: {output_path}"))
         update_browser_direction_after_render(
             story_json_path,
             job,
@@ -1143,7 +1137,7 @@ def run_browser_avatar_engine(
         prepared["viseme_path"],
     ]
     if path_is_fresh(output_path, inputs) and not force:
-        print(f"[direction] Reusing fresh browser avatar render: {output_path}")
+        print(safe_text(f"[direction] Reusing fresh browser avatar render: {output_path}"))
         update_browser_direction_after_render(
             story_json_path, job, output_path, prepared
         )
@@ -1232,7 +1226,7 @@ def run_legacy_blender_avatar_engine(
     test_mode: bool,
 ) -> Path:
     if output_is_fresh(output_path, [story_json_path, job_path]) and not force:
-        print(f"[direction] Reusing fresh anchor render: {output_path}")
+        print(safe_text(f"[direction] Reusing fresh anchor render: {output_path}"))
         record_story_artifact(
             story_json_path,
             "avatar_anchor",
@@ -1263,7 +1257,7 @@ def run_legacy_blender_avatar_engine(
     ):
         actual_output_path = native_export["path"]
         adopt_anchor_output_path(story_json_path, actual_output_path, native_export)
-        print(f"[direction] Reusing fresh native anchor segment: {actual_output_path}")
+        print(safe_text(f"[direction] Reusing fresh native anchor segment: {actual_output_path}"))
         record_story_artifact(
             story_json_path,
             "avatar_anchor",

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from pipeline import env as _env  # noqa: F401 - loads .env/.env.local at import time
+from pipeline import config as app_config
+from pipeline.observability import safe_text
 
 try:
     from google import genai
@@ -39,6 +39,43 @@ class ProviderRateLimitError(ValueError):
         self.retry_after_seconds = max(0.0, retry_after_seconds)
 
 
+@dataclass(frozen=True)
+class ProviderAvailability:
+    name: str
+    available: bool
+    reason: str
+    supports_structured_json: bool = True
+
+
+def provider_availability(provider_name: str | None = None) -> ProviderAvailability:
+    """Report configuration capability without making a network request."""
+
+    name = (provider_name or app_config.get_settings().llm.provider).strip().lower()
+    settings = app_config.get_settings().llm
+    if name == "mock":
+        return ProviderAvailability(name, True, "deterministic offline provider")
+    if name == "gemini":
+        if genai is None:
+            return ProviderAvailability(name, False, "google-genai is not installed")
+        return ProviderAvailability(
+            name,
+            bool(settings.gemini_api_key),
+            "configured" if settings.gemini_api_key else "GEMINI_API_KEY is missing",
+        )
+    if name == "groq":
+        return ProviderAvailability(
+            name,
+            bool(settings.groq_api_key),
+            "configured" if settings.groq_api_key else "GROQ_API_KEY is missing",
+        )
+    if name in {"hosted_fallback", "groq_then_gemini"}:
+        problem = settings.provider_problem()
+        return ProviderAvailability(
+            "hosted_fallback", not problem, problem or "both hosted providers configured"
+        )
+    return ProviderAvailability(name, False, "unsupported provider")
+
+
 def groq_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     """Normalize a schema to Groq strict structured-output requirements."""
 
@@ -62,12 +99,16 @@ def groq_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
 
 @dataclass
 class GeminiProvider:
-    model: str = os.environ.get("SYNTHPOST_GEMINI_MODEL", "gemini-3.5-flash")
-    temperature: float = float(os.environ.get("SYNTHPOST_GEMINI_TEMPERATURE", "0.2"))
+    model: str = field(
+        default_factory=lambda: app_config.get_settings().llm.gemini_model
+    )
+    temperature: float = field(
+        default_factory=lambda: app_config.get_settings().llm.gemini_temperature
+    )
     name: str = "gemini"
     last_model: str | None = None
-    timeout_seconds: float = float(
-        os.environ.get("SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS", "45")
+    timeout_seconds: float = field(
+        default_factory=lambda: app_config.get_settings().llm.request_timeout_seconds
     )
 
     def generate_json(
@@ -76,7 +117,7 @@ class GeminiProvider:
         if genai is None:
             raise ImportError("google-genai package is required to use GeminiProvider")
 
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = app_config.get_settings().llm.gemini_api_key
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable is missing")
 
@@ -112,21 +153,23 @@ class GeminiProvider:
 
 @dataclass
 class GroqProvider:
-    model: str = os.environ.get("SYNTHPOST_GROQ_MODEL", "openai/gpt-oss-120b")
-    temperature: float = float(os.environ.get("SYNTHPOST_GROQ_TEMPERATURE", "0.2"))
+    model: str = field(default_factory=lambda: app_config.get_settings().llm.groq_model)
+    temperature: float = field(
+        default_factory=lambda: app_config.get_settings().llm.groq_temperature
+    )
     name: str = "groq"
     last_model: str | None = None
-    timeout_seconds: float = float(
-        os.environ.get("SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS", "45")
+    timeout_seconds: float = field(
+        default_factory=lambda: app_config.get_settings().llm.request_timeout_seconds
     )
-    max_completion_tokens: int = int(
-        os.environ.get("SYNTHPOST_GROQ_MAX_COMPLETION_TOKENS", "2300")
+    max_completion_tokens: int = field(
+        default_factory=lambda: app_config.get_settings().llm.groq_max_completion_tokens
     )
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]:
-        api_key = os.environ.get("GROQ_API_KEY")
+        api_key = app_config.get_settings().llm.groq_api_key
         if not api_key:
             raise ValueError("GROQ_API_KEY environment variable is missing")
 
@@ -218,10 +261,10 @@ class HostedFallbackProvider:
             raise
         except Exception as exc:
             self.last_primary_error = str(exc)
-            print(
+            print(safe_text(
                 f"[HostedFallbackProvider] Primary {self.primary.name} failed: "
                 f"{exc}. Falling back to hosted provider {self.fallback.name}."
-            )
+            ))
             try:
                 value = self.fallback.generate_json(
                     prompt, schema, temperature=temperature
@@ -410,9 +453,7 @@ class MockProvider:
 
 
 def configured_provider(provider_name: str | None = None) -> LLMProvider:
-    provider = (
-        provider_name or os.environ.get("SYNTHPOST_LLM_PROVIDER", "groq")
-    ).strip().lower()
+    provider = (provider_name or app_config.get_settings().llm.provider).strip().lower()
     if provider == "mock":
         return MockProvider()
     if provider == "gemini":

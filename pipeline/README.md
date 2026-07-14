@@ -1,0 +1,11 @@
+# Python pipeline
+
+The Python package owns domain contracts, editorial use cases, providers, persistence, queue execution, renderer manifest construction, and FastAPI. Follow the dependency direction:
+
+```text
+API / CLI / worker -> feature service -> domain model + provider/repository
+```
+
+Start at `stages.py` for the production lifecycle, `models.py` for data contracts, `config.py` for settings, `db/repository.py` for persistence, and `api/main.py` for app wiring. Feature packages own their logic. Render boundaries consume approved state; they do not perform upstream editorial work.
+
+New environment reads go through typed configuration. New job types need a stage contract. New providers need capability checks and offline tests. See `docs/ARCHITECTURE.md`, `docs/PIPELINE.md`, and `docs/DEVELOPMENT.md`.

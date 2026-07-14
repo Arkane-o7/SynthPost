@@ -1,18 +1,34 @@
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-
 from pipeline import config
+from pipeline.api.schemas import (
+    CandidateAction,
+    CustomTopic,
+    CustomUrl,
+    DiscoveryStart,
+    EpisodeCreate,
+    EpisodePatch,
+    GenerateScriptRequest,
+    ManualScript,
+    ManualStory,
+    ProjectCreate,
+    ProjectPatch,
+    RenderRequest,
+    SourceCreate,
+    SourcePatch,
+    VisualPatch,
+    VisualStageRequest,
+)
+from pipeline.api.routes.jobs import router as jobs_router
 from pipeline.db.repository import NotFoundError, Repository, get_repository
 from pipeline.discovery.discover import (
     add_custom_topic,
@@ -25,22 +41,17 @@ from pipeline.discovery.assignment_desk import rebuild_assignment_desk
 from pipeline.discovery.seeds import seed_sources
 from pipeline.editorial.charter import load_editorial_charter
 from pipeline.manifest_builder import build_story_manifest
-from pipeline.jobs.policy import default_max_attempts
 from pipeline.models import (
-    ContentRole,
-    JobStatus,
-    NarrationMode,
     ReviewStatus,
-    RightsTier,
     ScriptDocument,
     ScriptStatus,
     SourceDefinition,
-    SourceType,
     StorySelectionStatus,
     StoryWorkflowState,
     TimelinePlan,
     TimelineStatus,
 )
+from pipeline.observability import LogContext, format_event
 from pipeline.scripts.generation import approve_script, save_manual_script
 from pipeline.storage import (
     PROJECT_ROOT,
@@ -73,6 +84,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(jobs_router)
 
 
 def repo() -> Repository:
@@ -81,6 +93,7 @@ def repo() -> Repository:
 
 @app.on_event("startup")
 def startup() -> None:
+    config.validate_startup()
     repository = repo()
     try:
         seed_sources(repository)
@@ -104,99 +117,6 @@ async def value_error_handler(request: Request, exc: ValueError):
         status_code=400,
         content={"error": {"code": "validation_error", "message": str(exc)}},
     )
-
-
-class ProjectCreate(BaseModel):
-    title: str
-    default_category: str = "general"
-    default_render_profile: str = "preview"
-
-
-class EpisodeCreate(BaseModel):
-    title: str
-    render_profile: str | None = None
-
-
-class SourceCreate(BaseModel):
-    name: str
-    source_type: SourceType
-    category: str = "general"
-    homepage_url: str | None = None
-    feed_url: str | None = None
-    country: str | None = None
-    enabled: bool = True
-    priority: int = 50
-    reliability_score: float = 0.7
-    custom: bool = True
-
-
-class DiscoveryStart(BaseModel):
-    episode_id: str | None = None
-    category: str | None = None
-
-
-class CandidateAction(BaseModel):
-    episode_id: str | None = None
-    reasons: list[str] = []
-
-
-class CustomTopic(BaseModel):
-    episode_id: str | None = None
-    title: str
-    summary: str = ""
-    category: str = "custom"
-
-
-class CustomUrl(BaseModel):
-    episode_id: str | None = None
-    url: str
-    title: str | None = None
-    summary: str = ""
-    category: str = "custom"
-
-
-class ManualStory(BaseModel):
-    episode_id: str | None = None
-    title: str
-    body: str
-    category: str = "manual"
-
-
-class ManualScript(BaseModel):
-    headline: str
-    text: str
-    category: str = "manual"
-
-
-class GenerateScriptRequest(BaseModel):
-    provider: str | None = None
-    target_duration_seconds: int = Field(default=600, ge=60, le=7200)
-    narration_mode: NarrationMode = NarrationMode.explained
-
-
-class VisualStageRequest(BaseModel):
-    path: str
-    title: str | None = None
-    section_ids: list[str] = []
-    content_role: ContentRole = ContentRole.context
-    rights_tier: RightsTier = RightsTier.yellow
-    usage_basis: str = "user_provided_local_media"
-
-
-class VisualPatch(BaseModel):
-    attribution_text: str | None = None
-    trim_start: float | None = None
-    trim_end: float | None = None
-    motion: dict[str, Any] | None = None
-    section_ids: list[str] | None = None
-    content_role: ContentRole | None = None
-
-
-class RenderRequest(BaseModel):
-    render_profile: str = "preview"
-    test_mode: bool = False
-    force: bool = False
-    skip_avatar_render: bool = True
 
 
 @app.get("/api/health")
@@ -249,10 +169,12 @@ def read_project(project_id: str) -> dict[str, Any]:
 
 
 @app.patch("/api/projects/{project_id}")
-def update_project(project_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+def update_project(project_id: str, patch: ProjectPatch) -> dict[str, Any]:
     repository = repo()
     try:
-        return repository.update_project(project_id, patch).model_dump(mode="json")
+        return repository.update_project(
+            project_id, patch.model_dump(exclude_none=True)
+        ).model_dump(mode="json")
     finally:
         repository.close()
 
@@ -290,10 +212,12 @@ def read_episode(episode_id: str) -> dict[str, Any]:
 
 
 @app.patch("/api/episodes/{episode_id}")
-def update_episode(episode_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+def update_episode(episode_id: str, patch: EpisodePatch) -> dict[str, Any]:
     repository = repo()
     try:
-        return repository.update_episode(episode_id, patch).model_dump(mode="json")
+        return repository.update_episode(
+            episode_id, patch.model_dump(exclude_none=True)
+        ).model_dump(mode="json")
     finally:
         repository.close()
 
@@ -324,10 +248,12 @@ def create_source(payload: SourceCreate) -> dict[str, Any]:
 
 
 @app.patch("/api/sources/{source_id}")
-def update_source(source_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+def update_source(source_id: str, patch: SourcePatch) -> dict[str, Any]:
     repository = repo()
     try:
-        return repository.update_source(source_id, patch).model_dump(mode="json")
+        return repository.update_source(
+            source_id, patch.model_dump(exclude_none=True)
+        ).model_dump(mode="json")
     finally:
         repository.close()
 
@@ -567,8 +493,15 @@ def api_approve_script(story_id: str) -> dict[str, Any]:
                     episode_id=episode.episode_id,
                     story_id=story_id,
                 )
-        except Exception as e:
-            print(f"[api] Warning: Failed to auto-queue visual search for {story_id}: {e}")
+        except Exception as exc:
+            print(
+                format_event(
+                    "visual_search_enqueue_failed",
+                    f"Failed to auto-queue visual search: {exc}",
+                    level="WARNING",
+                    context=LogContext(story_id=story_id, stage="script_approve"),
+                )
+            )
         return script.model_dump(mode="json")
     finally:
         repository.close()
@@ -884,10 +817,21 @@ def api_assemble_episode(episode_id: str, payload: RenderRequest) -> dict[str, A
                 candidate = repository.candidate_for_story(story_id)
                 if candidate.workflow_state == StoryWorkflowState.rendering_composition:
                     repository.transition_story(story_id, StoryWorkflowState.assembling)
-            except Exception:
+            except Exception as exc:
                 # Assembly should still be queueable for an episode even if one
                 # historical story record cannot be advanced cleanly.
-                pass
+                print(
+                    format_event(
+                        "workflow_transition_skipped",
+                        f"Could not advance historical story before assembly: {exc}",
+                        level="WARNING",
+                        context=LogContext(
+                            episode_id=episode_id,
+                            story_id=story_id,
+                            stage="assemble_episode",
+                        ),
+                    )
+                )
         job = repository.active_job(
             "assemble_episode",
             episode_id=episode_id,
@@ -927,163 +871,11 @@ def api_reveal_episode_output(episode_id: str) -> dict[str, Any]:
         repository.close()
 
 
-@app.get("/api/jobs")
-def list_jobs(
-    story_id: str | None = None,
-    episode_id: str | None = None,
-    job_type: str | None = None,
-    limit: int = 100,
-) -> list[dict[str, Any]]:
-    repository = repo()
-    try:
-        return [
-            job.model_dump(mode="json")
-            for job in repository.list_jobs(
-                max(1, min(limit, 500)),
-                story_id=story_id,
-                episode_id=episode_id,
-                job_type=job_type,
-            )
-        ]
-    finally:
-        repository.close()
-
-
-@app.get("/api/jobs/{job_id}")
-def read_job(job_id: str) -> dict[str, Any]:
-    repository = repo()
-    try:
-        return repository.get_job(job_id).model_dump(mode="json")
-    finally:
-        repository.close()
-
-
-@app.post("/api/jobs/{job_id}/cancel")
-def cancel_job(job_id: str) -> dict[str, Any]:
-    repository = repo()
-    try:
-        job = repository.get_job(job_id)
-        if job.status in {JobStatus.completed, JobStatus.failed}:
-            return job.model_dump(mode="json")
-        job.status = JobStatus.cancelled
-        job.stage = "cancelled"
-        job.available_at = None
-        repository.upsert_job(job)
-        if job.job_type == "script_generate" and job.story_id:
-            candidate = repository.candidate_for_story(job.story_id)
-            if candidate.workflow_state == StoryWorkflowState.script_generating:
-                repository.transition_story(
-                    job.story_id, StoryWorkflowState.research_ready
-                )
-        return job.model_dump(mode="json")
-    finally:
-        repository.close()
-
-
-@app.post("/api/jobs/{job_id}/pause")
-def pause_job(job_id: str) -> dict[str, Any]:
-    repository = repo()
-    try:
-        job = repository.get_job(job_id)
-        if job.status == JobStatus.paused:
-            return job.model_dump(mode="json")
-        if job.status != JobStatus.queued:
-            raise ValueError("Only queued jobs can be paused; cancel a running job instead")
-        job.status = JobStatus.paused
-        job.stage = "paused_by_editor"
-        repository.upsert_job(job)
-        return job.model_dump(mode="json")
-    finally:
-        repository.close()
-
-
-@app.post("/api/jobs/{job_id}/resume")
-def resume_job(job_id: str) -> dict[str, Any]:
-    repository = repo()
-    try:
-        job = repository.get_job(job_id)
-        if job.status != JobStatus.paused:
-            raise ValueError("Only paused jobs can be resumed")
-        job.status = JobStatus.queued
-        job.stage = "queued_after_pause"
-        job.available_at = None
-        repository.upsert_job(job)
-        return job.model_dump(mode="json")
-    finally:
-        repository.close()
-
-
-@app.post("/api/jobs/{job_id}/retry")
-def retry_job(job_id: str) -> dict[str, Any]:
-    repository = repo()
-    try:
-        job = repository.get_job(job_id)
-        if job.status not in {JobStatus.failed, JobStatus.cancelled}:
-            raise ValueError("Only failed or cancelled jobs can be retried")
-        job.status = JobStatus.queued
-        job.progress = 0
-        job.stage = "queued_for_retry"
-        job.last_error = job.error
-        job.error = None
-        job.traceback = None
-        job.failure_kind = None
-        job.available_at = None
-        job.started_at = None
-        job.completed_at = None
-        job.attempts = 0
-        job.max_attempts = default_max_attempts(job.job_type)
-        repository.upsert_job(job)
-        return job.model_dump(mode="json")
-    finally:
-        repository.close()
-
-
-@app.get("/api/jobs/{job_id}/logs")
-def job_logs(job_id: str) -> Response:
-    repository = repo()
-    try:
-        job = repository.get_job(job_id)
-        if not job.log_path:
-            return Response("", media_type="text/plain")
-        path = resolve_project_path(job.log_path)
-        if not path.exists():
-            return Response("", media_type="text/plain")
-        return Response(
-            path.read_text(encoding="utf-8", errors="replace"), media_type="text/plain"
-        )
-    finally:
-        repository.close()
-
-
-@app.get("/api/job-events")
-def job_events() -> StreamingResponse:
-    def stream():
-        import time
-
-        last = ""
-        while True:
-            repository = repo()
-            try:
-                payload = [
-                    job.model_dump(mode="json")
-                    for job in repository.list_jobs(limit=50)
-                ]
-            finally:
-                repository.close()
-            encoded = json.dumps(payload, sort_keys=True)
-            if encoded != last:
-                yield f"event: jobs\ndata: {encoded}\n\n"
-                last = encoded
-            time.sleep(1.0)
-
-    return StreamingResponse(stream(), media_type="text/event-stream")
-
-
 @app.get("/api/artifacts/{artifact_path:path}")
 def serve_artifact(artifact_path: str) -> FileResponse:
     resolved = resolve_project_path(artifact_path).resolve()
     root = PROJECT_ROOT.resolve()
-    if not str(resolved).startswith(str(root)):
+    if not resolved.is_relative_to(root):
         raise HTTPException(
             status_code=403, detail="Artifact path escapes project root"
         )
@@ -1103,4 +895,10 @@ if WEB_DIST.is_dir():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("pipeline.api.main:app", host="127.0.0.1", port=8765, reload=False)
+    settings = config.validate_startup()
+    uvicorn.run(
+        "pipeline.api.main:app",
+        host=settings.server.host,
+        port=settings.server.port,
+        reload=False,
+    )

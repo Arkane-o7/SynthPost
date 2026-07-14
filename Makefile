@@ -1,4 +1,4 @@
-.PHONY: setup dev backend worker workers web remote remote-status remote-off test typecheck smoke render-demo searxng-up searxng-down
+.PHONY: help setup dev backend worker workers web remote remote-status remote-off test test-unit test-avatar typecheck build check doctor config-check smoke render-demo searxng-up searxng-down clean-dev
 
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
@@ -6,6 +6,18 @@ DOCKER ?= $(shell command -v docker 2>/dev/null || { test -x /Applications/Docke
 DOCKER_CONTEXT ?=
 DOCKER_CONTEXT_ARG = $(if $(DOCKER_CONTEXT),--context $(DOCKER_CONTEXT),)
 LANE ?= all
+
+help:
+	@echo "SynthPost developer commands"
+	@echo "  setup          Install Python, Studio, and Remotion dependencies"
+	@echo "  dev            Start API, three queue workers, and Studio"
+	@echo "  test           Run deterministic root Python tests"
+	@echo "  test-avatar    Run Avatar Engine unit tests (no render)"
+	@echo "  typecheck      Compile Python and type-check both TypeScript apps"
+	@echo "  build          Build the Studio production bundle"
+	@echo "  doctor         Check required and optional local dependencies"
+	@echo "  check          Run config, tests, type checks, and Studio build"
+	@echo "  smoke          Run the lightweight TEST_MODE render smoke test"
 
 $(PYTHON):
 	python3 -m venv $(VENV)
@@ -16,7 +28,7 @@ setup: $(PYTHON)
 	npm --prefix web install
 
 backend:
-	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765
+	$(PYTHON) -m pipeline.api.main
 
 worker:
 	$(PYTHON) -m pipeline.jobs.worker --lane $(LANE)
@@ -51,16 +63,36 @@ remote-status:
 remote-off:
 	@tailscale serve --https=443 off 2>/dev/null || tailscale --socket="$$HOME/.synthpost/tailscaled.sock" serve --https=443 off
 
-test:
+test: test-unit
+
+test-unit:
 	$(PYTHON) -m unittest discover -s tests
 
+test-avatar:
+	PYTHONPATH=avatar-engine $(PYTHON) -m unittest discover -s avatar-engine/tests
+
 typecheck:
-	$(PYTHON) -m py_compile pipeline/models.py pipeline/workflow.py pipeline/db/sqlite.py pipeline/db/repository.py pipeline/discovery/discover.py pipeline/research/extract.py pipeline/llm/providers.py pipeline/scripts/generation.py pipeline/visuals/providers.py pipeline/timeline/templates.py pipeline/timeline/validation.py pipeline/timeline/planner.py pipeline/manifest_builder.py pipeline/api/main.py pipeline/jobs/policy.py pipeline/jobs/worker.py pipeline/run_episode.py
+	$(PYTHON) -m compileall -q pipeline assembly tools tests
 	npm --prefix compositor/remotion_renderer run typecheck
 	npm --prefix web run typecheck
+
+build:
+	npm --prefix web run build
+
+config-check:
+	$(PYTHON) -m tools.doctor --config-only
+
+doctor:
+	$(PYTHON) -m tools.doctor
+
+check: config-check test typecheck build
 
 smoke:
 	SYNTHPOST_LLM_PROVIDER=mock $(PYTHON) -m pipeline.run_episode --smoke --render-profile preview
 
 render-demo:
 	SYNTHPOST_LLM_PROVIDER=mock $(PYTHON) -m pipeline.run_episode --create-demo --render-profile preview
+
+clean-dev:
+	find pipeline assembly tests tools -type d -name __pycache__ -prune -exec rm -rf {} +
+	rm -rf web/dist compositor/remotion_renderer/out

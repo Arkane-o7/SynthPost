@@ -12,7 +12,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Protocol
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -66,6 +66,23 @@ class VisualQueryPlan:
     video_query: str
     video_priority: bool
     rationale: str
+
+
+class VisualSource(Protocol):
+    """Small extension boundary for visual candidate discovery sources."""
+
+    name: str
+
+    def available(self) -> bool: ...
+
+    def search(
+        self,
+        repository,
+        story_id: str,
+        *,
+        progress_callback: Callable[[float, str], None] | None = None,
+        cancel_check: Callable[[], None] | None = None,
+    ) -> list[VisualCandidate]: ...
 
 
 def _assert_public_http_url(url: str) -> None:
@@ -1299,6 +1316,59 @@ def search_searxng_visuals(
     return visuals
 
 
+@dataclass(frozen=True)
+class EpisodeMediaInboxSource:
+    name: str = "episode_media_inbox"
+
+    def available(self) -> bool:
+        return True
+
+    def search(
+        self,
+        repository,
+        story_id: str,
+        *,
+        progress_callback=None,
+        cancel_check=None,
+    ) -> list[VisualCandidate]:
+        return search_episode_media_inbox(
+            repository, story_id, generate_fallback=False
+        )
+
+
+@dataclass(frozen=True)
+class SearXNGVisualSource:
+    name: str = "searxng"
+
+    def available(self) -> bool:
+        return searxng_configured()
+
+    def search(
+        self,
+        repository,
+        story_id: str,
+        *,
+        progress_callback=None,
+        cancel_check=None,
+    ) -> list[VisualCandidate]:
+        return search_searxng_visuals(
+            repository,
+            story_id,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        )
+
+
+def configured_visual_sources() -> tuple[VisualSource, ...]:
+    """Return sources in deterministic precedence order.
+
+    Add a source by implementing ``VisualSource`` and registering it here; the
+    orchestration, review policy, and fallback generation stay unchanged.
+    """
+
+    return (EpisodeMediaInboxSource(), SearXNGVisualSource())
+
+
 def search_visuals(
     repository,
     story_id: str,
@@ -1308,28 +1378,28 @@ def search_visuals(
 ) -> list[VisualCandidate]:
     """Search the episode-isolated media inbox, then SearXNG and fallbacks."""
 
-    visuals = search_episode_media_inbox(
-        repository, story_id, generate_fallback=False
-    )
-    if cancel_check:
-        cancel_check()
-    if progress_callback:
-        progress_callback(0.03, "local episode media scanned; planning web search")
-    try:
-        visuals.extend(
-            search_searxng_visuals(
-                repository,
-                story_id,
-                progress_callback=progress_callback,
-                cancel_check=cancel_check,
+    visuals: list[VisualCandidate] = []
+    for source in configured_visual_sources():
+        if not source.available():
+            continue
+        if cancel_check:
+            cancel_check()
+        if progress_callback and source.name == "searxng":
+            progress_callback(0.03, "local episode media scanned; planning web search")
+        try:
+            visuals.extend(
+                source.search(
+                    repository,
+                    story_id,
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check,
+                )
             )
-        )
-    except SearXNGError:
-        # Local media can keep a story moving, but when SearXNG is the only
-        # configured source its outage must be visible as a failed job rather
-        # than masquerading as a successful generated-card search.
-        if not visuals:
-            raise
+        except SearXNGError:
+            # Local media can keep a story moving, but when SearXNG is the only
+            # configured source its outage must be visible as a failed job.
+            if not visuals:
+                raise
     # Always provide a rights-safe, local option for every script section. Web
     # discovery can be irrelevant or unusable until an editor clears rights;
     # one arbitrary file in the drop folder must not suppress all fallbacks.
