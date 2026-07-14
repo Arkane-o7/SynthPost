@@ -83,6 +83,14 @@ const optionalFiniteNumber = (value: unknown): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const optionalPositiveInteger = (value: unknown): number | undefined => {
+  const parsed = optionalFiniteNumber(value);
+  if (parsed === undefined || parsed < 1 || !Number.isInteger(parsed)) {
+    return undefined;
+  }
+  return parsed;
+};
+
 const isRemote = (value: string): boolean => /^https?:\/\//i.test(value);
 
 const publicPathFor = (absolutePath: string): string | null => {
@@ -717,6 +725,9 @@ const main = async () => {
     inputProps: props,
     codec: (process.env.SYNTHPOST_RENDER_CODEC as any) || "h264",
     outputLocation: outputPath,
+    concurrency: optionalPositiveInteger(
+      process.env.SYNTHPOST_REMOTION_CONCURRENCY,
+    ),
   });
 
   manifest.composition = {
@@ -756,7 +767,15 @@ const main = async () => {
   );
 };
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    // This file is a one-shot CLI. Under simultaneous renders, Chromium can
+    // occasionally leave an idle event-loop handle after every requested
+    // output and manifest write has completed. Exit explicitly at that safe
+    // boundary so one finished render cannot occupy a worker slot forever.
+    process.stdout.write("", () => process.exit(0));
+  })
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

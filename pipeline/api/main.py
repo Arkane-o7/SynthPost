@@ -121,7 +121,17 @@ async def value_error_handler(request: Request, exc: ValueError):
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "name": "SynthPost Studio", "version": "2.0.0"}
+    jobs = config.get_settings().jobs
+    return {
+        "ok": True,
+        "name": "SynthPost Studio",
+        "version": "2.0.0",
+        "worker_capacity": {
+            "editorial": jobs.editorial_workers,
+            "media": jobs.media_workers,
+            "render": jobs.render_workers,
+        },
+    }
 
 
 @app.get("/api/templates")

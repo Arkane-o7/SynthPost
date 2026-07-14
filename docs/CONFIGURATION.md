@@ -132,16 +132,22 @@ Required means required for the named feature, not for opening the local Studio.
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
 | `SYNTHPOST_REMOTION_DIR` | `compositor/remotion_renderer` | composition | `/Volumes/Work/remotion_renderer` | Must contain `package.json`. |
+| `SYNTHPOST_REMOTION_CONCURRENCY` | `4` | no | `6` | Frame-render concurrency inside each Remotion job. Total pressure is roughly this value times active Remotion workers. |
 | `SYNTHPOST_FFMPEG` | `ffmpeg` | render/assembly | `/opt/homebrew/bin/ffmpeg` | Binary name/path. |
 | `SYNTHPOST_RENDER_PROFILE` | `production` | no | `preview` | `preview`, `production`, `final_master`. |
 | `SYNTHPOST_RENDER_CODEC` | `h264` | no | `h264` | Renderer/assembly codec hint. |
 | `SYNTHPOST_RENDER_PREVIEW_FRAME` | `24` | no | `48` | Non-negative preview frame. |
+| `SYNTHPOST_EDITORIAL_WORKERS` | `2` | no | `4` | Independent editorial worker processes; range 1–32. Provider rate limits still apply. |
+| `SYNTHPOST_MEDIA_WORKERS` | `2` | no | `4` | Independent visual/timeline processes; range 1–32. Account for network and download bandwidth. |
+| `SYNTHPOST_RENDER_WORKERS` | `2` | no | `3` | Independent avatar/Remotion/FFmpeg processes; range 1–16. Each can consume substantial CPU, GPU, RAM, and disk. |
 | `SYNTHPOST_EDITORIAL_JOB_MAX_ATTEMPTS` | `3` | no | `3` | Total editorial attempts. |
 | `SYNTHPOST_MEDIA_JOB_MAX_ATTEMPTS` | `3` | no | `3` | Total media attempts. |
 | `SYNTHPOST_RENDER_JOB_MAX_ATTEMPTS` | `2` | no | `2` | Total render attempts. |
 | `SYNTHPOST_JOB_RETRY_BASE_SECONDS` | `15` | no | `30` | Backoff base. |
 | `SYNTHPOST_JOB_RETRY_MAX_SECONDS` | `900` | no | `900` | Must be at least the base. |
 | `SYNTHPOST_JOB_HEARTBEAT_SECONDS` | `5` | no | `5` | Minimum 1 second. |
+
+`make workers` launches exactly the configured capacity under one supervisor. Increasing a count requires restarting the supervisor. Jobs targeting the same story are serialized, and assembly is exclusive with other work for its episode; separate projects and episodes can use every available slot. For a powerful workstation, start with `4/3/2`, observe memory and provider quotas, then increase render workers or per-render Remotion concurrency separately.
 
 ## Security notes
 

@@ -33,6 +33,7 @@ Alpha WebM and Remotion-native rendering are deferred (see design doc).
 from __future__ import annotations
 
 import base64
+import fcntl
 import http.server
 import json
 import os
@@ -647,13 +648,22 @@ def _ensure_web_runtime_built(root: Path) -> None:
         )
 
     if not dist_dir.exists() or not any(dist_dir.iterdir()):
-        print(
-            "[talkinghead] web_avatar_runtime/dist/ not found. Running npm ci && npm run build …"
-        )
-        node_modules = runtime_dir / "node_modules"
-        if not node_modules.exists():
-            _run_npm(runtime_dir, ["ci"])
-        _run_npm(runtime_dir, ["run", "build"])
+        lock_dir = root / "assets" / "temp"
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        with (lock_dir / "web-runtime-build.lock").open(
+            "a+", encoding="utf-8"
+        ) as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            # Concurrent avatar jobs share the immutable runtime bundle. Recheck
+            # after leasing the build lock so only one npm build can mutate it.
+            if not dist_dir.exists() or not any(dist_dir.iterdir()):
+                print(
+                    "[talkinghead] web_avatar_runtime/dist/ not found. Running npm ci && npm run build …"
+                )
+                node_modules = runtime_dir / "node_modules"
+                if not node_modules.exists():
+                    _run_npm(runtime_dir, ["ci"])
+                _run_npm(runtime_dir, ["run", "build"])
 
     if not dist_dir.exists():
         raise RuntimeError(

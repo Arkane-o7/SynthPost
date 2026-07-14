@@ -29,6 +29,12 @@ Then inspect the failed job in the Studio Jobs page and `.synthpost/jobs/<job_id
 - A “live job updates disconnected” banner means EventSource is reconnecting; normal API actions still work.
 - Rebuild `web/dist` with `make build` before `make remote`.
 
+## Parallel workers do not start or projects remain queued
+
+Run `make doctor` and confirm the reported editorial/media/render capacity. Restart `make workers` after changing worker counts; a running supervisor does not hot-reload `.env`. `Another SynthPost worker supervisor is already running` means an existing pool owns the database—stop it instead of starting a second pool. A `legacy worker still owns` error means a pre-upgrade lane worker is still alive.
+
+Jobs for the same story intentionally wait for one another, and episode assembly waits for running work in that episode. Jobs from unrelated projects or episodes should show multiple `running` records when capacity is greater than one. If the Mac becomes memory-bound, lower `SYNTHPOST_RENDER_WORKERS` first, then set `SYNTHPOST_REMOTION_CONCURRENCY` to a smaller per-render value.
+
 ## Provider failures and timeouts
 
 - Verify the selected provider and its key without printing the key.

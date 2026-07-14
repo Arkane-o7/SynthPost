@@ -99,6 +99,17 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
             f"database={db_path}; artifact_root={PROJECT_ROOT / 'episodes'}",
         )
     )
+    jobs = settings.jobs
+    checks.append(
+        DiagnosticCheck(
+            "worker_pool",
+            "configured",
+            "required",
+            "parallel capacity: "
+            f"editorial={jobs.editorial_workers}, "
+            f"media={jobs.media_workers}, render={jobs.render_workers}",
+        )
+    )
     if config_only:
         return checks
 

@@ -116,6 +116,7 @@ class AvatarSettings(SettingsModel):
 
 class RenderSettings(SettingsModel):
     remotion_path: Path = Path("compositor/remotion_renderer")
+    remotion_concurrency: int = Field(default=4, ge=1, le=64)
     ffmpeg_binary: str = "ffmpeg"
     profile: Literal["preview", "production", "final_master"] = "production"
     codec: str = "h264"
@@ -124,6 +125,9 @@ class RenderSettings(SettingsModel):
 
 
 class JobSettings(SettingsModel):
+    editorial_workers: int = Field(default=2, ge=1, le=32)
+    media_workers: int = Field(default=2, ge=1, le=32)
+    render_workers: int = Field(default=2, ge=1, le=16)
     editorial_max_attempts: int = Field(default=3, ge=1)
     media_max_attempts: int = Field(default=3, ge=1)
     render_max_attempts: int = Field(default=2, ge=1)
@@ -136,6 +140,19 @@ class JobSettings(SettingsModel):
         if self.retry_max_seconds < self.retry_base_seconds:
             raise ValueError("retry_max_seconds must be >= retry_base_seconds")
         return self
+
+    def workers_for(self, lane: str) -> int:
+        """Return configured process capacity for a queue lane."""
+
+        counts = {
+            "editorial": self.editorial_workers,
+            "media": self.media_workers,
+            "render": self.render_workers,
+        }
+        try:
+            return counts[lane]
+        except KeyError as exc:
+            raise ValueError(f"Unknown queue lane: {lane}") from exc
 
 
 class SynthPostSettings(SettingsModel):
@@ -319,6 +336,9 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                     r.text("SYNTHPOST_REMOTION_DIR", "compositor/remotion_renderer")
                     or "compositor/remotion_renderer"
                 ),
+                remotion_concurrency=r.integer(
+                    "SYNTHPOST_REMOTION_CONCURRENCY", 4
+                ),
                 ffmpeg_binary=r.text("SYNTHPOST_FFMPEG", "ffmpeg"),
                 profile=(
                     r.text("SYNTHPOST_RENDER_PROFILE", "production") or "production"
@@ -330,6 +350,9 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
             ),
             jobs=JobSettings(
+                editorial_workers=r.integer("SYNTHPOST_EDITORIAL_WORKERS", 2),
+                media_workers=r.integer("SYNTHPOST_MEDIA_WORKERS", 2),
+                render_workers=r.integer("SYNTHPOST_RENDER_WORKERS", 2),
                 editorial_max_attempts=r.integer(
                     "SYNTHPOST_EDITORIAL_JOB_MAX_ATTEMPTS", 3
                 ),

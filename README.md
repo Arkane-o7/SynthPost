@@ -12,6 +12,7 @@ SynthPost is a local-first, AI-assisted newsroom and video-production system for
 - Local avatar/TTS/lip-sync rendering through the retained Avatar Engine
 - Remotion composition and FFmpeg episode assembly
 - React Studio with job progress, logs, retries, previews, and mobile/private Tailscale access
+- Configurable multi-process worker pools for parallel projects and episode renders
 - Deterministic offline tests and a lightweight `TEST_MODE` smoke render
 
 ## System requirements
@@ -37,7 +38,9 @@ make dev
 
 Open `http://127.0.0.1:5173`. Add the API key for the selected LLM provider in `.env`; use `SYNTHPOST_LLM_PROVIDER=mock` only for tests and smoke/demo runs.
 
-`make dev` starts FastAPI on port 8765, editorial/media/render workers, and Vite on port 5173. Run components separately with `make backend`, `make worker LANE=editorial`, `make workers`, and `make web`.
+`make dev` starts FastAPI on port 8765, the configured editorial/media/render process pools, and Vite on port 5173. The default capacity is two workers per lane, so independent projects can research, acquire media, render, and assemble concurrently. Tune `SYNTHPOST_EDITORIAL_WORKERS`, `SYNTHPOST_MEDIA_WORKERS`, and `SYNTHPOST_RENDER_WORKERS` in `.env`, then confirm the effective capacity with `make doctor`.
+
+Run components separately with `make backend`, `make workers`, `make worker LANE=render SLOT=1`, and `make web`. SynthPost serializes stages that target the same story and prevents episode assembly from overlapping work in that episode; unrelated projects and episodes remain parallel.
 
 ## Basic workflow
 
@@ -101,7 +104,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 | `make help` | Discover the command surface |
 | `make setup` | Install Python, Remotion, and Studio dependencies |
 | `make dev` | Start the full local stack |
-| `make backend` / `make workers` / `make web` | Start individual services |
+| `make backend` / `make workers` / `make web` | Start individual services and the configured worker pool |
 | `make searxng-up` / `make searxng-down` | Manage the local SearXNG container |
 | `make test` | Run deterministic Python tests |
 | `make test-avatar` | Run Avatar Engine unit tests without rendering |
@@ -110,6 +113,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 | `make config-check` / `make doctor` | Validate settings / diagnose local dependencies |
 | `make check` | Run the default quality gate |
 | `make smoke` | Run the lightweight TEST_MODE render smoke |
+| `make smoke-parallel` | Render and assemble two isolated TEST_MODE episodes concurrently |
 | `make remote` | Serve the built Studio privately through Tailscale |
 
 ## Documentation

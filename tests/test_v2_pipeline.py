@@ -197,6 +197,84 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
 
+    def test_parallel_claims_allow_independent_episodes(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        db_path = Path(temp.name) / "parallel-episodes.sqlite3"
+        first = Repository(db_path)
+        second = Repository(db_path)
+        try:
+            first_job = first.create_job(
+                "render_story", episode_id="ep_alpha", story_id="story_alpha"
+            )
+            second_job = first.create_job(
+                "render_story", episode_id="ep_beta", story_id="story_beta"
+            )
+
+            first_claim = first.claim_next_job("render")
+            second_claim = second.claim_next_job("render")
+
+            self.assertEqual(first_claim.job_id, first_job.job_id)
+            self.assertEqual(second_claim.job_id, second_job.job_id)
+            self.assertEqual(first_claim.status, JobStatus.running)
+            self.assertEqual(second_claim.status, JobStatus.running)
+        finally:
+            first.close()
+            second.close()
+            temp.cleanup()
+
+    def test_parallel_claims_serialize_stages_for_the_same_story(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        db_path = Path(temp.name) / "same-story.sqlite3"
+        first = Repository(db_path)
+        second = Repository(db_path)
+        try:
+            avatar = first.create_job(
+                "render_avatar", episode_id="ep_one", story_id="story_one"
+            )
+            composition = first.create_job(
+                "render_story", episode_id="ep_one", story_id="story_one"
+            )
+
+            claimed_avatar = first.claim_next_job("render")
+            self.assertEqual(claimed_avatar.job_id, avatar.job_id)
+            self.assertIsNone(second.claim_next_job("render"))
+
+            claimed_avatar.status = JobStatus.completed
+            self.assertTrue(
+                first.update_job_if_status(claimed_avatar, JobStatus.running)
+            )
+            claimed_composition = second.claim_next_job("render")
+            self.assertEqual(claimed_composition.job_id, composition.job_id)
+        finally:
+            first.close()
+            second.close()
+            temp.cleanup()
+
+    def test_assembly_is_exclusive_with_story_work_in_its_episode(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        db_path = Path(temp.name) / "assembly-exclusive.sqlite3"
+        first = Repository(db_path)
+        second = Repository(db_path)
+        try:
+            story = first.create_job(
+                "render_story", episode_id="ep_one", story_id="story_one"
+            )
+            first.create_job("assemble_episode", episode_id="ep_one")
+            other_episode = first.create_job(
+                "render_story", episode_id="ep_two", story_id="story_two"
+            )
+
+            self.assertEqual(first.claim_next_job("render").job_id, story.job_id)
+            # The assembly job is blocked, but unrelated episode work remains eligible.
+            self.assertEqual(
+                second.claim_next_job("render").job_id, other_episode.job_id
+            )
+            self.assertIsNone(first.claim_next_job("render"))
+        finally:
+            first.close()
+            second.close()
+            temp.cleanup()
+
     def test_automatic_retry_waits_for_backoff_and_preserves_last_error(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "retry-jobs.sqlite3")

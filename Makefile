@@ -1,4 +1,4 @@
-.PHONY: help setup dev backend worker workers web remote remote-status remote-off test test-unit test-avatar typecheck build check doctor config-check smoke render-demo searxng-up searxng-down clean-dev
+.PHONY: help setup dev backend worker workers web remote remote-status remote-off test test-unit test-avatar typecheck build check doctor config-check smoke smoke-parallel render-demo searxng-up searxng-down clean-dev
 
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
@@ -6,11 +6,13 @@ DOCKER ?= $(shell command -v docker 2>/dev/null || { test -x /Applications/Docke
 DOCKER_CONTEXT ?=
 DOCKER_CONTEXT_ARG = $(if $(DOCKER_CONTEXT),--context $(DOCKER_CONTEXT),)
 LANE ?= all
+SLOT ?=
 
 help:
 	@echo "SynthPost developer commands"
 	@echo "  setup          Install Python, Studio, and Remotion dependencies"
-	@echo "  dev            Start API, three queue workers, and Studio"
+	@echo "  dev            Start API, configured parallel worker pool, and Studio"
+	@echo "  workers        Start the configured multi-process worker pool"
 	@echo "  test           Run deterministic root Python tests"
 	@echo "  test-avatar    Run Avatar Engine unit tests (no render)"
 	@echo "  typecheck      Compile Python and type-check both TypeScript apps"
@@ -18,6 +20,7 @@ help:
 	@echo "  doctor         Check required and optional local dependencies"
 	@echo "  check          Run config, tests, type checks, and Studio build"
 	@echo "  smoke          Run the lightweight TEST_MODE render smoke test"
+	@echo "  smoke-parallel Render two TEST_MODE episodes concurrently"
 
 $(PYTHON):
 	python3 -m venv $(VENV)
@@ -31,12 +34,10 @@ backend:
 	$(PYTHON) -m pipeline.api.main
 
 worker:
-	$(PYTHON) -m pipeline.jobs.worker --lane $(LANE)
+	$(PYTHON) -m pipeline.jobs.worker --lane $(LANE) $(if $(SLOT),--slot $(SLOT),)
 
 workers:
-	$(PYTHON) -m pipeline.jobs.worker --lane editorial & \
-	$(PYTHON) -m pipeline.jobs.worker --lane media & \
-	$(PYTHON) -m pipeline.jobs.worker --lane render & wait
+	$(PYTHON) -m pipeline.jobs.supervisor
 
 web:
 	npm --prefix web run dev -- --host 127.0.0.1 --port 5173
@@ -49,9 +50,7 @@ searxng-down:
 
 dev:
 	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 & \
-	$(PYTHON) -m pipeline.jobs.worker --lane editorial & \
-	$(PYTHON) -m pipeline.jobs.worker --lane media & \
-	$(PYTHON) -m pipeline.jobs.worker --lane render & \
+	$(PYTHON) -m pipeline.jobs.supervisor & \
 	npm --prefix web run dev -- --host 127.0.0.1 --port 5173
 
 remote:
@@ -89,6 +88,9 @@ check: config-check test typecheck build
 
 smoke:
 	SYNTHPOST_LLM_PROVIDER=mock $(PYTHON) -m pipeline.run_episode --smoke --render-profile preview
+
+smoke-parallel:
+	$(PYTHON) -m tools.parallel_smoke --episodes 2 --render-profile preview
 
 render-demo:
 	SYNTHPOST_LLM_PROVIDER=mock $(PYTHON) -m pipeline.run_episode --create-demo --render-profile preview

@@ -3,9 +3,10 @@ flowchart LR
   Studio --> API[FastAPI API]
   API --> DB[(SQLite)]
   API --> Queue[Queue jobs]
-  Queue --> Editorial[Editorial worker]
-  Queue --> Media[Media worker]
-  Queue --> Render[Render worker]
+  Queue --> Supervisor[Worker supervisor]
+  Supervisor --> Editorial[Editorial process pool]
+  Supervisor --> Media[Media process pool]
+  Supervisor --> Render[Render process pool]
   Editorial --> Providers[LLM + RSS + SearXNG]
   Media --> Providers
   Media --> Files[Episode artifacts]

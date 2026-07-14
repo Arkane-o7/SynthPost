@@ -58,6 +58,8 @@ FFmpeg normalizes story clips and joins them with brand intro/outro assets. Prod
 - Discovery/research/script/visual/timeline retries are controlled by `pipeline/jobs/policy.py`; transient network, timeout, rate-limit, and subprocess failures can be retried with bounded exponential backoff.
 - Render jobs have a lower attempt budget because they are expensive and not assumed idempotent at arbitrary interruption points.
 - Worker heartbeats prevent healthy long jobs from being reclaimed. Stale running jobs are released or failed after job-type-specific limits.
+- Each lane has a configurable supervised process pool. SQLite claims are atomic, so independent projects can occupy multiple slots without claiming the same job twice.
+- Jobs for the same story are serialized. Episode assembly does not overlap any other running work for that episode, while unrelated projects and episodes remain parallel.
 - Avatar, composition, and assembly use file freshness/provenance checks and support explicit force flags.
 - Cancellation is cooperative between progress callbacks and the SQLite job status.
 - Validation/configuration failures are terminal and retain exception context in the job record/log.
@@ -68,7 +70,8 @@ FFmpeg normalizes story clips and joins them with brand intro/outro assets. Prod
 ```bash
 # One worker iteration or one lane
 .venv/bin/python -m pipeline.jobs.worker --once --lane editorial
-.venv/bin/python -m pipeline.jobs.worker --lane media
+.venv/bin/python -m pipeline.jobs.worker --lane media --slot 1
+.venv/bin/python -m pipeline.jobs.supervisor
 
 # Render a pre-authored approved manifest
 .venv/bin/python -m pipeline.run_story episodes/<episode>/stories/<story>/story.json \
@@ -76,6 +79,9 @@ FFmpeg normalizes story clips and joins them with brand intro/outro assets. Prod
 
 # Create and run the deterministic TEST_MODE smoke episode
 make smoke
+
+# Verify two independent episode renders and assemblies overlap safely
+make smoke-parallel
 
 # Create the local demo with the offline mock provider
 make render-demo

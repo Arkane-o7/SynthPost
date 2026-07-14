@@ -1,6 +1,6 @@
 # SynthPost architecture
 
-SynthPost is a local-first modular monolith. SQLite owns editorial workflow state; versioned JSON and media files make render inputs inspectable; three independent worker lanes isolate cheap editorial work from expensive media and render work. The React Studio is a client of the FastAPI API and never accesses SQLite or episode files directly.
+SynthPost is a local-first modular monolith. SQLite owns editorial workflow state; versioned JSON and media files make render inputs inspectable; three independently sized worker pools isolate editorial, media, and render work while allowing unrelated projects to execute concurrently. The React Studio is a client of the FastAPI API and never accesses SQLite or episode files directly.
 
 ```mermaid
 flowchart LR
@@ -8,9 +8,10 @@ flowchart LR
   Studio --> API[FastAPI API]
   API --> DB[(SQLite)]
   API --> Queue[Queue jobs]
-  Queue --> Editorial[Editorial worker]
-  Queue --> Media[Media worker]
-  Queue --> Render[Render worker]
+  Queue --> Supervisor[Worker supervisor]
+  Supervisor --> Editorial[Editorial process pool]
+  Supervisor --> Media[Media process pool]
+  Supervisor --> Render[Render process pool]
   Editorial --> Providers[LLM + RSS + SearXNG]
   Media --> Providers
   Media --> Files[Episode artifacts]
@@ -40,7 +41,7 @@ flowchart LR
 | `pipeline/visuals/` | Local/SearXNG discovery, download, broadcast-fit and rights review | `VisualSource`, `VisualCandidate` |
 | `pipeline/timeline/` | Template registry, timeline planning, and validation | `TimelinePlan` |
 | `pipeline/manifest_builder.py` | Approved editor state to renderer manifest | `build_story_manifest()` |
-| `pipeline/jobs/` | SQLite queue, workers, retries, cancellation, heartbeat | job type + `StageContract` |
+| `pipeline/jobs/` | SQLite queue, supervised process pools, slot leases, retries, cancellation, heartbeat | job type + `StageContract` |
 | `pipeline/api/` | HTTP contracts and feature routers | `/api/*` |
 | `web/` | Studio presentation, local UI state, typed API client, live job events | `api/client.ts`, `useStudio` |
 | `avatar-engine/` | Local TTS/lip-sync/avatar render subsystem | `scripts/run_job.py`, avatar job schemas |
@@ -62,7 +63,9 @@ flowchart TD
   F --> O[Final export]
 ```
 
-The Studio creates jobs through FastAPI. A lane worker claims a job atomically, validates its output keys against `pipeline/stages.py`, updates progress in SQLite, and writes a contextual log under `.synthpost/jobs/`. Editorial state changes remain in SQLite until `materialize_story_artifacts()` writes reproducible render inputs. Renderers only consume the approved manifest; they do not discover news, write scripts, or choose rights policy.
+The Studio creates jobs through FastAPI. The supervisor starts the configured number of OS processes for each lane; every process leases a numbered capacity slot and claims jobs atomically. The repository excludes jobs that would mutate the same story concurrently and prevents assembly from overlapping work in its episode. Independent projects and episodes remain eligible across every slot. Workers validate output keys against `pipeline/stages.py`, update progress in SQLite, and write project-aware logs under `.synthpost/jobs/`.
+
+Separate processes isolate renderer environment state and native subprocesses. Remotion staging, Avatar Engine media/render caches, story output, and FFmpeg assembly work are episode/story-scoped. Shared first-run brand and Avatar runtime generation uses filesystem locks.
 
 ## Domain and contract boundaries
 

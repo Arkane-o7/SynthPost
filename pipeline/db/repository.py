@@ -893,14 +893,33 @@ class Repository:
                 queue_lane.value if isinstance(queue_lane, JobQueueLane) else queue_lane
             )
             due_at = now_iso()
-            clauses = ["status = 'queued'", "(available_at IS NULL OR available_at <= ?)"]
+            clauses = [
+                "candidate.status = 'queued'",
+                "(candidate.available_at IS NULL OR candidate.available_at <= ?)",
+                """
+                NOT EXISTS (
+                  SELECT 1 FROM render_jobs AS running
+                  WHERE running.status = 'running'
+                    AND (
+                      (candidate.story_id IS NOT NULL
+                       AND running.story_id = candidate.story_id)
+                      OR
+                      (candidate.episode_id IS NOT NULL
+                       AND running.episode_id = candidate.episode_id
+                       AND (candidate.job_type = 'assemble_episode'
+                            OR running.job_type = 'assemble_episode'))
+                    )
+                )
+                """,
+            ]
             params: list[Any] = [due_at]
             if lane_value:
-                clauses.append("queue_lane = ?")
+                clauses.append("candidate.queue_lane = ?")
                 params.append(lane_value)
             row = self._one(
-                f"SELECT data FROM render_jobs WHERE {' AND '.join(clauses)} "
-                "ORDER BY COALESCE(available_at, created_at) ASC, created_at ASC LIMIT 1",
+                f"SELECT candidate.data FROM render_jobs AS candidate WHERE {' AND '.join(clauses)} "
+                "ORDER BY COALESCE(candidate.available_at, candidate.created_at) ASC, "
+                "candidate.created_at ASC LIMIT 1",
                 tuple(params),
             )
             data = row_data(row)

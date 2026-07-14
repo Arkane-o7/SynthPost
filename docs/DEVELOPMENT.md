@@ -40,6 +40,8 @@ make worker LANE=render
 make web
 ```
 
+`make workers` is the normal entry point: it supervises the process counts from `.env` and restarts workers that fail unexpectedly. A manual worker leases the first free configured slot; pass `SLOT=2` when debugging a specific slot. Separate OS processes intentionally isolate renderer environment overrides and native subprocess state.
+
 SQLite lives at `.synthpost/synthpost.sqlite3` unless overridden. Do not point tests at the production database; repository tests use temporary paths.
 
 ## Quality gates and test levels
@@ -52,6 +54,7 @@ SQLite lives at `.synthpost/synthpost.sqlite3` unless overridden. Do not point t
 | Studio production build | `make build` | offline after setup |
 | Full default gate | `make check` | offline after setup |
 | TEST_MODE smoke | `make smoke` | local Remotion/FFmpeg, placeholder-safe |
+| Parallel TEST_MODE smoke | `make smoke-parallel` | two simultaneous local Remotion/FFmpeg episodes |
 | Production/avatar manual | explicit Studio action or `pipeline.run_story` | expensive; not a default gate |
 
 Tests must not call live providers. Use `MockProvider`, fixtures, patched URL openers/subprocesses, and temporary databases/directories. Mark any future live integration command separately and never include it in `make test`.
@@ -61,6 +64,7 @@ Tests must not call live providers. Use `MockProvider`, fixtures, patched URL op
 - Job status/error/traceback: Studio Jobs page or `GET /api/jobs/<id>`.
 - Contextual log: `.synthpost/jobs/<job_id>.log` or `GET /api/jobs/<id>/logs`.
 - JSON logs: `SYNTHPOST_LOG_FORMAT=json`.
+- Effective parallel capacity: `make doctor` or `GET /api/health`.
 - Configuration parse: `make config-check`.
 - Tool availability: `make doctor`; add `--strict-features` through `python -m tools.doctor` when validating a production workstation.
 - API shape: FastAPI docs at `http://127.0.0.1:8765/docs`.

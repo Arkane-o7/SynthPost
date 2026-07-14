@@ -10,13 +10,14 @@ import threading
 import time
 import traceback as traceback_module
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TextIO
 from datetime import datetime, timezone
 
 from assembly.stitch_episode import stitch_episode
 from pipeline import config
-from pipeline.db.repository import Repository, get_repository
+from pipeline.db.repository import NotFoundError, Repository, get_repository
 from pipeline.db.sqlite import database_path
 from pipeline.discovery.discover import discover
 from pipeline.manifest_builder import build_story_manifest
@@ -42,6 +43,17 @@ class JobCancelled(RuntimeError):
     pass
 
 
+def _project_id_for_job(repository: Repository, job: RenderJob) -> str | None:
+    try:
+        if job.episode_id:
+            return repository.get_episode(job.episode_id).project_id
+        if job.story_id:
+            return repository.episode_for_story(job.story_id).project_id
+    except NotFoundError:
+        return None
+    return None
+
+
 class JobContext:
     def __init__(self, repository: Repository, job: RenderJob):
         self.repository = repository
@@ -54,6 +66,7 @@ class JobContext:
         self._cancelled = threading.Event()
         self._heartbeat_thread: threading.Thread | None = None
         self.log_context = LogContext(
+            project_id=_project_id_for_job(repository, job),
             episode_id=job.episode_id,
             story_id=job.story_id,
             job_id=job.job_id,
@@ -547,37 +560,100 @@ def run_one(
     return True
 
 
+@dataclass(frozen=True)
+class WorkerLease:
+    lanes: tuple[str, ...]
+    slot: int
+
+
+def _unlock(handles: list[TextIO]) -> None:
+    for handle in reversed(handles):
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
+
+
 @contextmanager
-def worker_process_lock(queue_lane: JobQueueLane | str | None = None):
-    """Guarantee one consumer per lane, or exclusive ownership of all lanes."""
+def worker_process_lock(
+    queue_lane: JobQueueLane | str | None = None, *, slot: int | None = None
+):
+    """Lease one configured process slot in a lane (or in every lane)."""
 
     lane_value = queue_lane.value if isinstance(queue_lane, JobQueueLane) else queue_lane
     lane_names = [lane_value] if lane_value else [lane.value for lane in JobQueueLane]
-    handles = []
+    settings = config.get_settings().jobs
+    capacities = {lane: settings.workers_for(lane) for lane in lane_names}
+    max_shared_slot = min(capacities.values())
+    if slot is not None and (slot < 1 or slot > max_shared_slot):
+        capacity_text = ", ".join(
+            f"{lane}={capacity}" for lane, capacity in capacities.items()
+        )
+        raise ValueError(
+            f"Worker slot {slot} is outside configured capacity ({capacity_text})."
+        )
+
+    db_path = database_path()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_guards: list[TextIO] = []
+    slot_handles: list[TextIO] = []
     try:
+        # Old SynthPost workers held an exclusive unnumbered lane lock. Shared
+        # guards let new slot workers coexist with one another while refusing
+        # to overlap a still-running pre-concurrency worker during an upgrade.
         for lane_name in lane_names:
-            lock_path = database_path().with_suffix(f".worker.{lane_name}.lock")
-            lock_path.parent.mkdir(parents=True, exist_ok=True)
-            handle = lock_path.open("a+", encoding="utf-8")
-            handles.append(handle)
+            legacy_path = db_path.with_suffix(f".worker.{lane_name}.lock")
+            handle = legacy_path.open("a+", encoding="utf-8")
             try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(handle.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
             except BlockingIOError as exc:
+                handle.close()
                 raise RuntimeError(
-                    f"Another SynthPost worker already owns the {lane_name} queue; "
-                    "refusing to start a duplicate."
+                    f"A legacy SynthPost worker still owns the {lane_name} lane; "
+                    "stop it before starting the parallel worker pool."
                 ) from exc
+            legacy_guards.append(handle)
+
+        selected_slot: int | None = None
+        candidates = (
+            [slot] if slot is not None else list(range(1, max_shared_slot + 1))
+        )
+        for candidate in candidates:
+            assert candidate is not None
+            candidate_handles: list[TextIO] = []
+            try:
+                for lane_name in lane_names:
+                    lock_path = db_path.with_suffix(
+                        f".worker.{lane_name}.{candidate}.lock"
+                    )
+                    handle = lock_path.open("a+", encoding="utf-8")
+                    try:
+                        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    except BlockingIOError:
+                        handle.close()
+                        raise
+                    candidate_handles.append(handle)
+            except BlockingIOError:
+                _unlock(candidate_handles)
+                continue
+            selected_slot = candidate
+            slot_handles = candidate_handles
+            break
+
+        if selected_slot is None:
+            label = lane_value or "all"
+            raise RuntimeError(
+                f"No free {label} worker slots (configured capacity={max_shared_slot})."
+            )
+        for handle in slot_handles:
             handle.seek(0)
             handle.truncate()
             handle.write(str(os.getpid()))
             handle.flush()
-        yield
+        yield WorkerLease(tuple(lane_names), selected_slot)
     finally:
-        for handle in reversed(handles):
-            try:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-            finally:
-                handle.close()
+        _unlock(slot_handles)
+        _unlock(legacy_guards)
 
 
 def run_loop(
@@ -585,8 +661,13 @@ def run_loop(
     once: bool = False,
     interval: float = 1.0,
     queue_lane: JobQueueLane | str | None = None,
+    slot: int | None = None,
 ) -> None:
-    with worker_process_lock(queue_lane):
+    with worker_process_lock(queue_lane, slot=slot) as lease:
+        print(
+            f"SynthPost worker started: lanes={','.join(lease.lanes)} slot={lease.slot}",
+            flush=True,
+        )
         repository = get_repository()
         try:
             recovered = recover_stale_jobs(repository, queue_lane)
@@ -625,13 +706,22 @@ def main() -> None:
         default="all",
         help="Consume one independent queue lane, or all lanes for compatibility.",
     )
+    parser.add_argument(
+        "--slot",
+        type=int,
+        help="Explicit 1-based worker slot. Omit to lease the first free slot.",
+    )
     args = parser.parse_args()
     run_loop(
         once=args.once,
         interval=args.interval,
         queue_lane=None if args.lane == "all" else args.lane,
+        slot=args.slot,
     )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("SynthPost worker stopped.", flush=True)

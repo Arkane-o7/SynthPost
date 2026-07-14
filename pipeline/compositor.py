@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -104,9 +105,19 @@ def render_story(
     if test_mode:
         print("[TEST_MODE] WARNING: Remotion composition is using TEST_MODE inputs.")
     print(safe_text(f"[compositor] Running Remotion renderer: {' '.join(command)}"))
+    environment = os.environ.copy()
+    environment.setdefault(
+        "SYNTHPOST_REMOTION_CONCURRENCY",
+        str(config.get_settings().render.remotion_concurrency),
+    )
     try:
         subprocess.run(
-            command, cwd=remotion_dir, check=True, capture_output=True, text=True
+            command,
+            cwd=remotion_dir,
+            env=environment,
+            check=True,
+            capture_output=True,
+            text=True,
         )
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Remotion render failed with exit code {e.returncode}.\nSTDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}") from e

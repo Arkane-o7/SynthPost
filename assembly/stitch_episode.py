@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import subprocess
 import sys
@@ -78,36 +79,45 @@ def ensure_placeholder_clip(
 ) -> None:
     if path.exists():
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    ffmpeg = config.ffmpeg_binary()
-    command = [
-        ffmpeg,
-        "-hide_banner",
-        "-loglevel",
-        "warning",
-        "-y",
-        "-f",
-        "lavfi",
-        "-i",
-        f"color=c=#050A14:s={width}x{height}:d={duration}",
-        "-f",
-        "lavfi",
-        "-i",
-        f"anullsrc=r=48000:cl=stereo:d={duration}",
-        "-vf",
-        "format=yuv420p",
-        "-shortest",
-        "-r",
-        str(fps),
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        str(path),
-    ]
-    run(command)
+    lock_dir = PROJECT_ROOT / ".synthpost" / "locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = lock_dir / "brand-placeholder.lock"
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        # Another assembly process may have completed it while this process
+        # waited. Only the first process writes the shared brand fallback.
+        if path.exists():
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        ffmpeg = config.ffmpeg_binary()
+        command = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "warning",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            f"color=c=#050A14:s={width}x{height}:d={duration}",
+            "-f",
+            "lavfi",
+            "-i",
+            f"anullsrc=r=48000:cl=stereo:d={duration}",
+            "-vf",
+            "format=yuv420p",
+            "-shortest",
+            "-r",
+            str(fps),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            str(path),
+        ]
+        run(command)
 
 
 def normalize_clip(

@@ -83,17 +83,13 @@ fi
 npm --prefix web run build
 
 api_pid=""
-editorial_worker_pid=""
-media_worker_pid=""
-render_worker_pid=""
+worker_supervisor_pid=""
 cleanup() {
   "${TAILSCALE_CMD[@]}" serve --https=443 off >/dev/null 2>&1 || true
-  [[ -n "$editorial_worker_pid" ]] && kill "$editorial_worker_pid" >/dev/null 2>&1 || true
-  [[ -n "$media_worker_pid" ]] && kill "$media_worker_pid" >/dev/null 2>&1 || true
-  [[ -n "$render_worker_pid" ]] && kill "$render_worker_pid" >/dev/null 2>&1 || true
+  [[ -n "$worker_supervisor_pid" ]] && kill "$worker_supervisor_pid" >/dev/null 2>&1 || true
   [[ -n "$api_pid" ]] && kill "$api_pid" >/dev/null 2>&1 || true
   [[ -n "$tailscaled_pid" ]] && kill "$tailscaled_pid" >/dev/null 2>&1 || true
-  for pid in "$editorial_worker_pid" "$media_worker_pid" "$render_worker_pid" "$api_pid"; do
+  for pid in "$worker_supervisor_pid" "$api_pid"; do
     [[ -n "$pid" ]] && wait "$pid" >/dev/null 2>&1 || true
   done
   rm -rf "$INSTANCE_LOCK_DIR"
@@ -102,21 +98,8 @@ trap cleanup EXIT INT TERM
 
 "${PYTHON_CMD[@]}" -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 &
 api_pid=$!
-start_editorial_worker() {
-  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker --lane editorial &
-  editorial_worker_pid=$!
-}
-start_media_worker() {
-  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker --lane media &
-  media_worker_pid=$!
-}
-start_render_worker() {
-  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker --lane render &
-  render_worker_pid=$!
-}
-start_editorial_worker
-start_media_worker
-start_render_worker
+"${PYTHON_CMD[@]}" -m pipeline.jobs.supervisor &
+worker_supervisor_pid=$!
 
 # Charter migrations and event-cluster rebuilding can take longer than a cold
 # FastAPI import on a mature inbox. Keep the launcher alive for up to a minute
@@ -137,20 +120,10 @@ echo
 echo "Open the HTTPS URL above on your phone. Press Ctrl+C to stop the Studio and remove remote access."
 
 while kill -0 "$api_pid" >/dev/null 2>&1; do
-  if ! kill -0 "$editorial_worker_pid" >/dev/null 2>&1; then
-    wait "$editorial_worker_pid" >/dev/null 2>&1 || true
-    echo "SynthPost editorial worker stopped unexpectedly; restarting it." >&2
-    start_editorial_worker
-  fi
-  if ! kill -0 "$media_worker_pid" >/dev/null 2>&1; then
-    wait "$media_worker_pid" >/dev/null 2>&1 || true
-    echo "SynthPost media worker stopped unexpectedly; restarting it." >&2
-    start_media_worker
-  fi
-  if ! kill -0 "$render_worker_pid" >/dev/null 2>&1; then
-    wait "$render_worker_pid" >/dev/null 2>&1 || true
-    echo "SynthPost render worker stopped unexpectedly; restarting it." >&2
-    start_render_worker
+  if ! kill -0 "$worker_supervisor_pid" >/dev/null 2>&1; then
+    wait "$worker_supervisor_pid" >/dev/null 2>&1 || true
+    echo "SynthPost worker supervisor stopped unexpectedly; stopping Remote Studio." >&2
+    exit 1
   fi
   sleep 2
 done
