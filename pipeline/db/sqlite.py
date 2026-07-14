@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import fcntl
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -52,9 +53,20 @@ def apply_migrations(connection: sqlite3.Connection) -> None:
 
 
 def init_db(path: str | Path | None = None) -> sqlite3.Connection:
-    connection = connect(path)
-    apply_migrations(connection)
-    return connection
+    db_path = database_path(path)
+    # The API and three lane workers can cold-start simultaneously. Serialize
+    # WAL activation and migrations so a fresh database cannot race on schema
+    # creation or schema_migrations inserts.
+    lock_path = db_path.with_suffix(db_path.suffix + ".init.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            connection = connect(db_path)
+            apply_migrations(connection)
+            return connection
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def dumps(data: Any) -> str:

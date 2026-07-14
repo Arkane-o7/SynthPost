@@ -1,10 +1,11 @@
-.PHONY: setup dev backend worker web remote remote-status remote-off test typecheck smoke render-demo searxng-up searxng-down
+.PHONY: setup dev backend worker workers web remote remote-status remote-off test typecheck smoke render-demo searxng-up searxng-down
 
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 DOCKER ?= $(shell command -v docker 2>/dev/null || { test -x /Applications/Docker.app/Contents/Resources/bin/docker && echo /Applications/Docker.app/Contents/Resources/bin/docker; } || echo docker)
 DOCKER_CONTEXT ?=
 DOCKER_CONTEXT_ARG = $(if $(DOCKER_CONTEXT),--context $(DOCKER_CONTEXT),)
+LANE ?= all
 
 $(PYTHON):
 	python3 -m venv $(VENV)
@@ -18,7 +19,12 @@ backend:
 	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765
 
 worker:
-	$(PYTHON) -m pipeline.jobs.worker
+	$(PYTHON) -m pipeline.jobs.worker --lane $(LANE)
+
+workers:
+	$(PYTHON) -m pipeline.jobs.worker --lane editorial & \
+	$(PYTHON) -m pipeline.jobs.worker --lane media & \
+	$(PYTHON) -m pipeline.jobs.worker --lane render & wait
 
 web:
 	npm --prefix web run dev -- --host 127.0.0.1 --port 5173
@@ -30,7 +36,11 @@ searxng-down:
 	$(DOCKER) $(DOCKER_CONTEXT_ARG) compose -f docker-compose.searxng.yml down
 
 dev:
-	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 & $(PYTHON) -m pipeline.jobs.worker & npm --prefix web run dev -- --host 127.0.0.1 --port 5173
+	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 & \
+	$(PYTHON) -m pipeline.jobs.worker --lane editorial & \
+	$(PYTHON) -m pipeline.jobs.worker --lane media & \
+	$(PYTHON) -m pipeline.jobs.worker --lane render & \
+	npm --prefix web run dev -- --host 127.0.0.1 --port 5173
 
 remote:
 	./tools/run_remote_studio.sh
@@ -45,7 +55,7 @@ test:
 	$(PYTHON) -m unittest discover -s tests
 
 typecheck:
-	$(PYTHON) -m py_compile pipeline/models.py pipeline/workflow.py pipeline/db/sqlite.py pipeline/db/repository.py pipeline/discovery/discover.py pipeline/research/extract.py pipeline/llm/providers.py pipeline/scripts/generation.py pipeline/visuals/providers.py pipeline/timeline/templates.py pipeline/timeline/validation.py pipeline/timeline/planner.py pipeline/manifest_builder.py pipeline/api/main.py pipeline/jobs/worker.py pipeline/run_episode.py
+	$(PYTHON) -m py_compile pipeline/models.py pipeline/workflow.py pipeline/db/sqlite.py pipeline/db/repository.py pipeline/discovery/discover.py pipeline/research/extract.py pipeline/llm/providers.py pipeline/scripts/generation.py pipeline/visuals/providers.py pipeline/timeline/templates.py pipeline/timeline/validation.py pipeline/timeline/planner.py pipeline/manifest_builder.py pipeline/api/main.py pipeline/jobs/policy.py pipeline/jobs/worker.py pipeline/run_episode.py
 	npm --prefix compositor/remotion_renderer run typecheck
 	npm --prefix web run typecheck
 

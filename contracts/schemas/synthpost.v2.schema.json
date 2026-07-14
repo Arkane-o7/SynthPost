@@ -34,7 +34,7 @@
     },
     "SourceDefinition": {
       "type": "object",
-      "required": ["source_id", "name", "source_type", "category", "homepage_url", "feed_url", "country", "enabled", "priority", "reliability_score", "custom", "last_checked_at"],
+      "required": ["source_id", "name", "source_type", "category", "homepage_url", "feed_url", "country", "enabled", "priority", "reliability_score", "custom", "last_checked_at", "last_success_at", "last_error", "consecutive_failures", "last_item_count"],
       "properties": {
         "source_id": {"type": "string"},
         "name": {"type": "string"},
@@ -47,12 +47,16 @@
         "priority": {"type": "integer"},
         "reliability_score": {"type": "number"},
         "custom": {"type": "boolean"},
-        "last_checked_at": {"type": ["string", "null"]}
+        "last_checked_at": {"type": ["string", "null"]},
+        "last_success_at": {"type": ["string", "null"]},
+        "last_error": {"type": ["string", "null"]},
+        "consecutive_failures": {"type": "integer"},
+        "last_item_count": {"type": "integer"}
       }
     },
     "StoryCandidate": {
       "type": "object",
-      "required": ["candidate_id", "title", "canonical_url", "source_id", "source_name", "published_at", "author", "category", "summary", "thumbnail_url", "language", "discovered_at", "scores", "editorial_fit", "final_score", "score_reasons", "selection_status", "rejection_reasons", "duplicate_group_id"],
+      "required": ["candidate_id", "title", "canonical_url", "source_id", "source_name", "published_at", "author", "category", "summary", "thumbnail_url", "language", "discovered_at", "scores", "editorial_fit", "final_score", "score_reasons", "selection_status", "rejection_reasons", "duplicate_group_id", "event_cluster_id", "cluster_size", "supporting_sources", "related_candidate_ids", "evidence_score", "assignment_lane", "assignment_summary", "recommended_format", "assignment_confidence"],
       "properties": {
         "candidate_id": {"type": "string"},
         "title": {"type": "string"},
@@ -72,12 +76,21 @@
         "score_reasons": {"type": "array", "items": {"type": "string"}},
         "selection_status": {"type": "string"},
         "rejection_reasons": {"type": "array", "items": {"type": "string"}},
-        "duplicate_group_id": {"type": ["string", "null"]}
+        "duplicate_group_id": {"type": ["string", "null"]},
+        "event_cluster_id": {"type": ["string", "null"]},
+        "cluster_size": {"type": "integer"},
+        "supporting_sources": {"type": "array", "items": {"type": "string"}},
+        "related_candidate_ids": {"type": "array", "items": {"type": "string"}},
+        "evidence_score": {"type": "number"},
+        "assignment_lane": {"type": "string"},
+        "assignment_summary": {"type": "string"},
+        "recommended_format": {"type": "string"},
+        "assignment_confidence": {"type": "number"}
       }
     },
     "EditorialFitAssessment": {
       "type": "object",
-      "required": ["charter_version", "score", "eligible", "primary_topic", "matched_criteria", "strengths", "penalties", "rejection_signals", "india_relevance", "reasons"],
+      "required": ["charter_version", "score", "eligible", "primary_topic", "matched_criteria", "strengths", "penalties", "rejection_signals", "india_relevance", "india_impact", "india_impact_confidence", "reasons"],
       "properties": {
         "charter_version": {"type": "string"},
         "score": {"type": "number"},
@@ -88,6 +101,8 @@
         "penalties": {"type": "array", "items": {"type": "string"}},
         "rejection_signals": {"type": "array", "items": {"type": "string"}},
         "india_relevance": {"type": "number"},
+        "india_impact": {"type": "string"},
+        "india_impact_confidence": {"type": "number"},
         "reasons": {"type": "array", "items": {"type": "string"}}
       }
     },
@@ -175,9 +190,21 @@
         "updated_at": {"type": "string"}
       }
     },
+    "SourceClipCue": {
+      "type": "object",
+      "required": ["duration_seconds", "search_query", "description", "fallback_narration", "speaker", "quote"],
+      "properties": {
+        "duration_seconds": {"type": "number", "minimum": 3, "maximum": 30},
+        "search_query": {"type": "string"},
+        "description": {"type": "string"},
+        "fallback_narration": {"type": "string"},
+        "speaker": {"type": "string"},
+        "quote": {"type": "string"}
+      }
+    },
     "ScriptSection": {
       "type": "object",
-      "required": ["section_id", "section_type", "text", "estimated_duration_seconds", "claim_ids", "suggested_visual_types", "suggested_search_queries", "suggested_template_ids", "lower_third", "chyron", "headline_cues", "editorial_notes", "approval_status"],
+      "required": ["section_id", "section_type", "text", "estimated_duration_seconds", "claim_ids", "suggested_visual_types", "suggested_search_queries", "suggested_template_ids", "lower_third", "chyron", "headline_cues", "source_clip", "editorial_notes", "approval_status"],
       "properties": {
         "section_id": {"type": "string"},
         "section_type": {"enum": ["cold_open", "intro", "context", "key_developments", "why_it_matters", "stakes", "uncertainty", "conclusion", "outro"]},
@@ -190,6 +217,7 @@
         "lower_third": {"type": "string", "maxLength": 80},
         "chyron": {"type": "string", "maxLength": 64},
         "headline_cues": {"type": "array", "items": {"type": "string", "maxLength": 80}},
+        "source_clip": {"anyOf": [{"$ref": "#/$defs/SourceClipCue"}, {"type": "null"}]},
         "editorial_notes": {"type": "array"},
         "approval_status": {"type": "string"}
       }
@@ -269,12 +297,13 @@
     },
     "RenderJob": {
       "type": "object",
-      "required": ["job_id", "episode_id", "story_id", "job_type", "render_profile", "status", "progress", "stage", "started_at", "completed_at", "output_paths", "log_path", "error"],
+      "required": ["job_id", "episode_id", "story_id", "job_type", "queue_lane", "render_profile", "status", "progress", "stage", "started_at", "completed_at", "output_paths", "log_path", "error", "attempts", "max_attempts", "available_at", "last_attempt_at", "last_error", "failure_kind"],
       "properties": {
         "job_id": {"type": "string"},
         "episode_id": {"type": ["string", "null"]},
         "story_id": {"type": ["string", "null"]},
         "job_type": {"type": "string"},
+        "queue_lane": {"enum": ["editorial", "media", "render"]},
         "render_profile": {"type": "string"},
         "status": {"enum": ["queued", "paused", "running", "completed", "failed", "cancelled"]},
         "progress": {"type": "number"},
@@ -283,7 +312,13 @@
         "completed_at": {"type": ["string", "null"]},
         "output_paths": {"type": "object"},
         "log_path": {"type": ["string", "null"]},
-        "error": {"type": ["string", "null"]}
+        "error": {"type": ["string", "null"]},
+        "attempts": {"type": "integer", "minimum": 0},
+        "max_attempts": {"type": "integer", "minimum": 1},
+        "available_at": {"type": ["string", "null"]},
+        "last_attempt_at": {"type": ["string", "null"]},
+        "last_error": {"type": ["string", "null"]},
+        "failure_kind": {"type": ["string", "null"]}
       }
     },
     "GenerationAudit": {

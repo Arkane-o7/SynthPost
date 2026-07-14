@@ -252,6 +252,19 @@ const SectionVisualRow: React.FC<{
           <div className="visual-section-kicker">{sectionLabel(section.section_type)}</div>
           <h3>{section.text}</h3>
         </div>
+        {section.source_clip && (
+          <div className="visual-source-clip-cue">
+            <span>
+              Primary-source B-roll target ·{" "}
+              {Math.round(section.source_clip.duration_seconds)}s
+            </span>
+            <strong>
+              {section.source_clip.speaker || "Primary source"}:{" "}
+              {section.source_clip.description}
+            </strong>
+            <small>{section.source_clip.search_query}</small>
+          </div>
+        )}
         <div className="visual-lower-third">
           <span>Timed lower thirds · {headlineCues.length}</span>
           <div className="visual-headline-cues">

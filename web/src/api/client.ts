@@ -120,6 +120,9 @@ export const api = {
       status?: string;
       category?: string;
       search?: string;
+      lane?: string;
+      includeDuplicates?: boolean;
+      includeExpired?: boolean;
     } = {},
   ) => {
     const query = new URLSearchParams();
@@ -127,6 +130,9 @@ export const api = {
     if (params.status) query.set("status", params.status);
     if (params.category) query.set("category", params.category);
     if (params.search) query.set("search", params.search);
+    if (params.lane) query.set("lane", params.lane);
+    if (params.includeDuplicates) query.set("include_duplicates", "true");
+    if (params.includeExpired) query.set("include_expired", "true");
     return request<StoryCandidate[]>(
       `/api/discovery/candidates${query.toString() ? `?${query}` : ""}`,
     );

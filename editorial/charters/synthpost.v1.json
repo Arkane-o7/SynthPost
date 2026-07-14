@@ -1,7 +1,7 @@
 {
   "charter_id": "synthpost",
-  "version": "1.1.0",
-  "effective_date": "2026-07-12",
+  "version": "1.2.1",
+  "effective_date": "2026-07-13",
   "editorial_promise": "SynthPost explains the systems shaping India's future—and India's place in the world.",
   "positioning": "A premium, India-first visual explainer publication about technology, science, infrastructure, business, internet culture, policy and power.",
   "lens": "Explain where technology meets people, institutions, money, internet culture and power.",
@@ -73,7 +73,9 @@
       "local_crime_or_accident": ["murder", "murdered", "killed", "rape", "robbery", "road accident", "crime", "arrested for", "police complaint", "missing person"],
       "ceremonial_or_personnel": ["inaugurates", "inaugurated", "foundation stone", "flagged off", "named head of", "appointed as", "takes charge", "felicitates", "attends event", "birthday", "anniversary"],
       "local_political_churn": ["chief minister said", "cm said", "slams", "hits out", "demands apology", "reacts to remarks", "party spokesperson", "campaign rally", "assembly bypoll"],
-      "institutional_housekeeping": ["court complex", "bar room", "transferred judge", "administrative reshuffle", "department chair", "university appointment"]
+      "institutional_housekeeping": ["court complex", "bar room", "transferred judge", "administrative reshuffle", "department chair", "university appointment"],
+      "product_fluff_or_personalities": ["best gadget", "best phone", "second car", "smart glasses", "celebrity wears", "celebrity uses", "hands-on review", "first look", "not sexy"],
+      "corporate_pr_without_consequence": ["showcase", "gathered at", "brand campaign", "customer event", "leadership summit", "wins award"]
     }
   },
   "eligibility_criteria": [
@@ -93,7 +95,7 @@
     "hiring": ["is hiring", "we're hiring", "job opening", "apply now", "vacancy"],
     "celebrity": ["celebrity", "bollywood", "actor", "actress", "dating", "wedding", "box office", "red carpet"],
     "routine_politics": ["slams", "hits out", "demands apology", "reacts to remarks", "party spokesperson", "campaign rally"],
-    "routine_announcement": ["press release", "sponsored", "announces partnership", "signs mou", "launches campaign", "hosts event", "webinar", "meetup", "conference registration"],
+    "routine_announcement": ["press release", "sponsored", "announces partnership", "expanded partnership", "partnership with", "signs mou", "to train", "training programme", "certification program", "launches campaign", "hosts event", "webinar", "meetup", "conference registration"],
     "empty_breaking_churn": ["breaking:", "live:", "latest updates", "minute-by-minute"]
   },
   "research_lens": [

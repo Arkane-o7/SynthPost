@@ -7,16 +7,18 @@ import re
 import shutil
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.error import URLError
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 import feedparser
 
+from pipeline import config
 from pipeline.models import (
     SourceDefinition,
     SourceType,
@@ -26,6 +28,7 @@ from pipeline.models import (
     now_iso,
 )
 from pipeline.editorial.charter import CHARTER_VERSION, assess_editorial_fit
+from pipeline.discovery.assignment_desk import apply_assignment_desk
 from pipeline.storage import PROJECT_ROOT
 
 CACHE_DIR = PROJECT_ROOT / ".synthpost" / "cache" / "feeds"
@@ -202,7 +205,15 @@ def score_candidate(
         1.0, 0.35 + sum(1 for term in importance_terms if term in text) * 0.075
     )
     freshness = freshness_score(published_at)
-    public_interest = min(1.0, 0.35 + len(title.split()) / 22)
+    consequence_terms = [
+        "users", "workers", "jobs", "prices", "cost", "investment",
+        "capacity", "supply chain", "regulation", "ban", "security",
+        "public", "industry", "market", "infrastructure", "trade",
+    ]
+    public_interest = min(
+        1.0,
+        0.25 + sum(1 for term in consequence_terms if term in text) * 0.085,
+    )
     visual = visual_potential(title, summary)
     explain = explainability(title, summary)
     reliability = max(0.0, min(1.0, source.reliability_score))
@@ -232,7 +243,8 @@ def score_candidate(
         getattr(scores, key) * weight for key, weight in weights.items()
     )
     editorial_fit = assess_editorial_fit(source, title, summary)
-    final = signal_score * 0.32 + editorial_fit.score * 0.68
+    priority = max(0.0, min(1.0, source.priority / 100.0))
+    final = signal_score * 0.29 + editorial_fit.score * 0.66 + priority * 0.05
     if not editorial_fit.eligible:
         final = min(final, 0.39 if not editorial_fit.rejection_signals else 0.18)
     reasons = [
@@ -390,33 +402,62 @@ def discover(
     episode_id: str | None = None,
     category: str | None = None,
     limit_per_source: int = 20,
+    progress_callback: Callable[[float, str], None] | None = None,
 ) -> list[StoryCandidate]:
-    seen_groups: set[str] = set()
     candidates: list[StoryCandidate] = []
     sources = repository.list_sources(enabled=True, category=category)
     if category and not sources:
         sources = repository.list_sources(enabled=True)
-    for source in sources:
-        try:
-            found = discover_from_source(source, seen_groups=seen_groups)[
-                :limit_per_source
-            ]
-        except Exception as exc:
-            found = []
-        for candidate in found:
-            candidate.episode_id = episode_id
-            repository.upsert_candidate(candidate)
-            candidates.append(candidate)
-        source.last_checked_at = now_iso()
-        repository.upsert_source(source)
-    return sorted(candidates, key=lambda item: item.final_score, reverse=True)
+    if not sources:
+        return []
+
+    max_workers = max(
+        1,
+        min(len(sources), int(config.env_float("SYNTHPOST_DISCOVERY_WORKERS", 6))),
+    )
+    completed = 0
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="feed") as executor:
+        futures = {
+            executor.submit(discover_from_source, source, seen_groups=set()): source
+            for source in sources
+        }
+        for future in as_completed(futures):
+            source = futures[future]
+            try:
+                found = future.result()[:limit_per_source]
+            except Exception as exc:
+                found = []
+                source.last_error = str(exc)[:500]
+                source.consecutive_failures += 1
+                source.last_item_count = 0
+            else:
+                source.last_success_at = now_iso()
+                source.last_error = None if found else "Feed returned no usable entries"
+                source.consecutive_failures = 0 if found else source.consecutive_failures + 1
+                source.last_item_count = len(found)
+            for candidate in found:
+                candidate.episode_id = episode_id
+                candidates.append(candidate)
+            source.last_checked_at = now_iso()
+            repository.upsert_source(source)
+            completed += 1
+            if progress_callback:
+                progress_callback(
+                    completed / len(sources),
+                    f"checked {completed}/{len(sources)} sources · {len(candidates)} articles",
+                )
+    if progress_callback:
+        progress_callback(1.0, f"clustering and ranking {len(candidates)} articles")
+    return apply_assignment_desk(repository, candidates, use_ai=True)
 
 
 def rescore_existing_candidates(repository) -> int:
     """Apply the current charter to legacy inbox rows after a code upgrade."""
 
     count = 0
-    for candidate in repository.list_candidates(limit=5000):
+    for candidate in repository.list_candidates(
+        limit=5000, include_duplicates=True, include_expired=True
+    ):
         if (
             candidate.editorial_fit.charter_version == CHARTER_VERSION
             and candidate.editorial_fit.reasons

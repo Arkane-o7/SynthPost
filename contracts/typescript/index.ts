@@ -35,6 +35,10 @@ export type SourceDefinition = {
   reliability_score: number;
   custom: boolean;
   last_checked_at: string | null;
+  last_success_at: string | null;
+  last_error: string | null;
+  consecutive_failures: number;
+  last_item_count: number;
 };
 
 export type StoryScores = Record<'importance' | 'freshness' | 'public_interest' | 'visual_potential' | 'explainability' | 'source_reliability' | 'format_suitability' | 'originality', number>;
@@ -49,6 +53,8 @@ export type EditorialFitAssessment = {
   penalties: string[];
   rejection_signals: string[];
   india_relevance: number;
+  india_impact: string;
+  india_impact_confidence: number;
   reasons: string[];
 };
 
@@ -69,9 +75,18 @@ export type StoryCandidate = {
   editorial_fit: EditorialFitAssessment;
   final_score: number;
   score_reasons: string[];
-  selection_status: 'suggested' | 'selected' | 'rejected' | 'duplicate';
+  selection_status: 'suggested' | 'selected' | 'rejected' | 'duplicate' | 'expired';
   rejection_reasons: string[];
   duplicate_group_id: string | null;
+  event_cluster_id: string | null;
+  cluster_size: number;
+  supporting_sources: string[];
+  related_candidate_ids: string[];
+  evidence_score: number;
+  assignment_lane: 'recommended' | 'global_watch' | 'india_watch' | 'rejected' | 'duplicate' | 'expired' | 'unassessed';
+  assignment_summary: string;
+  recommended_format: 'signal' | 'explained' | 'deep_dive' | 'india_builds';
+  assignment_confidence: number;
   episode_id?: string | null;
   story_id?: string | null;
   workflow_state?: string;
@@ -143,6 +158,15 @@ export type ResearchPack = {
   updated_at?: string;
 };
 
+export type SourceClipCue = {
+  duration_seconds: number;
+  search_query: string;
+  description: string;
+  fallback_narration: string;
+  speaker: string;
+  quote: string;
+};
+
 export type ScriptSection = {
   section_id: string;
   section_type: 'cold_open' | 'intro' | 'context' | 'key_developments' | 'why_it_matters' | 'stakes' | 'uncertainty' | 'conclusion' | 'outro';
@@ -155,6 +179,7 @@ export type ScriptSection = {
   lower_third: string;
   chyron: string;
   headline_cues: string[];
+  source_clip: SourceClipCue | null;
   editorial_notes: string[];
   approval_status: string;
   locked?: boolean;
@@ -289,6 +314,7 @@ export type RenderJob = {
   episode_id: string | null;
   story_id: string | null;
   job_type: string;
+  queue_lane: 'editorial' | 'media' | 'render';
   render_profile: string;
   status: 'queued' | 'paused' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress: number;
@@ -300,6 +326,12 @@ export type RenderJob = {
   error: string | null;
   traceback?: string | null;
   payload?: Record<string, unknown>;
+  attempts: number;
+  max_attempts: number;
+  available_at: string | null;
+  last_attempt_at: string | null;
+  last_error: string | null;
+  failure_kind: string | null;
   created_at?: string;
   updated_at?: string;
 };

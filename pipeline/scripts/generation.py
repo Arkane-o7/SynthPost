@@ -24,6 +24,7 @@ from pipeline.models import (
     ScriptDocument,
     ScriptSection,
     ScriptStatus,
+    SourceClipCue,
     StoryWorkflowState,
     new_id,
     now_iso,
@@ -44,8 +45,8 @@ SECTION_ORDER = [
     "outro",
 ]
 
-SCRIPT_PROMPT_VERSION = "synthpost.script.v4"
-LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v3"
+SCRIPT_PROMPT_VERSION = "synthpost.script.v5"
+LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v4"
 HEADLINE_PROMPT_VERSION = "synthpost.headline-editor.v2"
 
 
@@ -213,6 +214,53 @@ def estimate_duration(text: str) -> float:
     return round(max(3.0, words / config.words_per_minute() * 60.0), 2)
 
 
+def source_clip_schema() -> dict[str, Any]:
+    return {
+        "anyOf": [
+            {
+                "type": "object",
+                "required": [
+                    "duration_seconds",
+                    "search_query",
+                    "description",
+                    "fallback_narration",
+                    "speaker",
+                    "quote",
+                ],
+                "properties": {
+                    "duration_seconds": {
+                        "type": "number",
+                        "minimum": 3,
+                        "maximum": 30,
+                    },
+                    "search_query": {"type": "string"},
+                    "description": {"type": "string"},
+                    "fallback_narration": {"type": "string"},
+                    "speaker": {"type": "string"},
+                    "quote": {"type": "string"},
+                },
+            },
+            {"type": "null"},
+        ]
+    }
+
+
+def source_clip_from_raw(value: Any) -> SourceClipCue | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("source_clip must be an object or null")
+    return SourceClipCue.model_validate(value)
+
+
+def section_total_duration(text: str, source_clip: SourceClipCue | None) -> float:
+    return round(
+        estimate_duration(text)
+        + (source_clip.duration_seconds if source_clip is not None else 0.0),
+        2,
+    )
+
+
 def section_id(section_type: str, index: int) -> str:
     return f"sec_{index:03d}_{section_type}"
 
@@ -283,6 +331,7 @@ def script_schema() -> dict[str, Any]:
                         "lower_third",
                         "chyron",
                         "headline_cues",
+                        "source_clip",
                     ],
                     "properties": {
                         "section_type": {"type": "string"},
@@ -294,6 +343,7 @@ def script_schema() -> dict[str, Any]:
                             "type": "array",
                             "items": {"type": "string"},
                         },
+                        "source_clip": source_clip_schema(),
                         "suggested_visual_types": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -340,29 +390,54 @@ def script_from_llm_json(
         used_claim_ids = [
             claim_id for claim_id in item.get("claim_ids", []) if claim_id in claim_ids
         ]
+        source_clip = (
+            source_clip_from_raw(item.get("source_clip"))
+            if config.source_audio_inserts_enabled()
+            else None
+        )
+        if source_clip is not None and not used_claim_ids:
+            raise ValueError("source_clip sections require at least one valid claim_id")
+        suggested_visual_types = [
+            str(value)
+            for value in item.get("suggested_visual_types", ["context"])
+        ]
+        suggested_search_queries = [
+            str(value)
+            for value in item.get(
+                "suggested_search_queries", [raw.get("headline", "")]
+            )
+        ]
+        suggested_template_ids = [
+            str(value)
+            for value in item.get(
+                "suggested_template_ids", ["split_anchor_visual"]
+            )
+        ]
+        if source_clip is not None:
+            suggested_visual_types = list(
+                dict.fromkeys(
+                    ["video", "primary_footage", "source_audio"]
+                    + suggested_visual_types
+                )
+            )
+            suggested_search_queries = list(
+                dict.fromkeys(suggested_search_queries[:1] + [source_clip.search_query])
+            )
+            suggested_template_ids = list(
+                dict.fromkeys(
+                    suggested_template_ids + ["fullscreen_news_visual"]
+                )
+            )
         sections.append(
             ScriptSection(
                 section_id=section_id(section_type, index),
                 section_type=section_type,  # type: ignore[arg-type]
                 text=text,
-                estimated_duration_seconds=estimate_duration(text),
+                estimated_duration_seconds=section_total_duration(text, source_clip),
                 claim_ids=used_claim_ids,
-                suggested_visual_types=[
-                    str(value)
-                    for value in item.get("suggested_visual_types", ["context"])
-                ],
-                suggested_search_queries=[
-                    str(value)
-                    for value in item.get(
-                        "suggested_search_queries", [raw.get("headline", "")]
-                    )
-                ],
-                suggested_template_ids=[
-                    str(value)
-                    for value in item.get(
-                        "suggested_template_ids", ["split_anchor_visual"]
-                    )
-                ],
+                suggested_visual_types=suggested_visual_types,
+                suggested_search_queries=suggested_search_queries,
+                suggested_template_ids=suggested_template_ids,
                 lower_third=(
                     lower_third[:80]
                     or section_overlay_text(text, section_type, max_chars=80)
@@ -374,12 +449,15 @@ def script_from_llm_json(
                 headline_cues=normalize_section_headline_cues(
                     text, section_type, headline_cues
                 ),
+                source_clip=source_clip,
                 editorial_notes=[],
                 approval_status=ApprovalStatus.review,
             )
         )
     if not sections:
         raise ValueError("LLM returned no script sections")
+    if sum(section.source_clip is not None for section in sections) > 4:
+        raise ValueError("script may contain at most four source_clip inserts")
     script = ScriptDocument(
         story_id=story_id,
         headline=str(raw.get("headline") or "SynthPost Briefing"),
@@ -424,6 +502,33 @@ def generation_prompt(
         primary_topic=primary_topic,
     )
     editorial_context = charter_prompt_context(show_format=show_format)
+    source_clip_instructions = (
+        """
+For each section return source_clip as either null or a structured primary-source
+audio insert. Use a source_clip only when hearing the real person, exchange,
+demonstration, announcement, or event audio materially improves the explanation
+and the supplied evidence supports that exact moment. It is not ordinary B-roll.
+When used:
+- the section text must naturally set up the clip before it plays;
+- duration_seconds must be 3-15 seconds in most cases, never more than 30;
+- search_query must identify the exact person/event/location and seek the
+  original official video, speech, hearing, press conference, demo, or raw feed;
+- description must state what viewers need to see and hear;
+- quote must contain only a verified expected excerpt, or be an empty string;
+- speaker must name the verified speaker, or be an empty string;
+- fallback_narration must communicate the same supported point naturally if no
+  usable audible clip is found. Do not write "as you can see" or promise a clip.
+Use these inserts sparingly: normally zero to two in a short explainer and no
+more than four in a long programme. Reduce spoken narration to keep insert time
+inside the requested total runtime.
+""".strip()
+        if config.source_audio_inserts_enabled()
+        else """
+Source-audio inserts are disabled for production. Return source_clip as null for
+every section. External videos are muted B-roll and the anchor narration must
+remain continuous; never write a sentence that promises an upcoming audible clip.
+""".strip()
+    )
     return f"""
 You are SynthPost Studio's senior newsroom writer. Create a grounded, visual-first section-based news script.
 
@@ -455,6 +560,7 @@ headline or reuse the same overlay across sections.
 Also return headline_cues in spoken order: one concise headline for every
 sentence or major clause in the section narration. Each cue must describe the
 specific beat being spoken, not the template, visual, or overall episode.
+{source_clip_instructions}
 For every section, return exactly two suggested_search_queries grounded in its linked claims:
 1. A still-image, diagram, or map query using concrete people, places, objects, and events.
 2. A primary-source video query using the exact event/person/location plus "official video", "raw footage", "B-roll", or "press footage". Do not request finished news coverage or broadcaster packages.
@@ -505,6 +611,7 @@ def _long_form_section_schema() -> dict[str, Any]:
             "suggested_visual_types",
             "suggested_search_queries",
             "suggested_template_ids",
+            "source_clip",
         ],
         "properties": {
             "text": {"type": "string"},
@@ -527,6 +634,7 @@ def _long_form_section_schema() -> dict[str, Any]:
                 "type": "array",
                 "items": {"type": "string"},
             },
+            "source_clip": source_clip_schema(),
         },
     }
 
@@ -557,9 +665,23 @@ def _validate_long_form_section(
     valid_claim_ids: set[str],
 ) -> ScriptSection:
     text = " ".join(str(raw.get("text") or "").split()).strip()
+    source_clip = (
+        source_clip_from_raw(raw.get("source_clip"))
+        if config.source_audio_inserts_enabled()
+        else None
+    )
     word_count = len(text.split())
-    lower = max(16, min(target_words, round(target_words * 0.55)))
-    upper = round(target_words * 1.55)
+    clip_words = (
+        round(source_clip.duration_seconds * config.words_per_minute() / 60.0)
+        if source_clip is not None
+        else 0
+    )
+    narration_target_words = max(16, target_words - clip_words)
+    lower = max(
+        16,
+        min(narration_target_words, round(narration_target_words * 0.55)),
+    )
+    upper = round(narration_target_words * 1.55)
     if word_count < lower or word_count > upper:
         raise ValueError(
             f"{section_type} must contain {lower}-{upper} words; got {word_count}"
@@ -584,23 +706,33 @@ def _validate_long_form_section(
         ]
     elif len(queries) == 1:
         queries.append(f"{queries[0]} official video")
+    suggested_visual_types = [
+        str(value) for value in raw.get("suggested_visual_types", ["context"])
+    ]
+    suggested_template_ids = [
+        str(value)
+        for value in raw.get("suggested_template_ids", ["split_anchor_visual"])
+    ]
+    if source_clip is not None:
+        suggested_visual_types = list(
+            dict.fromkeys(
+                ["video", "primary_footage", "source_audio"]
+                + suggested_visual_types
+            )
+        )
+        queries = list(dict.fromkeys(queries[:1] + [source_clip.search_query]))
+        suggested_template_ids = list(
+            dict.fromkeys(suggested_template_ids + ["fullscreen_news_visual"])
+        )
     return ScriptSection(
         section_id=section_id(section_type, index),
         section_type=section_type,  # type: ignore[arg-type]
         text=text,
-        estimated_duration_seconds=estimate_duration(text),
+        estimated_duration_seconds=section_total_duration(text, source_clip),
         claim_ids=list(dict.fromkeys(claim_ids)),
-        suggested_visual_types=[
-            str(value)
-            for value in raw.get("suggested_visual_types", ["context"])
-        ],
+        suggested_visual_types=suggested_visual_types,
         suggested_search_queries=queries,
-        suggested_template_ids=[
-            str(value)
-            for value in raw.get(
-                "suggested_template_ids", ["split_anchor_visual"]
-            )
-        ],
+        suggested_template_ids=suggested_template_ids,
         lower_third=(
             str(raw.get("lower_third") or "").strip()[:80]
             or section_overlay_text(text, section_type, max_chars=80)
@@ -618,6 +750,7 @@ def _validate_long_form_section(
                 if str(value).strip()
             ],
         ),
+        source_clip=source_clip,
         approval_status=ApprovalStatus.review,
     )
 
@@ -641,6 +774,18 @@ def expand_long_form_script(
     }
     sections: list[ScriptSection] = []
     attempt_count = 0
+    source_clip_instruction = (
+        """Return source_clip as null unless the evidence supports a specific
+original audio moment that deserves to interrupt narration. When present, the
+section text must set it up; provide its exact source-oriented search query,
+intended speaker/verified quote when known, 3-30 second duration, editorial
+description, and natural fallback_narration. The source clip duration is part
+of this section's time budget, so reduce spoken words accordingly."""
+        if config.source_audio_inserts_enabled()
+        else """Source-audio inserts are disabled for production. Return
+source_clip as null. Treat every external video as muted B-roll and write
+continuous anchor narration without promising an audible clip."""
+    )
     for index, (section_type, target_words) in enumerate(targets.items(), start=1):
         base = _long_form_base_section(outline, section_type)
         payload = {
@@ -672,6 +817,7 @@ Return a lower_third of at most 80 characters and a chyron of at most 64
 characters that specifically summarize this section rather than the episode.
 Return headline_cues in spoken order, with one concise headline for each
 sentence or major clause in the narration.
+{source_clip_instruction}
 
 Return only JSON matching this schema:
 {json.dumps(_long_form_section_schema())}
@@ -1243,7 +1389,18 @@ def save_manual_script(
             edited.suggested_visual_types = list(original.suggested_visual_types)
             edited.suggested_search_queries = list(original.suggested_search_queries)
             edited.suggested_template_ids = list(original.suggested_template_ids)
+            edited.source_clip = (
+                original.source_clip.model_copy(deep=True)
+                if original.source_clip and config.source_audio_inserts_enabled()
+                else None
+            )
+            edited.estimated_duration_seconds = section_total_duration(
+                edited.text, edited.source_clip
+            )
             edited.editorial_notes = list(original.editorial_notes)
+        script.estimated_duration_seconds = round(
+            sum(section.estimated_duration_seconds for section in script.sections), 2
+        )
     saved = repository.save_script(script)
     candidate = repository.candidate_for_story(story_id)
     if candidate.workflow_state in {

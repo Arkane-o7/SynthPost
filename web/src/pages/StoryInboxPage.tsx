@@ -6,7 +6,7 @@ import { EmptyState } from "../components/EmptyState";
 import { scorePercent, relativeTime } from "../lib/formatters";
 
 type InboxTab = "candidates" | "custom";
-type FitFilter = "charter" | "off_charter" | "all";
+type DeskFilter = "recommended" | "global_watch" | "rejected" | "all";
 
 export const StoryInboxPage: React.FC<{
   onStorySelected?: () => void;
@@ -15,7 +15,7 @@ export const StoryInboxPage: React.FC<{
   const [tab, setTab] = React.useState<InboxTab>("candidates");
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
-  const [fitFilter, setFitFilter] = React.useState<FitFilter>("charter");
+  const [deskFilter, setDeskFilter] = React.useState<DeskFilter>("all");
   const [busy, setBusy] = React.useState(false);
 
   // Custom story form state
@@ -27,22 +27,22 @@ export const StoryInboxPage: React.FC<{
     if (search && !c.title.toLowerCase().includes(search.toLowerCase()))
       return false;
     if (statusFilter && c.selection_status !== statusFilter) return false;
-    const assessed = c.editorial_fit?.reasons?.length > 0;
-    if (fitFilter === "charter" && assessed && !c.editorial_fit.eligible)
-      return false;
-    if (fitFilter === "off_charter" && (!assessed || c.editorial_fit.eligible))
-      return false;
+    const lane = c.assignment_lane || (c.editorial_fit?.eligible ? "recommended" : "rejected");
+    if (deskFilter !== "all" && lane !== deskFilter) return false;
     return true;
   });
 
   const suggestedCount = studio.candidates.filter(
     (c) => c.selection_status === "suggested",
   ).length;
-  const charterCount = studio.candidates.filter(
-    (c) => c.editorial_fit?.eligible,
+  const recommendedCount = studio.candidates.filter(
+    (c) => c.assignment_lane === "recommended" || (!c.assignment_lane && c.editorial_fit?.eligible),
   ).length;
-  const offCharterCount = studio.candidates.filter(
-    (c) => c.editorial_fit?.reasons?.length && !c.editorial_fit.eligible,
+  const globalWatchCount = studio.candidates.filter(
+    (c) => c.assignment_lane === "global_watch",
+  ).length;
+  const filteredCount = studio.candidates.filter(
+    (c) => c.assignment_lane === "rejected",
   ).length;
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -96,7 +96,7 @@ export const StoryInboxPage: React.FC<{
 
       <section className="editorial-charter-strip">
         <div>
-          <span className="editorial-charter-kicker">Global assignment desk · charter v1.1</span>
+          <span className="editorial-charter-kicker">Global assignment desk · charter v1.2</span>
           <strong>Global shifts. India consequences.</strong>
           <p>
             Technology, AI, science, business, infrastructure and geopolitical power—selected
@@ -105,8 +105,9 @@ export const StoryInboxPage: React.FC<{
           </p>
         </div>
         <div className="editorial-charter-counts" aria-label="Editorial fit summary">
-          <span><b>{charterCount}</b> on charter</span>
-          <span><b>{offCharterCount}</b> filtered out</span>
+          <span><b>{recommendedCount}</b> recommended</span>
+          <span><b>{globalWatchCount}</b> global watch</span>
+          <span><b>{filteredCount}</b> filtered out</span>
         </div>
       </section>
 
@@ -127,13 +128,14 @@ export const StoryInboxPage: React.FC<{
           <option value="rejected">Rejected</option>
         </select>
         <select
-          value={fitFilter}
-          aria-label="Editorial fit"
-          onChange={(e) => setFitFilter(e.target.value as FitFilter)}
+          value={deskFilter}
+          aria-label="Assignment desk lane"
+          onChange={(e) => setDeskFilter(e.target.value as DeskFilter)}
         >
-          <option value="charter">On-charter first</option>
-          <option value="off_charter">Off-charter review</option>
-          <option value="all">All editorial states</option>
+          <option value="recommended">Recommended</option>
+          <option value="global_watch">Global watch</option>
+          <option value="rejected">Filtered out</option>
+          <option value="all">All desk lanes</option>
         </select>
       </div>
 
@@ -165,9 +167,8 @@ export const StoryInboxPage: React.FC<{
           ) : (
             candidates.map((c) => {
               const hasFit = Boolean(c.editorial_fit?.reasons?.length);
-              const pct = scorePercent(
-                hasFit ? c.editorial_fit.score : c.final_score,
-              );
+              const pct = scorePercent(c.final_score);
+              const lane = c.assignment_lane || (c.editorial_fit?.eligible ? "recommended" : "rejected");
               const isSelected = c.selection_status === "selected";
               const isActive =
                 isSelected && c.story_id === studio.selectedStoryId;
@@ -176,7 +177,7 @@ export const StoryInboxPage: React.FC<{
               return (
                 <div
                   key={c.candidate_id}
-                  className={`story-card editorial-story-card ${isActive ? "story-selected" : ""} ${isRejected ? "story-rejected" : ""} ${hasFit && !c.editorial_fit.eligible ? "story-off-charter" : ""}`}
+                  className={`story-card editorial-story-card ${isActive ? "story-selected" : ""} ${isRejected ? "story-rejected" : ""} ${lane === "rejected" ? "story-off-charter" : ""}`}
                 >
                   {/* Score circle */}
                   <div
@@ -189,18 +190,16 @@ export const StoryInboxPage: React.FC<{
                     }`}
                   >
                     <span>{pct}</span>
-                    <small>{hasFit ? "fit" : "rank"}</small>
+                    <small>desk</small>
                   </div>
 
                   {/* Content */}
                   <div className="stack" style={{ gap: 8 }}>
                     <div className="editorial-story-heading">
                       <strong>{c.title}</strong>
-                      {hasFit && (
-                        <span className={c.editorial_fit.eligible ? "fit-verdict fit-verdict-on" : "fit-verdict fit-verdict-off"}>
-                          {c.editorial_fit.eligible ? "On charter" : "Off charter"}
-                        </span>
-                      )}
+                      <span className={`fit-verdict desk-lane desk-lane-${lane}`}>
+                        {lane.replace(/_/g, " ")}
+                      </span>
                     </div>
                     <div className="text-muted" style={{ fontSize: 12 }}>
                       {c.source_name} · {c.category} ·{" "}
@@ -209,9 +208,20 @@ export const StoryInboxPage: React.FC<{
                     {hasFit && (
                       <div className="editorial-fit-meta">
                         <span>{c.editorial_fit.primary_topic.replace(/_/g, " ")}</span>
-                        <span>India angle {Math.round(c.editorial_fit.india_relevance * 100)}%</span>
+                        <span>India impact confidence {Math.round(c.editorial_fit.india_impact_confidence * 100)}%</span>
+                        <span>{c.cluster_size} article{c.cluster_size === 1 ? "" : "s"} · {c.supporting_sources.length || 1} source{(c.supporting_sources.length || 1) === 1 ? "" : "s"}</span>
+                        <span>Evidence {Math.round(c.evidence_score * 100)}%</span>
+                        <span>{c.recommended_format.replace(/_/g, " ")}</span>
                         <span>Charter {c.editorial_fit.charter_version}</span>
                       </div>
+                    )}
+                    {c.editorial_fit?.india_impact && (
+                      <p className="assignment-india-impact">
+                        <strong>India consequence to verify:</strong> {c.editorial_fit.india_impact}
+                      </p>
+                    )}
+                    {c.assignment_summary && (
+                      <p className="assignment-desk-summary">{c.assignment_summary}</p>
                     )}
                     {c.summary && (
                       <p className="text-muted" style={{ fontSize: 13 }}>
@@ -255,7 +265,7 @@ export const StoryInboxPage: React.FC<{
                               ? "This story is currently open in the Command Center"
                               : isSelected
                                 ? "Switch the Command Center to this selected story"
-                                : hasFit && !c.editorial_fit.eligible
+                                : lane !== "recommended"
                                   ? "Editorial override: select an off-charter story"
                                   : "Select this story for the current episode"
                         }
@@ -265,7 +275,7 @@ export const StoryInboxPage: React.FC<{
                           ? "Current in Command Center"
                           : isSelected
                             ? "Switch to this Story"
-                            : hasFit && !c.editorial_fit.eligible
+                            : lane !== "recommended"
                               ? "Select with Override"
                               : "Select for Episode"}
                       </button>

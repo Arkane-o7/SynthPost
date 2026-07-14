@@ -50,7 +50,7 @@ pipeline/llm/                      Hosted Groq/Gemini structured-generation prov
 pipeline/scripts/                  Script generation/editing/grounding checks
 pipeline/visuals/                  Local + SearXNG visual discovery, download, and rights review
 pipeline/timeline/                 Template registry, timeline generation, validation
-pipeline/jobs/                     SQLite-backed local worker
+pipeline/jobs/                     SQLite-backed queue lanes, workers, and retry policy
 pipeline/api/                      FastAPI backend
 pipeline/manifest_builder.py       Approved Studio state → renderer story.json
 pipeline/run_episode.py            High-level demo/smoke orchestration
@@ -78,16 +78,25 @@ make dev
 This starts:
 
 - FastAPI backend on `http://127.0.0.1:8765`
-- SQLite-backed background worker
+- Three SQLite-backed workers: editorial, media, and render
 - SynthPost Studio Vite app on `http://127.0.0.1:5173`
 
 You can also run services separately:
 
 ```bash
 make backend
-make worker
+make workers
 make web
 ```
+
+The lanes are independent: long avatar/composition jobs cannot block discovery,
+research, scripts, visual acquisition, or timeline work. For debugging, run one
+lane with `make worker LANE=editorial`, `LANE=media`, or `LANE=render`.
+
+Transient rate-limit, timeout, network, and subprocess failures are requeued
+automatically with exponential backoff. The Jobs page shows the queue lane,
+attempt budget, last failure, and scheduled retry. Validation and configuration
+errors fail immediately because they require an editor or setup change.
 
 ## Private phone access
 
@@ -107,7 +116,7 @@ One-time setup:
 make remote
 ```
 
-The command builds the mobile UI, starts FastAPI and the worker on localhost,
+The command builds the mobile UI, starts FastAPI and all three workers on localhost,
 and prints a private HTTPS `*.ts.net` address. Open that address on the phone.
 Press Ctrl+C to stop the services and remove the Serve mapping. You can inspect
 or disable the mapping separately with `make remote-status` and

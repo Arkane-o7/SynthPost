@@ -332,6 +332,11 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 {Math.round(sec.estimated_duration_seconds)}s ·{" "}
                 {sec.approval_status}
               </div>
+              {sec.source_clip && (
+                <span className="source-clip-badge">
+                  Primary-source video · {Math.round(sec.source_clip.duration_seconds)}s
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -359,6 +364,29 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           onChange={(e) => setText(e.target.value)}
           style={{ minHeight: 260 }}
         />
+        {script.sections.some((section) => section.source_clip) && (
+          <div className="source-clip-plan">
+            <div className="source-clip-plan-title">
+              Legacy primary-source visual directions
+            </div>
+            {script.sections
+              .filter((section) => section.source_clip)
+              .map((section) => {
+                const cue = section.source_clip!;
+                return (
+                  <article key={section.section_id}>
+                    <div>
+                      <strong>{cue.speaker || section.section_type}</strong>
+                      <span>{Math.round(cue.duration_seconds)} seconds</span>
+                    </div>
+                    <p>{cue.description}</p>
+                    <code>{cue.search_query}</code>
+                    <small>Narration used in production: {cue.fallback_narration}</small>
+                  </article>
+                );
+              })}
+          </div>
+        )}
         <label style={{ maxWidth: 280 }}>
           Target video length for regenerate
           <div className="row-tight">

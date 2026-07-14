@@ -911,6 +911,48 @@ label {
     background: var(--status-red-bg);
 }
 
+.desk-lane-recommended {
+    border-color: var(--status-green-bd);
+    color: var(--status-green);
+    background: var(--status-green-bg);
+}
+
+.desk-lane-global_watch {
+    border-color: rgba(91, 156, 255, 0.48);
+    color: var(--accent-blue);
+    background: rgba(91, 156, 255, 0.1);
+}
+
+.desk-lane-rejected,
+.desk-lane-expired {
+    border-color: var(--status-red-bd);
+    color: var(--status-red);
+    background: var(--status-red-bg);
+}
+
+.assignment-india-impact,
+.assignment-desk-summary {
+    margin: 0;
+    padding: 9px 11px;
+    border-left: 2px solid rgba(91, 156, 255, 0.62);
+    background: rgba(91, 156, 255, 0.055);
+    color: var(--text-muted);
+    font-size: 11px;
+    line-height: 1.55;
+}
+
+.assignment-india-impact strong {
+    color: var(--text);
+}
+
+.assignment-desk-summary {
+    padding-block: 5px;
+    border-left-color: var(--border);
+    background: transparent;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 9px;
+}
+
 .editorial-fit-meta,
 .editorial-fit-reasons {
     display: flex;
@@ -1312,6 +1354,35 @@ label {
     border-radius: var(--radius-full);
     color: var(--text-faint);
     font-size: 9px;
+}
+
+.visual-source-clip-cue {
+    display: grid;
+    gap: 5px;
+    padding: var(--sp-3);
+    border: 1px solid rgba(255, 187, 56, 0.32);
+    border-left: 3px solid #ffbb38;
+    background: rgba(255, 187, 56, 0.06);
+}
+
+.visual-source-clip-cue span {
+    color: #ffd47c;
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.visual-source-clip-cue strong {
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.visual-source-clip-cue small {
+    color: var(--accent-blue);
+    overflow-wrap: anywhere;
 }
 
 .visual-carousel-shell {
@@ -1964,6 +2035,59 @@ label {
 .section-list button.active {
     background: var(--accent-red-soft);
     border-color: var(--accent-red);
+}
+
+.source-clip-badge {
+    display: inline-flex;
+    margin-top: 5px;
+    padding: 3px 7px;
+    border: 1px solid rgba(255, 187, 56, 0.45);
+    border-radius: var(--radius-full);
+    color: #ffd47c;
+    background: rgba(255, 187, 56, 0.08);
+    font-family: "JetBrains Mono", "SF Mono", monospace;
+    font-size: 9px;
+    text-transform: uppercase;
+}
+
+.source-clip-plan {
+    display: grid;
+    gap: var(--sp-2);
+}
+
+.source-clip-plan-title {
+    color: #ffd47c;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.source-clip-plan article {
+    display: grid;
+    gap: 6px;
+    padding: var(--sp-3);
+    border: 1px solid rgba(255, 187, 56, 0.28);
+    border-left: 3px solid #ffbb38;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 187, 56, 0.055);
+}
+
+.source-clip-plan article > div {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--sp-2);
+}
+
+.source-clip-plan article p,
+.source-clip-plan article small {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.source-clip-plan article code {
+    color: var(--accent-blue);
+    overflow-wrap: anywhere;
 }
 
 /* ── 25. Onboarding cards ────────────────────────────────────── */

@@ -112,7 +112,13 @@ export const SourcesPage: React.FC = () => {
                   </div>
                   {source.last_checked_at && (
                     <div className="text-muted" style={{ fontSize: 11 }}>
-                      Last checked: {relativeTime(source.last_checked_at)}
+                      Last checked: {relativeTime(source.last_checked_at)} · last pull {source.last_item_count} items
+                      {source.last_success_at ? ` · last success ${relativeTime(source.last_success_at)}` : ''}
+                    </div>
+                  )}
+                  {source.last_error && (
+                    <div className="validation-msg validation-warning" style={{ fontSize: 11 }}>
+                      Feed health: {source.consecutive_failures} consecutive failure{source.consecutive_failures === 1 ? '' : 's'} · {source.last_error}
                     </div>
                   )}
                   {testResults[source.source_id] && (

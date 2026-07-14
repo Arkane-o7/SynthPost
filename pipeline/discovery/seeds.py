@@ -9,7 +9,7 @@ SEED_SOURCES: list[SourceDefinition] = [
         source_type=SourceType.rss,
         category="global",
         homepage_url="https://www.reuters.com/",
-        feed_url="https://feeds.reuters.com/reuters/topNews",
+        feed_url="https://news.google.com/rss/search?q=site%3Areuters.com+(technology+OR+AI+OR+chips+OR+energy+OR+trade)&hl=en-IN&gl=IN&ceid=IN:en",
         country="global",
         priority=95,
         reliability_score=0.92,
@@ -20,7 +20,7 @@ SEED_SOURCES: list[SourceDefinition] = [
         source_type=SourceType.rss,
         category="global",
         homepage_url="https://apnews.com/",
-        feed_url="https://apnews.com/hub/ap-top-news?output=1",
+        feed_url="https://news.google.com/rss/search?q=site%3Aapnews.com+(technology+OR+AI+OR+science+OR+energy+OR+business)&hl=en-IN&gl=IN&ceid=IN:en",
         country="us",
         priority=93,
         reliability_score=0.92,
@@ -31,7 +31,7 @@ SEED_SOURCES: list[SourceDefinition] = [
         source_type=SourceType.rss,
         category="global",
         homepage_url="https://www.bbc.com/news/world",
-        feed_url="https://feeds.bbci.co.uk/news/world/rss.xml",
+        feed_url="https://news.google.com/rss/search?q=site%3Abbc.com/news+(technology+OR+AI+OR+science+OR+energy+OR+business)&hl=en-IN&gl=IN&ceid=IN:en",
         country="gb",
         priority=88,
         reliability_score=0.88,
@@ -174,7 +174,7 @@ SEED_SOURCES: list[SourceDefinition] = [
         source_type=SourceType.rss,
         category="energy",
         homepage_url="https://www.iea.org/",
-        feed_url="https://www.iea.org/rss/news.xml",
+        feed_url="https://news.google.com/rss/search?q=site%3Aiea.org+(energy+OR+electricity+OR+oil+OR+gas+OR+renewables)&hl=en-IN&gl=IN&ceid=IN:en",
         country="global",
         priority=82,
         reliability_score=0.9,
@@ -226,6 +226,15 @@ def seed_sources(repository) -> int:
         else:
             # Keep the editor's enable/disable choice while synchronizing the
             # curated desk's section, feed URL, reliability and priority.
-            synced = source.model_copy(update={"enabled": current.enabled})
+            synced = source.model_copy(
+                update={
+                    "enabled": current.enabled,
+                    "last_checked_at": current.last_checked_at,
+                    "last_success_at": current.last_success_at,
+                    "last_error": current.last_error,
+                    "consecutive_failures": current.consecutive_failures,
+                    "last_item_count": current.last_item_count,
+                }
+            )
         repository.upsert_source(synced)
     return count

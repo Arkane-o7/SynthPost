@@ -75,6 +75,14 @@ const exists = async (filePath: string): Promise<boolean> => {
 const sanitize = (value: string): string =>
   value.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "asset";
 
+const optionalFiniteNumber = (value: unknown): number | undefined => {
+  if (value === null || value === undefined || value === "") {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const isRemote = (value: string): boolean => /^https?:\/\//i.test(value);
 
 const publicPathFor = (absolutePath: string): string | null => {
@@ -358,6 +366,7 @@ const timelineSegmentProps = async (
     return [];
   }
   const segments: TimelineSegmentProps[] = [];
+  let narrationCursor = 0;
   for (const segment of plan.segments) {
     const visualRef = segment.visual ?? {};
     const assetId = String(visualRef.asset_id ?? "");
@@ -374,8 +383,8 @@ const timelineSegmentProps = async (
       }
     }
     const visualPath = String(visualRef.path ?? "");
-    const trimStart = Number(visualRef.trim_start);
-    const trimEnd = Number(visualRef.trim_end);
+    const trimStart = optionalFiniteNumber(visualRef.trim_start);
+    const trimEnd = optionalFiniteNumber(visualRef.trim_end);
     const staged = assetId
       ? await stageMedia(
           visualPath,
@@ -388,6 +397,10 @@ const timelineSegmentProps = async (
     const end = Number(
       segment.end_time ?? start + Number(segment.duration ?? 1),
     );
+    const narrationStart = narrationCursor;
+    if (segment.audio?.mode !== "source") {
+      narrationCursor += Math.max(0, end - start);
+    }
     const visual = staged
       ? {
           ...staged,
@@ -441,8 +454,8 @@ const timelineSegmentProps = async (
           skillPlaceholder: visualRef.skill_placeholder,
           renderSafetyStatus: visualRef.render_safety_status,
           motion: visualRef.motion,
-          trimStart: Number.isFinite(trimStart) ? trimStart : undefined,
-          trimEnd: Number.isFinite(trimEnd) ? trimEnd : undefined,
+          trimStart,
+          trimEnd,
         }
       : undefined;
     segments.push({
@@ -451,6 +464,7 @@ const timelineSegmentProps = async (
       start,
       end,
       duration: Math.max(0.01, Number(segment.duration ?? end - start)),
+      narrationStart,
       scriptText: String(segment.script_text ?? ""),
       anchor: {
         visible: Boolean(segment.anchor?.visible),

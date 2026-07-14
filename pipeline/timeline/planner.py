@@ -88,12 +88,23 @@ def visual_has_audio(visual: VisualCandidate | None) -> bool:
 
 
 def choose_audio_mode(
-    template_id: str, visual: VisualCandidate | None
+    template_id: str,
+    visual: VisualCandidate | None,
+    *,
+    authored_source_clip: bool = False,
 ) -> AudioMode:
-    """Use source audio only for fullscreen video that actually contains it."""
+    """Use source audio only for a script-authored insert.
+
+    Ordinary searched videos remain muted B-roll. A full-screen clip may replace
+    narration only when the script explicitly reserved the beat and the selected
+    local video really contains an audio stream.
+    """
 
     if (
-        template_id == "fullscreen_news_visual"
+        config.source_audio_inserts_enabled()
+        and
+        authored_source_clip
+        and template_id == "fullscreen_news_visual"
         and visual is not None
         and visual.media_type == MediaType.video
         and visual_has_audio(visual)
@@ -280,6 +291,37 @@ def approved_visuals_by_section(
     return result
 
 
+def source_audio_visuals_by_section(
+    visuals: list[VisualCandidate],
+) -> dict[str, VisualCandidate]:
+    """Choose an audible local video for each authored source-clip cue."""
+
+    result: dict[str, VisualCandidate] = {}
+    ranked = sorted(
+        visuals,
+        key=lambda visual: (
+            0
+            if visual.review_status == ReviewStatus.manual_approved
+            else 1
+            if visual.review_status == ReviewStatus.approved
+            else 2,
+            -visual.relevance_score,
+            -visual.visual_quality_score,
+            -visual.source_authority,
+        ),
+    )
+    for visual in ranked:
+        if (
+            visual.media_type != MediaType.video
+            or not _is_renderable_visual(visual)
+            or not visual_has_audio(visual)
+        ):
+            continue
+        for section_id in visual.section_ids:
+            result.setdefault(section_id, visual)
+    return result
+
+
 def distribute_unassigned_visuals(
     visuals: list[VisualCandidate],
     section_ids: list[str],
@@ -404,10 +446,37 @@ def build_audio_plan(story_id: str, segments: list[TimelineSegment]) -> AudioPla
         duration_seconds=round(duration, 3),
         regions=regions,
         strategy="timeline_aligned_avatar",
-        warnings=[
-            "MVP uses a single timeline-aligned avatar render; full source-audio pause synthesis is planned in the audio hardening phase."
-        ],
+        warnings=(
+            [
+                "Experimental source-audio inserts are enabled; the avatar clock pauses during authored inserts."
+            ]
+            if config.source_audio_inserts_enabled()
+            else [
+                "Production-safe audio policy: all external visuals are muted B-roll under continuous anchor narration."
+            ]
+        ),
     )
+
+
+def _source_clip_window(
+    visual: VisualCandidate, requested_duration: float
+) -> tuple[float, float, float]:
+    trim_start = max(0.0, float(visual.trim_start or 0.0))
+    available_end = visual.trim_end
+    if available_end is None and visual.duration_seconds is not None:
+        available_end = float(visual.duration_seconds)
+    available = (
+        max(0.0, float(available_end) - trim_start)
+        if available_end is not None
+        else requested_duration
+    )
+    duration = min(requested_duration, available) if available > 0 else 0.0
+    return trim_start, trim_start + duration, duration
+
+
+def _estimated_narration_duration(text: str) -> float:
+    words = len(text.split())
+    return round(max(3.0, words / config.words_per_minute() * 60.0), 2)
 
 
 def generate_timeline(repository, story_id: str) -> TimelinePlan:
@@ -418,22 +487,55 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         raise ValueError(f"No script exists for story: {story_id}")
     visuals = repository.list_visuals(story_id)
     by_section = approved_visuals_by_section(visuals)
+    source_audio_by_section = source_audio_visuals_by_section(visuals)
     # Auto-distribute renderable visuals that were staged without explicit
     # section_id bindings (common for UI uploads and drop-folder scans).
     all_section_ids = [section.section_id for section in script.sections]
     by_section = distribute_unassigned_visuals(visuals, all_section_ids, by_section)
     start = 0.0
     segments: list[TimelineSegment] = []
+    source_audio_enabled = config.source_audio_inserts_enabled()
     for index, section in enumerate(script.sections):
-        duration = max(4.0, section.estimated_duration_seconds or 5.0)
+        authored_source_clip = section.source_clip
+        source_clip = authored_source_clip if source_audio_enabled else None
+        narration_text = section.text
+        if authored_source_clip is not None and not source_audio_enabled:
+            narration_text = " ".join(
+                value.strip()
+                for value in (
+                    section.text,
+                    authored_source_clip.fallback_narration,
+                )
+                if value.strip()
+            )
+        source_visual = (
+            source_audio_by_section.get(section.section_id) if source_clip else None
+        )
+        duration = (
+            _estimated_narration_duration(narration_text)
+            if authored_source_clip is not None and not source_audio_enabled
+            else max(
+                4.0,
+                (section.estimated_duration_seconds or 5.0)
+                - (source_clip.duration_seconds if source_clip else 0.0),
+            )
+        )
         visual = by_section.get(section.section_id)
+        if (
+            source_visual is not None
+            and visual is not None
+            and visual.asset_id == source_visual.asset_id
+        ):
+            # Let the anchor set up an authored insert instead of showing the
+            # same clip muted and then immediately replaying it with sound.
+            visual = None
         decision = select_template(
             section.section_type,
             visual,
             index,
             total_sections=len(script.sections),
             previous_templates=[item.template.template_id for item in segments],
-            script_text=section.text,
+            script_text=narration_text,
         )
         template_id = decision.template_id
         render_visual = (
@@ -458,12 +560,12 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         elif audio_mode == AudioMode.mixed:
             segment_visual.audio_mode = "mixed"
         segment = TimelineSegment(
-            segment_id=f"seg_{index + 1:03d}",
+            segment_id=f"seg_{len(segments) + 1:03d}",
             section_id=section.section_id,
             start_time=round(start, 3),
             end_time=round(start + duration, 3),
             duration=round(duration, 3),
-            script_text=section.text,
+            script_text=narration_text,
             claim_ids=section.claim_ids,
             anchor=anchor,
             visual=segment_visual,
@@ -484,14 +586,15 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 and render_visual.content_role == ContentRole.document
                 else "",
                 data={
+                    "playback_mode": "narration",
                     "title": section.section_type.replace("_", " ").title(),
                     "headline_cues": timed_section_headline_cues(
-                        section.text,
+                        narration_text,
                         section.section_type,
                         section.headline_cues,
                         duration,
                     ),
-                    "bullets": [section.text[:120]],
+                    "bullets": [narration_text[:120]],
                     "values": [],
                     "locations": [],
                     "events": [],
@@ -507,6 +610,121 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         )
         segments.append(segment)
         start += duration
+
+        if source_clip is None:
+            continue
+
+        source_duration = 0.0
+        trim_start = 0.0
+        trim_end = 0.0
+        if source_visual is not None:
+            trim_start, trim_end, source_duration = _source_clip_window(
+                source_visual, source_clip.duration_seconds
+            )
+
+        if source_visual is not None and source_duration >= 3.0:
+            source_segment_visual = segment_visual_from_candidate(source_visual)
+            source_segment_visual.audio_mode = "original"
+            source_segment_visual.trim_start = trim_start
+            source_segment_visual.trim_end = trim_end
+            source_segment = TimelineSegment(
+                segment_id=f"seg_{len(segments) + 1:03d}",
+                section_id=section.section_id,
+                start_time=round(start, 3),
+                end_time=round(start + source_duration, 3),
+                duration=round(source_duration, 3),
+                script_text="",
+                claim_ids=section.claim_ids,
+                anchor=SegmentAnchor(
+                    visible=False,
+                    speaking=False,
+                    camera="front_close",
+                ),
+                visual=source_segment_visual,
+                template=SegmentTemplate(template_id="fullscreen_news_visual"),
+                audio=SegmentAudio(
+                    mode=AudioMode.source,
+                    narration_volume=0.0,
+                    source_volume=1.0,
+                    ducking=False,
+                ),
+                overlays=SegmentOverlays(
+                    lower_third=section.lower_third,
+                    chyron=section.chyron,
+                    attribution=source_visual.attribution_text or "",
+                    quote_text=source_clip.quote,
+                    data={
+                        "playback_mode": "source_clip",
+                        "source_clip": source_clip.model_dump(mode="json"),
+                        "headline_cues": [
+                            {
+                                "text": source_clip.quote
+                                or source_clip.description,
+                                "start": 0.0,
+                                "end": round(source_duration, 3),
+                            }
+                        ],
+                        "template_selection": {
+                            "policy": "authored_source_clip",
+                            "selected": "fullscreen_news_visual",
+                            "reasons": [
+                                "script explicitly reserved primary-source audio"
+                            ],
+                        },
+                    },
+                ),
+                status=ApprovalStatus.review,
+            )
+        else:
+            fallback_duration = _estimated_narration_duration(
+                source_clip.fallback_narration
+            )
+            source_segment = TimelineSegment(
+                segment_id=f"seg_{len(segments) + 1:03d}",
+                section_id=section.section_id,
+                start_time=round(start, 3),
+                end_time=round(start + fallback_duration, 3),
+                duration=round(fallback_duration, 3),
+                script_text=source_clip.fallback_narration,
+                claim_ids=section.claim_ids,
+                anchor=SegmentAnchor(
+                    visible=True,
+                    speaking=True,
+                    camera="front_close",
+                ),
+                visual=segment_visual_from_candidate(None),
+                template=SegmentTemplate(template_id="fallback_anchor"),
+                audio=SegmentAudio(
+                    mode=AudioMode.narration,
+                    narration_volume=1.0,
+                    source_volume=0.0,
+                    ducking=False,
+                ),
+                overlays=SegmentOverlays(
+                    lower_third=section.lower_third,
+                    chyron=section.chyron,
+                    data={
+                        "playback_mode": "source_clip_fallback",
+                        "source_clip": source_clip.model_dump(mode="json"),
+                        "headline_cues": timed_section_headline_cues(
+                            source_clip.fallback_narration,
+                            section.section_type,
+                            [],
+                            fallback_duration,
+                        ),
+                        "template_selection": {
+                            "policy": "authored_source_clip_fallback",
+                            "selected": "fallback_anchor",
+                            "reasons": [
+                                "no usable local video with source audio was available"
+                            ],
+                        },
+                    },
+                ),
+                status=ApprovalStatus.review,
+            )
+        segments.append(source_segment)
+        start += source_segment.duration
     plan = TimelinePlan(
         story_id=story_id, status=TimelineStatus.review, segments=segments
     )

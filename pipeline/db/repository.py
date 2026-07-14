@@ -9,6 +9,7 @@ from pipeline.models import (
     Episode,
     EpisodeStatus,
     GenerationAudit,
+    JobQueueLane,
     JobStatus,
     Project,
     RenderJob,
@@ -23,7 +24,9 @@ from pipeline.models import (
     VisualCandidate,
     new_id,
     now_iso,
+    queue_lane_for_job_type,
 )
+from pipeline.jobs.policy import default_max_attempts
 from pipeline.workflow import assert_transition
 
 
@@ -259,12 +262,19 @@ class Repository:
             (candidate.candidate_id,),
         )
         existing_data = row_data(existing_row)
-        if (
-            existing_data is not None
-            and candidate.selection_status == StorySelectionStatus.suggested
-        ):
+        if existing_data is not None:
             existing = StoryCandidate.model_validate(existing_data)
-            if existing.selection_status != StorySelectionStatus.suggested:
+            # Only decisions made by an editor are sticky. Duplicate/expired
+            # are assignment-desk classifications and must be free to change
+            # when a newer article becomes the cluster leader or a story is
+            # refreshed with better evidence.
+            if existing.selection_status in {
+                StorySelectionStatus.selected,
+                StorySelectionStatus.rejected,
+            } and candidate.selection_status not in {
+                StorySelectionStatus.selected,
+                StorySelectionStatus.rejected,
+            }:
                 candidate = candidate.model_copy(
                     update={
                         "episode_id": existing.episode_id,
@@ -326,6 +336,8 @@ class Repository:
         category: str | None = None,
         search: str | None = None,
         limit: int = 100,
+        include_duplicates: bool = False,
+        include_expired: bool = False,
     ) -> list[StoryCandidate]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -342,6 +354,11 @@ class Repository:
                     status.value if isinstance(status, StorySelectionStatus) else status
                 )
             )
+        else:
+            if not include_duplicates:
+                clauses.append("selection_status != 'duplicate'")
+            if not include_expired:
+                clauses.append("selection_status != 'expired'")
         if category:
             clauses.append("category = ?")
             params.append(category)
@@ -690,10 +707,12 @@ class Repository:
     ) -> RenderJob:
         job = RenderJob(
             job_type=job_type,
+            queue_lane=queue_lane_for_job_type(job_type),
             episode_id=episode_id,
             story_id=story_id,
             render_profile=render_profile,
             payload=payload or {},
+            max_attempts=default_max_attempts(job_type),
         )
         self.upsert_job(job)
         return job
@@ -732,28 +751,97 @@ class Repository:
         with self.connection:
             self.connection.execute(
                 """
-                INSERT INTO render_jobs(job_id, job_type, episode_id, story_id, status, progress, stage, data, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO render_jobs(
+                  job_id, job_type, queue_lane, episode_id, story_id, status,
+                  progress, stage, available_at, attempts, max_attempts, data,
+                  created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(job_id) DO UPDATE SET
                   status=excluded.status,
                   progress=excluded.progress,
                   stage=excluded.stage,
+                  queue_lane=excluded.queue_lane,
+                  available_at=excluded.available_at,
+                  attempts=excluded.attempts,
+                  max_attempts=excluded.max_attempts,
                   data=excluded.data,
                   updated_at=excluded.updated_at
                 """,
                 (
                     job.job_id,
                     job.job_type,
+                    job.queue_lane.value,
                     job.episode_id,
                     job.story_id,
                     job.status.value,
                     job.progress,
                     job.stage,
+                    job.available_at,
+                    job.attempts,
+                    job.max_attempts,
                     dumps(data),
                     job.created_at,
                     job.updated_at,
                 ),
             )
+
+    def update_job_if_status(
+        self, job: RenderJob, expected_status: JobStatus
+    ) -> bool:
+        """Persist a worker-owned update without resurrecting cancelled jobs."""
+
+        job.updated_at = now_iso()
+        data = job.model_dump(mode="json")
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE render_jobs
+                SET status = ?, progress = ?, stage = ?, queue_lane = ?,
+                    available_at = ?, attempts = ?, max_attempts = ?,
+                    data = ?, updated_at = ?
+                WHERE job_id = ? AND status = ?
+                """,
+                (
+                    job.status.value,
+                    job.progress,
+                    job.stage,
+                    job.queue_lane.value,
+                    job.available_at,
+                    job.attempts,
+                    job.max_attempts,
+                    dumps(data),
+                    job.updated_at,
+                    job.job_id,
+                    expected_status.value,
+                ),
+            )
+        return cursor.rowcount == 1
+
+    def heartbeat_job(self, job_id: str) -> JobStatus:
+        """Refresh a running job's lease and return its authoritative status."""
+
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self._one(
+                "SELECT data FROM render_jobs WHERE job_id = ?", (job_id,)
+            )
+            data = row_data(row)
+            if data is None:
+                raise NotFoundError(f"job not found: {job_id}")
+            job = RenderJob.model_validate(data)
+            if job.status == JobStatus.running:
+                job.updated_at = now_iso()
+                self.connection.execute(
+                    "UPDATE render_jobs SET data = ?, updated_at = ? "
+                    "WHERE job_id = ? AND status = 'running'",
+                    (dumps(job.model_dump(mode="json")), job.updated_at, job_id),
+                )
+            self.connection.commit()
+            return job.status
+        except Exception:
+            self.connection.rollback()
+            raise
 
     def get_job(self, job_id: str) -> RenderJob:
         row = self._one("SELECT data FROM render_jobs WHERE job_id = ?", (job_id,))
@@ -793,20 +881,70 @@ class Repository:
             )
         ]
 
-    def claim_next_job(self) -> RenderJob | None:
-        row = self._one(
-            "SELECT data FROM render_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1"
-        )
-        data = row_data(row)
-        if data is None:
-            return None
-        job = RenderJob.model_validate(data)
-        job.status = JobStatus.running
-        job.started_at = now_iso()
-        job.attempts += 1
-        job.stage = "starting"
-        self.upsert_job(job)
-        return job
+    def claim_next_job(
+        self, queue_lane: JobQueueLane | str | None = None
+    ) -> RenderJob | None:
+        # A deferred SELECT followed by a separate UPSERT allows two worker
+        # processes to claim the same row. Serialize the claim and make the
+        # status transition conditional instead.
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            lane_value = (
+                queue_lane.value if isinstance(queue_lane, JobQueueLane) else queue_lane
+            )
+            due_at = now_iso()
+            clauses = ["status = 'queued'", "(available_at IS NULL OR available_at <= ?)"]
+            params: list[Any] = [due_at]
+            if lane_value:
+                clauses.append("queue_lane = ?")
+                params.append(lane_value)
+            row = self._one(
+                f"SELECT data FROM render_jobs WHERE {' AND '.join(clauses)} "
+                "ORDER BY COALESCE(available_at, created_at) ASC, created_at ASC LIMIT 1",
+                tuple(params),
+            )
+            data = row_data(row)
+            if data is None:
+                self.connection.commit()
+                return None
+            job = RenderJob.model_validate(data)
+            job.status = JobStatus.running
+            claimed_at = now_iso()
+            job.started_at = job.started_at or claimed_at
+            job.last_attempt_at = claimed_at
+            job.updated_at = claimed_at
+            job.attempts += 1
+            job.stage = "starting"
+            job.available_at = None
+            job.error = None
+            job.traceback = None
+            job.failure_kind = None
+            cursor = self.connection.execute(
+                """
+                UPDATE render_jobs
+                SET status = ?, progress = ?, stage = ?, queue_lane = ?,
+                    available_at = ?, attempts = ?, max_attempts = ?,
+                    data = ?, updated_at = ?
+                WHERE job_id = ? AND status = 'queued'
+                """,
+                (
+                    job.status.value,
+                    job.progress,
+                    job.stage,
+                    job.queue_lane.value,
+                    job.available_at,
+                    job.attempts,
+                    job.max_attempts,
+                    dumps(job.model_dump(mode="json")),
+                    job.updated_at,
+                    job.job_id,
+                ),
+            )
+            self.connection.commit()
+            return job if cursor.rowcount == 1 else None
+        except Exception:
+            self.connection.rollback()
+            raise
 
     def record_artifact(
         self,

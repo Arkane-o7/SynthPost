@@ -88,6 +88,7 @@ export type TimelineSegmentProps = {
   start: number;
   end: number;
   duration: number;
+  narrationStart?: number;
   scriptText: string;
   anchor: {
     visible: boolean;

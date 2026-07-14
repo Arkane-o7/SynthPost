@@ -66,6 +66,9 @@ class GeminiProvider:
     temperature: float = float(os.environ.get("SYNTHPOST_GEMINI_TEMPERATURE", "0.2"))
     name: str = "gemini"
     last_model: str | None = None
+    timeout_seconds: float = float(
+        os.environ.get("SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS", "45")
+    )
 
     def generate_json(
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
@@ -77,7 +80,17 @@ class GeminiProvider:
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable is missing")
 
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(
+                timeout=max(1, int(self.timeout_seconds * 1000)),
+                retry_options=types.HttpRetryOptions(
+                    attempts=2,
+                    initial_delay=1.0,
+                    max_delay=3.0,
+                ),
+            ),
+        )
 
         # Enforce JSON output. The generation prompt already includes the schema string.
         config = types.GenerateContentConfig(
@@ -231,6 +244,30 @@ class MockProvider:
         self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
     ) -> dict[str, Any]:
         # Deterministic structured response for tests and offline demos.
+        if "senior assignment editor" in prompt.lower():
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            assessments = []
+            for item in payload:
+                impact = str(item.get("deterministic_india_hypothesis") or "")
+                rejected = bool(item.get("rejection_signals"))
+                consequence = 0.25 if rejected else 0.72
+                india_score = 0.0 if rejected else (0.58 if impact else 0.25)
+                verdict = "reject" if rejected else ("recommended" if impact else "global_watch")
+                assessments.append(
+                    {
+                        "candidate_id": item["candidate_id"],
+                        "verdict": verdict,
+                        "consequence_score": consequence,
+                        "india_score": india_score,
+                        "evidence_score": 0.68,
+                        "confidence": 0.78,
+                        "reason": "Deterministic mock assignment-desk assessment.",
+                        "india_impact": impact,
+                        "recommended_format": "signal",
+                    }
+                )
+            return {"assessments": assessments}
         if "editorial-cleanliness classifier" in prompt.lower():
             marker = "EVIDENCE JSON:\n"
             evidence = json.loads(prompt.split(marker, 1)[1])
@@ -269,6 +306,7 @@ class MockProvider:
                     f"{topic} official raw footage",
                 ],
                 "suggested_template_ids": ["split_anchor_visual"],
+                "source_clip": None,
             }
         if "senior headline editor" in prompt.lower():
             marker = "INPUT JSON:\n"
@@ -328,6 +366,7 @@ class MockProvider:
                         "lower_third": "The Core Development Right Now",
                         "chyron": "Breaking Down the Core Development",
                         "headline_cues": ["The Core Development Right Now"],
+                        "source_clip": None,
                     },
                     {
                         "section_type": "context",
@@ -336,6 +375,7 @@ class MockProvider:
                         "lower_third": "The Documented Context",
                         "chyron": "What the Source Material Shows",
                         "headline_cues": ["The Documented Context"],
+                        "source_clip": None,
                     },
                     {
                         "section_type": "key_developments",
@@ -344,6 +384,7 @@ class MockProvider:
                         "lower_third": "Key Developments in the Record",
                         "chyron": "The Documented Facts",
                         "headline_cues": ["Key Developments in the Record"],
+                        "source_clip": None,
                     },
                     {
                         "section_type": "why_it_matters",
@@ -352,6 +393,7 @@ class MockProvider:
                         "lower_third": "The Practical Impact for Viewers",
                         "chyron": "Why This Matters",
                         "headline_cues": ["The Practical Impact for Viewers"],
+                        "source_clip": None,
                     },
                     {
                         "section_type": "conclusion",
@@ -360,6 +402,7 @@ class MockProvider:
                         "lower_third": "Confirmed Facts, Clearly Attributed",
                         "chyron": "What Is Confirmed",
                         "headline_cues": ["Confirmed Facts, Clearly Attributed"],
+                        "source_clip": None,
                     },
                 ],
             }

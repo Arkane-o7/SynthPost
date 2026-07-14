@@ -91,6 +91,23 @@ class V2ContractTests(unittest.TestCase):
         self.assertIn("export type NarrationMode", ts)
         self.assertIn("narration_mode: NarrationMode", ts)
 
+    def test_script_contract_exposes_authored_source_audio_cues(self) -> None:
+        schema = json.loads(
+            (ROOT / "contracts" / "schemas" / "synthpost.v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        section = schema["$defs"]["ScriptSection"]
+        cue = schema["$defs"]["SourceClipCue"]
+        ts = (ROOT / "contracts" / "typescript" / "index.ts").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("source_clip", section["required"])
+        self.assertIn("fallback_narration", cue["required"])
+        self.assertIn("export type SourceClipCue", ts)
+        self.assertIn("source_clip: SourceClipCue | null", ts)
+
     def test_job_event_stream_uses_unambiguous_static_route(self) -> None:
         api = (ROOT / "pipeline" / "api" / "main.py").read_text(encoding="utf-8")
         studio = (ROOT / "web" / "src" / "state" / "useStudio.tsx").read_text(
@@ -99,6 +116,34 @@ class V2ContractTests(unittest.TestCase):
         self.assertIn('@app.get("/api/job-events")', api)
         self.assertIn('new EventSource("/api/job-events")', studio)
         self.assertNotIn('new EventSource("/api/jobs/events")', studio)
+
+    def test_render_job_contract_exposes_queue_lane_and_retry_state(self) -> None:
+        schema = json.loads(
+            (ROOT / "contracts" / "schemas" / "synthpost.v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        job = schema["$defs"]["RenderJob"]
+        ts = (ROOT / "contracts" / "typescript" / "index.ts").read_text(
+            encoding="utf-8"
+        )
+
+        for field in (
+            "queue_lane",
+            "attempts",
+            "max_attempts",
+            "available_at",
+            "last_attempt_at",
+            "last_error",
+            "failure_kind",
+        ):
+            self.assertIn(field, job["required"])
+        self.assertEqual(
+            job["properties"]["queue_lane"]["enum"],
+            ["editorial", "media", "render"],
+        )
+        self.assertIn("queue_lane: 'editorial' | 'media' | 'render'", ts)
+        self.assertIn("available_at: string | null", ts)
 
 
 if __name__ == "__main__":

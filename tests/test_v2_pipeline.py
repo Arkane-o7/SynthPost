@@ -6,19 +6,29 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 from pipeline.db.repository import Repository
 from pipeline.discovery.discover import (
     add_manual_story,
     canonicalize_url,
+    discover,
     duplicate_group,
     fetch_feed,
     normalize_title,
     score_candidate,
 )
+from pipeline.discovery.assignment_desk import (
+    apply_assignment_desk,
+    cluster_candidates,
+)
 from pipeline.editorial.charter import CHARTER_VERSION, assess_editorial_fit
-from pipeline.manifest_builder import build_story_manifest, hydrate_timeline_visuals
+from pipeline.manifest_builder import (
+    build_story_manifest,
+    hydrate_timeline_visuals,
+    timeline_narration_text,
+)
 from pipeline.models import (
     AudioMode,
     ContentRole,
@@ -37,6 +47,7 @@ from pipeline.models import (
     SegmentTemplate,
     SegmentVisual,
     SourceDefinition,
+    SourceClipCue,
     SourceType,
     StoryCandidate,
     StorySelectionStatus,
@@ -54,6 +65,7 @@ from pipeline.scripts.generation import (
     compact_research_pack_for_prompt,
     expand_long_form_script,
     generation_prompt,
+    script_from_llm_json,
     section_word_targets,
     generate_script,
 )
@@ -71,7 +83,11 @@ from pipeline.timeline.planner import (
     generate_timeline,
     select_template,
 )
-from pipeline.timeline.templates import TEMPLATE_REGISTRY, template_registry_json
+from pipeline.timeline.templates import (
+    TEMPLATE_REGISTRY,
+    template_compatible,
+    template_registry_json,
+)
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
     _result_matches_query,
@@ -83,7 +99,8 @@ from pipeline.visuals.providers import (
     stage_local_visual,
 )
 from pipeline.workflow import assert_transition, can_transition
-from pipeline.jobs.worker import recover_stale_jobs
+from pipeline.jobs.worker import HANDLERS, recover_stale_jobs, run_one
+from pipeline.jobs.policy import classify_failure
 from assembly.stitch_episode import story_manifests
 
 
@@ -122,11 +139,191 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
 
             self.assertEqual(recover_stale_jobs(repository), 1)
             recovered = repository.get_job(job.job_id)
+            self.assertEqual(recovered.status, JobStatus.queued)
+            self.assertEqual(recovered.stage, "retry_wait")
+            self.assertEqual(recovered.failure_kind, "worker_lost")
+            self.assertIsNotNone(recovered.available_at)
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_stale_job_fails_after_automatic_retry_budget_is_exhausted(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "stale-exhausted.sqlite3")
+        try:
+            job = repository.create_job("render_story")
+            job.status = JobStatus.running
+            job.attempts = job.max_attempts
+            job.updated_at = "2020-01-01T00:00:00Z"
+            data = job.model_dump(mode="json")
+            repository.connection.execute(
+                "UPDATE render_jobs SET status = ?, attempts = ?, data = ?, updated_at = ? WHERE job_id = ?",
+                (
+                    "running",
+                    job.attempts,
+                    json.dumps(data),
+                    job.updated_at,
+                    job.job_id,
+                ),
+            )
+
+            self.assertEqual(recover_stale_jobs(repository, "render"), 1)
+            recovered = repository.get_job(job.job_id)
             self.assertEqual(recovered.status, JobStatus.failed)
             self.assertEqual(recovered.stage, "failed_stale_worker")
         finally:
             repository.close()
             temp.cleanup()
+
+    def test_queue_lanes_claim_independently(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "lane-jobs.sqlite3")
+        try:
+            render = repository.create_job("render_story")
+            editorial = repository.create_job("research")
+            media = repository.create_job("visual_search")
+
+            editorial_claim = repository.claim_next_job("editorial")
+            media_claim = repository.claim_next_job("media")
+            render_claim = repository.claim_next_job("render")
+
+            self.assertEqual(editorial_claim.job_id, editorial.job_id)
+            self.assertEqual(media_claim.job_id, media.job_id)
+            self.assertEqual(render_claim.job_id, render.job_id)
+            self.assertEqual(editorial_claim.attempts, 1)
+            self.assertEqual(media_claim.attempts, 1)
+            self.assertEqual(render_claim.attempts, 1)
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_automatic_retry_waits_for_backoff_and_preserves_last_error(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "retry-jobs.sqlite3")
+        try:
+            job = repository.create_job("research")
+            with patch.dict(
+                HANDLERS,
+                {"research": Mock(side_effect=TimeoutError("upstream timed out"))},
+            ), patch.dict(
+                "os.environ",
+                {"SYNTHPOST_JOB_RETRY_BASE_SECONDS": "60"},
+            ):
+                self.assertTrue(run_one(repository, "editorial"))
+
+            retrying = repository.get_job(job.job_id)
+            self.assertEqual(retrying.status, JobStatus.queued)
+            self.assertEqual(retrying.stage, "retry_wait")
+            self.assertEqual(retrying.failure_kind, "timeout")
+            self.assertEqual(retrying.last_error, "upstream timed out")
+            self.assertEqual(retrying.attempts, 1)
+            self.assertIsNotNone(retrying.available_at)
+            self.assertIsNone(repository.claim_next_job("editorial"))
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_deterministic_validation_failure_does_not_retry(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "permanent-job.sqlite3")
+        try:
+            job = repository.create_job("research")
+            with patch.dict(
+                HANDLERS,
+                {"research": Mock(side_effect=ValueError("invalid research input"))},
+            ):
+                self.assertTrue(run_one(repository, "editorial"))
+
+            failed = repository.get_job(job.job_id)
+            self.assertEqual(failed.status, JobStatus.failed)
+            self.assertEqual(failed.failure_kind, "validation")
+            self.assertEqual(failed.attempts, 1)
+            self.assertIsNone(failed.available_at)
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_retry_policy_distinguishes_quota_from_missing_provider_package(self) -> None:
+        quota = classify_failure(
+            "script_generate",
+            1,
+            ValueError("429 RESOURCE_EXHAUSTED; retryDelay: 38s"),
+        )
+        configuration = classify_failure(
+            "script_generate",
+            1,
+            ValueError("google-genai package is required to use GeminiProvider"),
+        )
+
+        self.assertTrue(quota.retryable)
+        self.assertEqual(quota.kind, "rate_limited")
+        self.assertGreaterEqual(quota.delay_seconds, 38)
+        self.assertFalse(configuration.retryable)
+        self.assertEqual(configuration.kind, "configuration")
+
+    def test_queue_claim_is_exclusive_and_cancelled_job_cannot_be_resurrected(
+        self,
+    ) -> None:
+        temp = tempfile.TemporaryDirectory()
+        db_path = Path(temp.name) / "atomic-jobs.sqlite3"
+        first = Repository(db_path)
+        second = Repository(db_path)
+        try:
+            queued = first.create_job("discovery")
+            claimed = first.claim_next_job()
+            self.assertIsNotNone(claimed)
+            self.assertEqual(claimed.job_id, queued.job_id)
+            self.assertIsNone(second.claim_next_job())
+
+            cancelled = second.get_job(queued.job_id)
+            cancelled.status = JobStatus.cancelled
+            cancelled.stage = "cancelled"
+            second.upsert_job(cancelled)
+
+            claimed.status = JobStatus.completed
+            claimed.stage = "completed"
+            self.assertFalse(
+                first.update_job_if_status(claimed, JobStatus.running)
+            )
+            self.assertEqual(
+                first.get_job(queued.job_id).status, JobStatus.cancelled
+            )
+        finally:
+            first.close()
+            second.close()
+            temp.cleanup()
+
+    def test_job_heartbeat_preserves_authoritative_status(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        db_path = Path(temp.name) / "heartbeat-jobs.sqlite3"
+        worker = Repository(db_path)
+        controller = Repository(db_path)
+        try:
+            job = worker.create_job("visual_search")
+            claimed = worker.claim_next_job()
+            self.assertIsNotNone(claimed)
+            self.assertEqual(
+                worker.heartbeat_job(job.job_id), JobStatus.running
+            )
+
+            cancelled = controller.get_job(job.job_id)
+            cancelled.status = JobStatus.cancelled
+            cancelled.stage = "cancelled"
+            controller.upsert_job(cancelled)
+            self.assertEqual(
+                worker.heartbeat_job(job.job_id), JobStatus.cancelled
+            )
+        finally:
+            worker.close()
+            controller.close()
+            temp.cleanup()
+
+    def test_split_anchor_accepts_primary_video_footage(self) -> None:
+        self.assertTrue(
+            template_compatible(
+                "split_anchor_visual", "video", "primary_footage"
+            )
+        )
 
     def test_paused_job_stays_out_of_worker_queue_until_resumed(self) -> None:
         temp = tempfile.TemporaryDirectory()
@@ -353,6 +550,10 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertIn("Fast, presenter-led and decisive", prompt)
         self.assertIn("Target duration: 600 seconds", prompt)
         self.assertNotIn("Format: SynthPost Explained", prompt)
+        self.assertIn("source_clip as null", prompt)
+        self.assertIn("External videos are muted B-roll", prompt)
+        self.assertIn("narration must", prompt)
+        self.assertIn("remain continuous", prompt)
 
     def test_legacy_static_overlays_are_backfilled_from_each_section(self) -> None:
         script = ScriptDocument(
@@ -404,7 +605,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertLess(float(cues[0]["end"]), float(cues[1]["end"]))
         self.assertEqual(len({str(cue["text"]) for cue in cues}), 3)
 
-    def test_fullscreen_audio_policy_only_replaces_narration_for_audible_video(
+    def test_fullscreen_audio_policy_keeps_narration_for_broll_video(
         self,
     ) -> None:
         image = VisualCandidate(
@@ -432,12 +633,185 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             choose_audio_mode("fullscreen_news_visual", audible_video),
-            AudioMode.source,
+            AudioMode.narration,
         )
         self.assertEqual(
             choose_audio_mode("split_anchor_visual", audible_video),
             AudioMode.narration,
         )
+        self.assertEqual(
+            choose_audio_mode(
+                "fullscreen_news_visual",
+                audible_video,
+                authored_source_clip=True,
+            ),
+            AudioMode.narration,
+        )
+        with patch(
+            "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ):
+            self.assertEqual(
+                choose_audio_mode(
+                    "fullscreen_news_visual",
+                    audible_video,
+                    authored_source_clip=True,
+                ),
+                AudioMode.source,
+            )
+
+    def test_authored_source_clip_creates_a_real_narration_pause(self) -> None:
+        section = ScriptSection(
+            section_id="sec_001_key_developments",
+            section_type="key_developments",
+            text="The minister then stated the policy in unusually direct terms.",
+            estimated_duration_seconds=12,
+            claim_ids=["claim_001"],
+            lower_third="Minister states the policy directly",
+            chyron="The policy in the minister's words",
+            source_clip=SourceClipCue(
+                duration_seconds=6,
+                search_query="minister policy announcement official video",
+                description="Hear the minister state the policy at the lectern.",
+                fallback_narration="The minister said the policy would begin immediately.",
+                speaker="The minister",
+                quote="The policy begins immediately.",
+            ),
+        )
+        script = ScriptDocument(
+            story_id="story_source_pause",
+            headline="Source pause test",
+            status="approved",
+            sections=[section],
+            estimated_duration_seconds=12,
+        )
+        video = VisualCandidate(
+            asset_id="visual_source_pause",
+            story_id=script.story_id,
+            section_ids=[section.section_id],
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.video,
+            content_role=ContentRole.primary_footage,
+            width=1920,
+            height=1080,
+            duration_seconds=20,
+            has_audio=True,
+            attribution_text="Official source",
+            rights_tier=RightsTier.green,
+            review_status=ReviewStatus.approved,
+        )
+        repository = Mock()
+        repository.latest_script.return_value = script
+        repository.list_visuals.return_value = [video]
+        repository.save_timeline.side_effect = lambda plan: plan
+        repository.candidate_for_story.return_value = SimpleNamespace(
+            workflow_state=StoryWorkflowState.timeline_review
+        )
+
+        production_plan = generate_timeline(repository, script.story_id)
+        self.assertEqual(len(production_plan.segments), 1)
+        production_segment = production_plan.segments[0]
+        self.assertEqual(production_segment.audio.mode, AudioMode.narration)
+        self.assertEqual(production_segment.visual.audio_mode, "muted")
+        self.assertTrue(production_segment.anchor.speaking)
+        self.assertIn(
+            "The minister said the policy would begin immediately.",
+            timeline_narration_text(production_plan),
+        )
+
+        with patch(
+            "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ):
+            plan = generate_timeline(repository, script.story_id)
+
+        self.assertEqual(len(plan.segments), 2)
+        narration, source = plan.segments
+        self.assertEqual(narration.audio.mode, AudioMode.narration)
+        self.assertTrue(narration.anchor.speaking)
+        self.assertEqual(source.audio.mode, AudioMode.source)
+        self.assertFalse(source.anchor.speaking)
+        self.assertEqual(source.template.template_id, "fullscreen_news_visual")
+        self.assertEqual(source.visual.audio_mode, "original")
+        self.assertEqual(source.visual.trim_start, 0)
+        self.assertEqual(source.visual.trim_end, 6)
+        self.assertEqual(source.script_text, "")
+        self.assertEqual(source.overlays.data["playback_mode"], "source_clip")
+        self.assertEqual(
+            timeline_narration_text(plan),
+            "The minister then stated the policy in unusually direct terms.",
+        )
+
+        repository.list_visuals.return_value = []
+        with patch(
+            "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ):
+            fallback_plan = generate_timeline(repository, script.story_id)
+        fallback = fallback_plan.segments[-1]
+        self.assertEqual(fallback.audio.mode, AudioMode.narration)
+        self.assertTrue(fallback.anchor.speaking)
+        self.assertEqual(fallback.template.template_id, "fallback_anchor")
+        self.assertEqual(
+            fallback.script_text,
+            "The minister said the policy would begin immediately.",
+        )
+        self.assertEqual(
+            fallback.overlays.data["playback_mode"], "source_clip_fallback"
+        )
+        self.assertIn(
+            "The minister said the policy would begin immediately.",
+            timeline_narration_text(fallback_plan),
+        )
+
+    def test_structured_script_parses_grounded_source_clip_direction(self) -> None:
+        raw = {
+            "headline": "Policy announcement",
+            "dek": "A verified announcement.",
+            "category": "policy",
+            "sections": [
+                {
+                    "section_type": "key_developments",
+                    "text": "The minister described when the policy would begin.",
+                    "claim_ids": ["claim_001"],
+                    "lower_third": "Minister gives the implementation date",
+                    "chyron": "The minister's announcement",
+                    "headline_cues": ["Minister gives the implementation date"],
+                    "suggested_visual_types": ["context"],
+                    "suggested_search_queries": [
+                        "ministry policy announcement photo",
+                        "ministry policy announcement official video",
+                    ],
+                    "suggested_template_ids": ["split_anchor_visual"],
+                    "source_clip": {
+                        "duration_seconds": 7,
+                        "search_query": "minister policy announcement official video",
+                        "description": "Hear the implementation date in the announcement.",
+                        "fallback_narration": "The minister said implementation would begin immediately.",
+                        "speaker": "The minister",
+                        "quote": "",
+                    },
+                }
+            ],
+        }
+        pack = {
+            "claims": [{"claim_id": "claim_001"}],
+            "documents": [],
+            "evidence": [],
+        }
+
+        with patch(
+            "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ):
+            script = script_from_llm_json("story_source_contract", raw, pack)
+        section = script.sections[0]
+
+        self.assertIsNotNone(section.source_clip)
+        self.assertGreater(section.estimated_duration_seconds, 7)
+        self.assertIn("source_audio", section.suggested_visual_types)
+        self.assertEqual(
+            section.suggested_search_queries[-1],
+            "minister policy announcement official video",
+        )
+        self.assertIn("fullscreen_news_visual", section.suggested_template_ids)
 
     def test_editorial_template_policy_creates_balanced_story_rhythm(self) -> None:
         hero = VisualCandidate(
@@ -786,6 +1160,104 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             hydrated.segments[0].overlays.attribution, "Corrected source"
         )
         self.assertEqual(plan.segments[0].visual.attribution_text, "Old label")
+
+    def test_manifest_upgrades_legacy_fullscreen_source_audio_to_narrated_broll(
+        self,
+    ) -> None:
+        plan = TimelinePlan(
+            story_id="story_legacy_source_audio",
+            status="approved",
+            segments=[
+                TimelineSegment(
+                    segment_id="seg_001",
+                    section_id="sec_context",
+                    start_time=0,
+                    end_time=5,
+                    duration=5,
+                    script_text="Narration must remain audible over this clip.",
+                    anchor=SegmentAnchor(visible=False, speaking=False),
+                    visual=SegmentVisual(
+                        asset_id="visual_video",
+                        path=__file__,
+                        media_type=MediaType.video,
+                        content_role=ContentRole.primary_footage,
+                        review_status=ReviewStatus.suggested,
+                        audio_mode="original",
+                        has_audio=True,
+                    ),
+                    template=SegmentTemplate(template_id="fullscreen_news_visual"),
+                    audio=SegmentAudio(
+                        mode=AudioMode.source,
+                        narration_volume=0,
+                        source_volume=1,
+                    ),
+                    overlays=SegmentOverlays(attribution="Source: unit"),
+                )
+            ],
+        )
+        current = VisualCandidate(
+            asset_id="visual_video",
+            story_id=plan.story_id,
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.video,
+            content_role=ContentRole.primary_footage,
+            rights_tier=RightsTier.yellow,
+            review_status=ReviewStatus.suggested,
+            has_audio=True,
+        )
+
+        hydrated = hydrate_timeline_visuals(plan, [current])
+        segment = hydrated.segments[0]
+
+        self.assertEqual(segment.audio.mode, AudioMode.narration)
+        self.assertEqual(segment.audio.narration_volume, 1)
+        self.assertEqual(segment.audio.source_volume, 0)
+        self.assertEqual(segment.visual.audio_mode, "muted")
+        self.assertTrue(segment.anchor.speaking)
+
+        authored_plan = plan.model_copy(deep=True)
+        authored_segment = authored_plan.segments[0]
+        authored_segment.script_text = ""
+        authored_segment.overlays.data = {
+            "playback_mode": "source_clip",
+            "source_clip": {
+                "duration_seconds": 5,
+                "search_query": "official speech video",
+                "description": "Hear the original statement.",
+                "fallback_narration": "The official confirmed the change.",
+                "speaker": "The official",
+                "quote": "",
+            },
+        }
+        authored = hydrate_timeline_visuals(authored_plan, [current]).segments[0]
+        self.assertEqual(authored.audio.mode, AudioMode.narration)
+        self.assertEqual(authored.visual.audio_mode, "muted")
+        self.assertTrue(authored.anchor.speaking)
+        self.assertEqual(authored.script_text, "The official confirmed the change.")
+        self.assertEqual(
+            authored.overlays.data["playback_mode"],
+            "source_clip_muted_broll",
+        )
+
+        with patch(
+            "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ):
+            experimental = hydrate_timeline_visuals(
+                authored_plan, [current]
+            ).segments[0]
+        self.assertEqual(experimental.audio.mode, AudioMode.source)
+        self.assertEqual(experimental.visual.audio_mode, "original")
+        self.assertFalse(experimental.anchor.speaking)
+
+        missing = hydrate_timeline_visuals(authored_plan, []).segments[0]
+        self.assertEqual(missing.audio.mode, AudioMode.narration)
+        self.assertEqual(missing.template.template_id, "fallback_anchor")
+        self.assertTrue(missing.anchor.speaking)
+        self.assertEqual(missing.script_text, "The official confirmed the change.")
+        self.assertEqual(
+            missing.overlays.data["playback_mode"], "source_clip_fallback"
+        )
 
     def test_manifest_uses_fallback_only_when_selected_media_becomes_unusable(self) -> None:
         plan = TimelinePlan(
@@ -1235,6 +1707,200 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertIn("system_change", candidate.matched_criteria)
         self.assertIn("india_connection", candidate.matched_criteria)
 
+    def test_assignment_desk_clusters_events_and_keeps_one_source_priority_leader(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "assignment-desk.sqlite3")
+        try:
+            primary = SourceDefinition(
+                source_id="src_primary",
+                name="Primary Wire",
+                source_type=SourceType.rss,
+                feed_url="https://example.com/primary.xml",
+                category="technology",
+                country="us",
+                priority=96,
+                reliability_score=0.94,
+            )
+            secondary = primary.model_copy(
+                update={
+                    "source_id": "src_secondary",
+                    "name": "Secondary Blog",
+                    "feed_url": "https://example.com/secondary.xml",
+                    "priority": 55,
+                    "reliability_score": 0.7,
+                }
+            )
+            repository.upsert_source(primary)
+            repository.upsert_source(secondary)
+
+            def make(source: SourceDefinition, candidate_id: str, title: str) -> StoryCandidate:
+                summary = "The global AI platform agreement changes market access, competition and data-centre infrastructure."
+                scores, final, reasons = score_candidate(source, title, summary, None)
+                return StoryCandidate(
+                    candidate_id=candidate_id,
+                    title=title,
+                    source_id=source.source_id,
+                    source_name=source.name,
+                    category=source.category,
+                    summary=summary,
+                    scores=scores,
+                    editorial_fit=assess_editorial_fit(source, title, summary),
+                    final_score=final,
+                    score_reasons=reasons,
+                )
+
+            candidates = [
+                make(primary, "cand_primary", "Apple and OpenAI sign global AI platform agreement"),
+                make(secondary, "cand_secondary", "OpenAI and Apple sign an AI platform agreement globally"),
+            ]
+            clusters = cluster_candidates(
+                candidates,
+                source_priorities={primary.source_id: 96, secondary.source_id: 55},
+            )
+            self.assertEqual(len(clusters), 1)
+            self.assertEqual(clusters[0].leader.candidate_id, "cand_primary")
+
+            leaders = apply_assignment_desk(repository, candidates, use_ai=False)
+            self.assertEqual(len(leaders), 1)
+            self.assertEqual(leaders[0].cluster_size, 2)
+            self.assertEqual(
+                repository.get_candidate("cand_secondary").selection_status,
+                StorySelectionStatus.duplicate,
+            )
+            self.assertEqual(
+                [item.candidate_id for item in repository.list_candidates()],
+                ["cand_primary"],
+            )
+
+            unrelated = make(
+                secondary,
+                "cand_unrelated",
+                "Nvidia opens a robotics research lab - Secondary Blog",
+            )
+            publisher_suffix_peer = make(
+                secondary,
+                "cand_suffix_peer",
+                "Microsoft changes cloud pricing in Asia - Secondary Blog",
+            )
+            self.assertEqual(
+                len(cluster_candidates([unrelated, publisher_suffix_peer])),
+                2,
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_assignment_desk_rejects_product_fluff_and_labels_global_india_hypothesis(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "assignment-quality.sqlite3")
+        try:
+            source = SourceDefinition(
+                source_id="src_global",
+                name="Global Technology Wire",
+                source_type=SourceType.rss,
+                feed_url="https://example.com/global.xml",
+                category="technology",
+                country="us",
+                priority=90,
+                reliability_score=0.9,
+            )
+            repository.upsert_source(source)
+
+            def make(candidate_id: str, title: str, summary: str) -> StoryCandidate:
+                scores, final, reasons = score_candidate(source, title, summary, None)
+                return StoryCandidate(
+                    candidate_id=candidate_id,
+                    title=title,
+                    source_id=source.source_id,
+                    source_name=source.name,
+                    category=source.category,
+                    summary=summary,
+                    scores=scores,
+                    editorial_fit=assess_editorial_fit(source, title, summary),
+                    final_score=final,
+                    score_reasons=reasons,
+                )
+
+            strong = make(
+                "cand_chips",
+                "US tightens global AI chip export controls",
+                "The regulation changes semiconductor supply chains, cloud capacity, investment and market competition.",
+            )
+            fluff = make(
+                "cand_fluff",
+                "Celebrity wears the best AI smart glasses at a showcase",
+                "A hands-on review of a new consumer gadget.",
+            )
+            leaders = apply_assignment_desk(repository, [strong, fluff], use_ai=False)
+            by_id = {item.candidate_id: item for item in leaders}
+            self.assertIn(by_id["cand_chips"].assignment_lane, {"recommended", "global_watch"})
+            self.assertGreater(by_id["cand_chips"].editorial_fit.india_impact_confidence, 0)
+            self.assertIn("Indian", by_id["cand_chips"].editorial_fit.india_impact)
+            self.assertEqual(by_id["cand_fluff"].assignment_lane, "rejected")
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_discovery_records_source_health_and_reports_progress(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "discovery-health.sqlite3")
+        try:
+            healthy = SourceDefinition(
+                source_id="src_healthy",
+                name="Healthy Feed",
+                source_type=SourceType.rss,
+                feed_url="https://example.com/healthy.xml",
+            )
+            broken = healthy.model_copy(
+                update={
+                    "source_id": "src_broken",
+                    "name": "Broken Feed",
+                    "feed_url": "https://example.com/broken.xml",
+                }
+            )
+            repository.upsert_source(healthy)
+            repository.upsert_source(broken)
+            progress: list[tuple[float, str]] = []
+
+            def fake_fetch(source: SourceDefinition, *, seen_groups=None):
+                if source.source_id == broken.source_id:
+                    raise OSError("feed unavailable")
+                return [
+                    StoryCandidate(
+                        candidate_id="cand_health",
+                        title="India expands AI data-centre capacity",
+                        source_id=source.source_id,
+                        source_name=source.name,
+                    )
+                ]
+
+            with patch(
+                "pipeline.discovery.discover.discover_from_source",
+                side_effect=fake_fetch,
+            ), patch(
+                "pipeline.discovery.discover.apply_assignment_desk",
+                side_effect=lambda _repository, candidates, use_ai: candidates,
+            ):
+                rows = discover(
+                    repository,
+                    progress_callback=lambda fraction, stage: progress.append(
+                        (fraction, stage)
+                    ),
+                )
+
+            self.assertEqual([item.candidate_id for item in rows], ["cand_health"])
+            healthy_after = repository.get_source(healthy.source_id)
+            broken_after = repository.get_source(broken.source_id)
+            self.assertEqual(healthy_after.last_item_count, 1)
+            self.assertIsNotNone(healthy_after.last_success_at)
+            self.assertIn("feed unavailable", broken_after.last_error or "")
+            self.assertEqual(broken_after.consecutive_failures, 1)
+            self.assertEqual(progress[-1][0], 1.0)
+            self.assertIn("clustering and ranking", progress[-1][1])
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_script_generation_persists_prompts_responses_and_normalization(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "generation-audit.sqlite3")
@@ -1463,31 +2129,55 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertEqual(manifest["approved_timeline"]["duration_seconds"], 42.0)
         self.assertEqual(manifest["approved_timeline"]["segments"][0]["end_time"], 42.0)
 
-    def test_avatar_duration_rescale_skips_source_audio_timelines(self) -> None:
+    def test_avatar_duration_rescale_preserves_source_audio_pause(self) -> None:
         manifest = {
-            "direction": {"estimated_duration_seconds": 37.8},
+            "direction": {
+                "estimated_duration_seconds": 30.0,
+                "audio_duration_seconds": 30.0,
+            },
+            "script": {"text": "Narration before. Narration after."},
             "approved_timeline": {
                 "status": "approved",
-                "duration_seconds": 30.0,
+                "duration_seconds": 25.0,
                 "segments": [
                     {
                         "segment_id": "seg_001",
                         "start_time": 0.0,
-                        "end_time": 30.0,
-                        "duration": 30.0,
+                        "end_time": 10.0,
+                        "duration": 10.0,
+                        "audio": {"mode": "narration"},
+                        "visual": {"audio_mode": "muted"},
+                    },
+                    {
+                        "segment_id": "seg_002",
+                        "start_time": 10.0,
+                        "end_time": 15.0,
+                        "duration": 5.0,
                         "audio": {"mode": "source"},
                         "visual": {"audio_mode": "original"},
-                    }
+                    },
+                    {
+                        "segment_id": "seg_003",
+                        "start_time": 15.0,
+                        "end_time": 25.0,
+                        "duration": 10.0,
+                        "audio": {"mode": "narration"},
+                        "visual": {"audio_mode": "muted"},
+                    },
                 ],
             },
         }
 
         changed = _sync_timeline_to_avatar_duration(manifest)
 
-        self.assertFalse(changed)
+        self.assertTrue(changed)
         timeline = manifest["approved_timeline"]
-        self.assertEqual(timeline["segments"][0]["end_time"], 30.0)
-        self.assertIn("source/mixed audio", timeline["timing_sync_warning"])
+        self.assertEqual(timeline["segments"][0]["end_time"], 15.0)
+        self.assertEqual(timeline["segments"][1]["start_time"], 15.0)
+        self.assertEqual(timeline["segments"][1]["end_time"], 20.0)
+        self.assertEqual(timeline["segments"][2]["start_time"], 20.0)
+        self.assertEqual(timeline["segments"][2]["end_time"], 35.0)
+        self.assertEqual(timeline["duration_seconds"], 35.0)
 
     def test_manual_vertical_slice_builds_renderer_manifest(self) -> None:
         temp = tempfile.TemporaryDirectory()

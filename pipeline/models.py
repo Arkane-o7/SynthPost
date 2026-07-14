@@ -55,6 +55,7 @@ class StorySelectionStatus(str, Enum):
     selected = "selected"
     rejected = "rejected"
     duplicate = "duplicate"
+    expired = "expired"
 
 
 class StoryWorkflowState(str, Enum):
@@ -161,6 +162,20 @@ class JobStatus(str, Enum):
     cancelled = "cancelled"
 
 
+class JobQueueLane(str, Enum):
+    editorial = "editorial"
+    media = "media"
+    render = "render"
+
+
+def queue_lane_for_job_type(job_type: str) -> JobQueueLane:
+    if job_type in {"visual_search", "timeline_generate"}:
+        return JobQueueLane.media
+    if job_type in {"render_avatar", "render_story", "assemble_episode"}:
+        return JobQueueLane.render
+    return JobQueueLane.editorial
+
+
 class Project(StrictModel):
     project_id: str = Field(default_factory=lambda: new_id("proj"))
     title: str
@@ -196,6 +211,10 @@ class SourceDefinition(StrictModel):
     reliability_score: float = 0.7
     custom: bool = False
     last_checked_at: str | None = None
+    last_success_at: str | None = None
+    last_error: str | None = None
+    consecutive_failures: int = 0
+    last_item_count: int = 0
 
     @model_validator(mode="after")
     def require_source_locator(self) -> "SourceDefinition":
@@ -227,6 +246,8 @@ class EditorialFitAssessment(StrictModel):
     penalties: list[str] = Field(default_factory=list)
     rejection_signals: list[str] = Field(default_factory=list)
     india_relevance: float = 0.0
+    india_impact: str = ""
+    india_impact_confidence: float = 0.0
     reasons: list[str] = Field(default_factory=list)
 
 
@@ -252,6 +273,15 @@ class StoryCandidate(StrictModel):
     selection_status: StorySelectionStatus = StorySelectionStatus.suggested
     rejection_reasons: list[str] = Field(default_factory=list)
     duplicate_group_id: str | None = None
+    event_cluster_id: str | None = None
+    cluster_size: int = 1
+    supporting_sources: list[str] = Field(default_factory=list)
+    related_candidate_ids: list[str] = Field(default_factory=list)
+    evidence_score: float = 0.0
+    assignment_lane: str = "unassessed"
+    assignment_summary: str = ""
+    recommended_format: str = "explained"
+    assignment_confidence: float = 0.0
     episode_id: str | None = None
     story_id: str | None = None
     workflow_state: StoryWorkflowState = StoryWorkflowState.discovered
@@ -336,6 +366,22 @@ SectionType = Literal[
 ]
 
 
+class SourceClipCue(StrictModel):
+    """An editorially authored pause for primary-source audio.
+
+    The cue is attached to a narrated section and plays immediately after that
+    section's setup. ``fallback_narration`` is spoken only when no usable local
+    video with audio can satisfy the cue.
+    """
+
+    duration_seconds: float = Field(ge=3.0, le=30.0)
+    search_query: str = Field(min_length=4, max_length=180)
+    description: str = Field(min_length=4, max_length=320)
+    fallback_narration: str = Field(min_length=4, max_length=600)
+    speaker: str = Field(default="", max_length=120)
+    quote: str = Field(default="", max_length=500)
+
+
 class ScriptSection(StrictModel):
     section_id: str
     section_type: SectionType
@@ -348,6 +394,7 @@ class ScriptSection(StrictModel):
     lower_third: str = ""
     chyron: str = ""
     headline_cues: list[str] = Field(default_factory=list)
+    source_clip: SourceClipCue | None = None
     editorial_notes: list[str] = Field(default_factory=list)
     approval_status: ApprovalStatus = ApprovalStatus.review
     locked: bool = False
@@ -782,6 +829,7 @@ class RenderJob(StrictModel):
     episode_id: str | None = None
     story_id: str | None = None
     job_type: str
+    queue_lane: JobQueueLane | None = None
     render_profile: str = "preview"
     status: JobStatus = JobStatus.queued
     progress: float = 0.0
@@ -795,8 +843,18 @@ class RenderJob(StrictModel):
     payload: dict[str, Any] = Field(default_factory=dict)
     attempts: int = 0
     max_attempts: int = 2
+    available_at: str | None = None
+    last_attempt_at: str | None = None
+    last_error: str | None = None
+    failure_kind: str | None = None
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
+
+    @model_validator(mode="after")
+    def infer_queue_lane(self):
+        if self.queue_lane is None:
+            self.queue_lane = queue_lane_for_job_type(self.job_type)
+        return self
 
 
 class GenerationAudit(StrictModel):

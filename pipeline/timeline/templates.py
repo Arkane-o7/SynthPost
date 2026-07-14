@@ -46,6 +46,7 @@ TEMPLATE_REGISTRY: dict[str, TemplateDefinition] = {
             "fallback",
         ],
         supported_content_roles=[
+            "primary_footage",
             "context",
             "evidence",
             "explanation",

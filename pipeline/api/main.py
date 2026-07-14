@@ -21,9 +21,11 @@ from pipeline.discovery.discover import (
     discover_from_source,
     rescore_existing_candidates,
 )
+from pipeline.discovery.assignment_desk import rebuild_assignment_desk
 from pipeline.discovery.seeds import seed_sources
 from pipeline.editorial.charter import load_editorial_charter
 from pipeline.manifest_builder import build_story_manifest
+from pipeline.jobs.policy import default_max_attempts
 from pipeline.models import (
     ContentRole,
     JobStatus,
@@ -82,7 +84,9 @@ def startup() -> None:
     repository = repo()
     try:
         seed_sources(repository)
-        rescore_existing_candidates(repository)
+        rescored = rescore_existing_candidates(repository)
+        if rescored:
+            rebuild_assignment_desk(repository, use_ai=False)
     finally:
         repository.close()
 
@@ -347,6 +351,9 @@ def test_source(source_id: str) -> dict[str, Any]:
 def start_discovery(payload: DiscoveryStart) -> dict[str, Any]:
     repository = repo()
     try:
+        active = repository.active_job("discovery", episode_id=payload.episode_id)
+        if active:
+            return active.model_dump(mode="json")
         job = repository.create_job(
             "discovery", episode_id=payload.episode_id, payload=payload.model_dump()
         )
@@ -361,15 +368,24 @@ def list_candidates(
     status: StorySelectionStatus | None = None,
     category: str | None = None,
     search: str | None = None,
+    lane: str | None = None,
+    include_duplicates: bool = False,
+    include_expired: bool = False,
 ) -> list[dict[str, Any]]:
     repository = repo()
     try:
-        return [
-            candidate.model_dump(mode="json")
-            for candidate in repository.list_candidates(
-                episode_id=episode_id, status=status, category=category, search=search
-            )
-        ]
+        candidates = repository.list_candidates(
+            episode_id=episode_id,
+            status=status,
+            category=category,
+            search=search,
+            limit=250,
+            include_duplicates=include_duplicates,
+            include_expired=include_expired,
+        )
+        if lane:
+            candidates = [item for item in candidates if item.assignment_lane == lane]
+        return [candidate.model_dump(mode="json") for candidate in candidates]
     finally:
         repository.close()
 
@@ -544,8 +560,7 @@ def api_approve_script(story_id: str) -> dict[str, Any]:
         # Auto-trigger visual search after script approval so the pipeline
         # doesn't stall waiting for the user to manually click "Search".
         try:
-            existing_jobs = repository.list_jobs(story_id=story_id)
-            if not any(j.job_type == "visual_search" for j in existing_jobs):
+            if not repository.active_job("visual_search", story_id=story_id):
                 episode = repository.episode_for_story(story_id)
                 repository.create_job(
                     "visual_search",
@@ -564,7 +579,9 @@ def search_visuals(story_id: str) -> dict[str, Any]:
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        job = repository.create_job(
+        job = repository.active_job(
+            "visual_search", story_id=story_id
+        ) or repository.create_job(
             "visual_search", episode_id=episode.episode_id, story_id=story_id
         )
         return job.model_dump(mode="json")
@@ -950,6 +967,7 @@ def cancel_job(job_id: str) -> dict[str, Any]:
             return job.model_dump(mode="json")
         job.status = JobStatus.cancelled
         job.stage = "cancelled"
+        job.available_at = None
         repository.upsert_job(job)
         if job.job_type == "script_generate" and job.story_id:
             candidate = repository.candidate_for_story(job.story_id)
@@ -988,6 +1006,7 @@ def resume_job(job_id: str) -> dict[str, Any]:
             raise ValueError("Only paused jobs can be resumed")
         job.status = JobStatus.queued
         job.stage = "queued_after_pause"
+        job.available_at = None
         repository.upsert_job(job)
         return job.model_dump(mode="json")
     finally:
@@ -1004,8 +1023,15 @@ def retry_job(job_id: str) -> dict[str, Any]:
         job.status = JobStatus.queued
         job.progress = 0
         job.stage = "queued_for_retry"
+        job.last_error = job.error
         job.error = None
         job.traceback = None
+        job.failure_kind = None
+        job.available_at = None
+        job.started_at = None
+        job.completed_at = None
+        job.attempts = 0
+        job.max_attempts = default_max_attempts(job.job_type)
         repository.upsert_job(job)
         return job.model_dump(mode="json")
     finally:

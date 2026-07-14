@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pipeline import config
 from pipeline.artifacts import (
     materialize_story_artifacts,
     story_manifest_path,
@@ -9,6 +10,7 @@ from pipeline.artifacts import (
 )
 from pipeline.models import (
     ArtifactRecord,
+    AudioMode,
     ContentRole,
     MediaType,
     ReviewStatus,
@@ -63,6 +65,16 @@ def renderer_timeline(plan: TimelinePlan) -> dict[str, Any]:
     }
 
 
+def timeline_narration_text(plan: TimelinePlan) -> str:
+    """Return only words assigned to the continuous anchor performance."""
+
+    return "\n\n".join(
+        segment.script_text.strip()
+        for segment in plan.segments
+        if segment.audio.mode != AudioMode.source and segment.script_text.strip()
+    )
+
+
 def hydrate_timeline_visuals(
     plan: TimelinePlan, visuals: list[Any]
 ) -> TimelinePlan:
@@ -76,8 +88,38 @@ def hydrate_timeline_visuals(
 
     hydrated = plan.model_copy(deep=True)
     by_id = {visual.asset_id: visual for visual in visuals}
+    source_audio_enabled = config.source_audio_inserts_enabled()
+
+    def use_narration_over_visual(segment) -> None:
+        """Treat selected video as B-roll unless an insert edit exists.
+
+        Older approved timelines inferred source audio from the mere presence
+        of an audio stream. That muted the continuous avatar render while its
+        script clock kept advancing. The current timeline model has no explicit
+        insert-edit contract, so hydration safely upgrades those legacy regions
+        to narrated B-roll as well.
+        """
+
+        segment.visual.audio_mode = "muted"
+        segment.anchor.speaking = True
+        segment.audio.mode = AudioMode.narration
+        segment.audio.narration_volume = 1.0
+        segment.audio.source_volume = 0.0
+        segment.audio.ducking = False
 
     def use_fallback(segment) -> None:
+        playback_mode = str(segment.overlays.data.get("playback_mode") or "")
+        source_clip = segment.overlays.data.get("source_clip")
+        if playback_mode in {
+            "source_clip",
+            "source_clip_muted_broll",
+        } and isinstance(source_clip, dict):
+            fallback_narration = str(
+                source_clip.get("fallback_narration") or ""
+            ).strip()
+            if fallback_narration:
+                segment.script_text = fallback_narration
+            segment.overlays.data["playback_mode"] = "source_clip_fallback"
         segment.visual.asset_id = None
         segment.visual.path = None
         segment.visual.media_type = MediaType.fallback
@@ -95,13 +137,28 @@ def hydrate_timeline_visuals(
             segment.template.template_id = "fallback_anchor"
         segment.anchor.visible = True
         segment.anchor.speaking = True
-        segment.audio.mode = "narration"
+        segment.audio.mode = AudioMode.narration
         segment.audio.narration_volume = 1.0
         segment.audio.source_volume = 0.0
         segment.overlays.attribution = ""
         segment.overlays.document_source = ""
 
     for segment in hydrated.segments:
+        playback_mode = str(segment.overlays.data.get("playback_mode") or "")
+        source_clip = segment.overlays.data.get("source_clip")
+        if (
+            playback_mode == "source_clip"
+            and not source_audio_enabled
+            and isinstance(source_clip, dict)
+        ):
+            fallback_narration = str(
+                source_clip.get("fallback_narration") or ""
+            ).strip()
+            if fallback_narration:
+                segment.script_text = fallback_narration
+            segment.overlays.data["playback_mode"] = "source_clip_muted_broll"
+            segment.overlays.data["source_audio_policy"] = "disabled_unverified"
+            use_narration_over_visual(segment)
         asset_id = segment.visual.asset_id
         current = by_id.get(asset_id) if asset_id else None
         if current is None:
@@ -140,6 +197,36 @@ def hydrate_timeline_visuals(
         segment.overlays.attribution = current.attribution_text or ""
         if segment.overlays.document_source:
             segment.overlays.document_source = current.attribution_text or ""
+        explicit_source_clip = (
+            segment.overlays.data.get("playback_mode") == "source_clip"
+        )
+        if (
+            segment.template.template_id == "fullscreen_news_visual"
+            and current.media_type == MediaType.video
+            and not explicit_source_clip
+            and (
+                segment.audio.mode in {AudioMode.source, AudioMode.mixed}
+                or segment.visual.audio_mode in {"original", "mixed"}
+            )
+        ):
+            use_narration_over_visual(segment)
+
+    if hydrated.audio_plan:
+        segment_by_id = {
+            segment.segment_id: segment for segment in hydrated.segments
+        }
+        for region in hydrated.audio_plan.regions:
+            segment = segment_by_id.get(region.segment_id)
+            if not segment:
+                continue
+            region.mode = segment.audio.mode
+            region.narration_volume = segment.audio.narration_volume
+            region.source_volume = segment.audio.source_volume
+            region.source_path = (
+                segment.visual.path
+                if segment.audio.mode in {AudioMode.source, AudioMode.mixed}
+                else None
+            )
     return hydrated
 
 
@@ -165,6 +252,9 @@ def build_story_manifest(
     visuals = repository.list_visuals(story_id)
     timeline = hydrate_timeline_visuals(timeline, visuals)
     assert_timeline_valid(timeline, require_approved=True, check_media_exists=True)
+    narration_text = timeline_narration_text(timeline)
+    if not narration_text:
+        raise ValueError("Approved timeline contains no anchor narration")
     artifacts = materialize_story_artifacts(repository, story_id)
     story_path = story_manifest_path(episode.episode_id, story_id)
     output_path = story_path.with_name(
@@ -190,7 +280,8 @@ def build_story_manifest(
             "headline": script.headline,
             "dek": script.dek,
             "category": script.category,
-            "text": script.text,
+            "text": narration_text,
+            "editorial_text": script.text,
             "sections": [
                 section.model_dump(mode="json") for section in script.sections
             ],

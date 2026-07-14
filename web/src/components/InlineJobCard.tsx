@@ -1,7 +1,7 @@
 import React from 'react';
 import type { RenderJob } from '../contracts';
 import { StatusBadge } from './StatusBadge';
-import { shortId } from '../lib/formatters';
+import { shortId, timeUntil } from '../lib/formatters';
 
 /**
  * Compact job card for the right rail and inline usage.
@@ -29,6 +29,9 @@ export const InlineJobCard: React.FC<{
       {job.story_id && (
         <div className="job-meta font-mono">{shortId(job.story_id)}</div>
       )}
+      <div className="job-meta">
+        {job.queue_lane} queue · attempt {job.attempts}/{job.max_attempts}
+      </div>
       <div className="progress-bar">
         <div
           className={`progress-bar-fill ${progressClass}`}
@@ -39,6 +42,12 @@ export const InlineJobCard: React.FC<{
         {job.stage}
         {job.error ? ` · ${job.error}` : ''}
       </div>
+      {job.status === 'queued' && job.available_at && (
+        <div className="job-meta">
+          Automatic retry in {timeUntil(job.available_at)}
+          {job.failure_kind ? ` · ${job.failure_kind.replace(/_/g, ' ')}` : ''}
+        </div>
+      )}
       {(onRetry || onCancel || onPause || onResume) && (
         <div className="row-tight" style={{ marginTop: 8 }}>
           {onRetry && job.status === 'failed' && (
@@ -91,7 +100,10 @@ export const MiniJobCard: React.FC<{ job: RenderJob }> = ({ job }) => {
         />
       </div>
       <div className="text-muted" style={{ fontSize: 11 }}>
-        {job.stage}
+        {job.queue_lane} · {job.stage}
+        {job.status === 'queued' && job.available_at
+          ? ` · retry in ${timeUntil(job.available_at)}`
+          : ''}
       </div>
     </div>
   );

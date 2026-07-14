@@ -4,6 +4,21 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+STATE_DIR="${HOME}/.synthpost"
+INSTANCE_LOCK_DIR="${STATE_DIR}/remote-studio.lock"
+mkdir -p "$STATE_DIR"
+if ! mkdir "$INSTANCE_LOCK_DIR" 2>/dev/null; then
+  existing_pid="$(cat "$INSTANCE_LOCK_DIR/pid" 2>/dev/null || true)"
+  if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+    echo "SynthPost Remote Studio is already running (PID $existing_pid)." >&2
+    echo "Stop that instance before starting another one." >&2
+    exit 1
+  fi
+  rm -rf "$INSTANCE_LOCK_DIR"
+  mkdir "$INSTANCE_LOCK_DIR"
+fi
+echo "$$" >"$INSTANCE_LOCK_DIR/pid"
+
 if command -v tailscale >/dev/null 2>&1; then
   TAILSCALE_BIN="$(command -v tailscale)"
 elif [[ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]]; then
@@ -30,7 +45,6 @@ fi
 
 tailscaled_pid=""
 TAILSCALE_CMD=("$TAILSCALE_BIN")
-STATE_DIR="${HOME}/.synthpost"
 SOCKET_PATH="${STATE_DIR}/tailscaled.sock"
 CUSTOM_STATUS=""
 if [[ -S "$SOCKET_PATH" ]]; then
@@ -69,25 +83,45 @@ fi
 npm --prefix web run build
 
 api_pid=""
-worker_pid=""
+editorial_worker_pid=""
+media_worker_pid=""
+render_worker_pid=""
 cleanup() {
   "${TAILSCALE_CMD[@]}" serve --https=443 off >/dev/null 2>&1 || true
-  [[ -n "$worker_pid" ]] && kill "$worker_pid" >/dev/null 2>&1 || true
+  [[ -n "$editorial_worker_pid" ]] && kill "$editorial_worker_pid" >/dev/null 2>&1 || true
+  [[ -n "$media_worker_pid" ]] && kill "$media_worker_pid" >/dev/null 2>&1 || true
+  [[ -n "$render_worker_pid" ]] && kill "$render_worker_pid" >/dev/null 2>&1 || true
   [[ -n "$api_pid" ]] && kill "$api_pid" >/dev/null 2>&1 || true
   [[ -n "$tailscaled_pid" ]] && kill "$tailscaled_pid" >/dev/null 2>&1 || true
-  wait "$worker_pid" "$api_pid" >/dev/null 2>&1 || true
+  for pid in "$editorial_worker_pid" "$media_worker_pid" "$render_worker_pid" "$api_pid"; do
+    [[ -n "$pid" ]] && wait "$pid" >/dev/null 2>&1 || true
+  done
+  rm -rf "$INSTANCE_LOCK_DIR"
 }
 trap cleanup EXIT INT TERM
 
 "${PYTHON_CMD[@]}" -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 &
 api_pid=$!
-start_worker() {
-  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker &
-  worker_pid=$!
+start_editorial_worker() {
+  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker --lane editorial &
+  editorial_worker_pid=$!
 }
-start_worker
+start_media_worker() {
+  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker --lane media &
+  media_worker_pid=$!
+}
+start_render_worker() {
+  "${PYTHON_CMD[@]}" -m pipeline.jobs.worker --lane render &
+  render_worker_pid=$!
+}
+start_editorial_worker
+start_media_worker
+start_render_worker
 
-for _ in {1..40}; do
+# Charter migrations and event-cluster rebuilding can take longer than a cold
+# FastAPI import on a mature inbox. Keep the launcher alive for up to a minute
+# instead of killing a healthy API at the old ten-second boundary.
+for _ in {1..240}; do
   if curl -fsS http://127.0.0.1:8765/api/health >/dev/null 2>&1; then
     break
   fi
@@ -103,10 +137,20 @@ echo
 echo "Open the HTTPS URL above on your phone. Press Ctrl+C to stop the Studio and remove remote access."
 
 while kill -0 "$api_pid" >/dev/null 2>&1; do
-  if ! kill -0 "$worker_pid" >/dev/null 2>&1; then
-    wait "$worker_pid" >/dev/null 2>&1 || true
-    echo "SynthPost worker stopped unexpectedly; restarting it." >&2
-    start_worker
+  if ! kill -0 "$editorial_worker_pid" >/dev/null 2>&1; then
+    wait "$editorial_worker_pid" >/dev/null 2>&1 || true
+    echo "SynthPost editorial worker stopped unexpectedly; restarting it." >&2
+    start_editorial_worker
+  fi
+  if ! kill -0 "$media_worker_pid" >/dev/null 2>&1; then
+    wait "$media_worker_pid" >/dev/null 2>&1 || true
+    echo "SynthPost media worker stopped unexpectedly; restarting it." >&2
+    start_media_worker
+  fi
+  if ! kill -0 "$render_worker_pid" >/dev/null 2>&1; then
+    wait "$render_worker_pid" >/dev/null 2>&1 || true
+    echo "SynthPost render worker stopped unexpectedly; restarting it." >&2
+    start_render_worker
   fi
   sleep 2
 done

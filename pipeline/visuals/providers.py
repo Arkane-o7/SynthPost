@@ -9,6 +9,7 @@ import re
 import socket
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -161,6 +162,12 @@ def _download_remote_video(url: str, destination_stem: Path) -> Path:
         resolved_binary,
         "--no-playlist",
         "--no-progress",
+        "--socket-timeout",
+        str(int(config.env_float("SYNTHPOST_SEARXNG_SOCKET_TIMEOUT", 15.0))),
+        "--retries",
+        "1",
+        "--fragment-retries",
+        "1",
         "--js-runtimes",
         "node",
         "--restrict-filenames",
@@ -185,7 +192,15 @@ def _download_remote_video(url: str, destination_stem: Path) -> Path:
         "best[ext=mp4]/best",
     ]
     errors: list[str] = []
+    total_timeout = max(
+        15.0, config.env_float("SYNTHPOST_SEARXNG_VIDEO_TIMEOUT", 90.0)
+    )
+    deadline = time.monotonic() + total_timeout
     for selector in format_attempts:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            errors.append("video download exhausted its total time budget")
+            break
         command = common_command[:]
         format_index = command.index("--merge-output-format")
         command[format_index:format_index] = ["-f", selector]
@@ -195,7 +210,7 @@ def _download_remote_video(url: str, destination_stem: Path) -> Path:
                 check=False,
                 capture_output=True,
                 text=True,
-                timeout=config.env_float("SYNTHPOST_SEARXNG_VIDEO_TIMEOUT", 300.0),
+                timeout=remaining,
             )
         except subprocess.TimeoutExpired:
             errors.append("video download timed out")
@@ -664,17 +679,24 @@ def _fallback_visual_search_plan(repository, story_id: str) -> list[VisualQueryP
             for value in (section.suggested_visual_types if section else [])
         }
         section_type = section.section_type if section else ""
-        video_priority = "video" in suggested_types or section_type in {
-            "cold_open",
-            "key_developments",
-            "conclusion",
-        }
+        source_clip = section.source_clip if section else None
+        video_priority = (
+            source_clip is not None
+            or "video" in suggested_types
+            or section_type
+            in {
+                "cold_open",
+                "key_developments",
+                "conclusion",
+            }
+        )
         plans.append(
             VisualQueryPlan(
                 section_id=section_id,
                 image_query=image_query,
                 video_query=_video_query(
-                    video_seed, script.headline if script else image_query
+                    source_clip.search_query if source_clip else video_seed,
+                    script.headline if script else image_query,
                 ),
                 video_priority=video_priority,
                 rationale=(
@@ -816,6 +838,11 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
                     if claim_id in claim_by_id
                 ],
                 "visual_direction": section.suggested_visual_types,
+                "source_clip": (
+                    section.source_clip.model_dump(mode="json")
+                    if section.source_clip
+                    else None
+                ),
             }
             for section in script.sections
         ],
@@ -841,6 +868,8 @@ For every section return exactly one image_query and one distinct video_query.
 - Do not invent an event, appearance, location, date, or person that the input does not support.
 - Treat linked_claims and verified entities as factual grounding. Legacy search-query hints are intentionally excluded.
 - Set video_priority true only when motion materially improves the section.
+- When source_clip is present, video_priority MUST be true and video_query must
+  target that exact original audible moment—not generic B-roll or a news package.
 - Explain the concrete subject choice briefly in rationale.
 
 INPUT JSON:
@@ -902,7 +931,28 @@ INPUT JSON:
         ))
     if generation_error:
         raise generation_error
-    return plans
+    source_clip_by_section = {
+        section.section_id: section.source_clip
+        for section in script.sections
+        if section.source_clip is not None
+    }
+    return [
+        VisualQueryPlan(
+            section_id=plan.section_id,
+            image_query=plan.image_query,
+            video_query=_video_query(
+                source_clip_by_section[plan.section_id].search_query,
+                script.headline,
+            ),
+            video_priority=True,
+            rationale=(
+                f"authored source-audio insert: {plan.rationale}"
+            ),
+        )
+        if plan.section_id in source_clip_by_section
+        else plan
+        for plan in plans
+    ]
 
 
 def _visual_search_tasks(
@@ -1129,7 +1179,13 @@ def _stage_searxng_result(
     return visual
 
 
-def search_searxng_visuals(repository, story_id: str) -> list[VisualCandidate]:
+def search_searxng_visuals(
+    repository,
+    story_id: str,
+    *,
+    progress_callback=None,
+    cancel_check=None,
+) -> list[VisualCandidate]:
     if not searxng_configured() or config.env_bool(
         "SYNTHPOST_DISABLE_WEB_VISUALS", False
     ):
@@ -1163,7 +1219,17 @@ def search_searxng_visuals(repository, story_id: str) -> list[VisualCandidate]:
     tasks = _visual_search_tasks(
         _visual_search_plan(repository, story_id), max_queries
     )
-    for plan, category, query, media_type in tasks:
+    total_tasks = max(1, len(tasks))
+    if progress_callback:
+        progress_callback(0.08, "AI keyword plan ready; searching visual sources")
+    for task_index, (plan, category, query, media_type) in enumerate(tasks):
+        if cancel_check:
+            cancel_check()
+        if progress_callback:
+            progress_callback(
+                0.08 + (0.84 * task_index / total_tasks),
+                f"searching {category}: {query[:72]}",
+            )
         limit = image_limit if media_type == MediaType.image else video_limit
         if limit <= 0:
             continue
@@ -1180,6 +1246,8 @@ def search_searxng_visuals(repository, story_id: str) -> list[VisualCandidate]:
         accepted = 0
         staged = 0
         for rank, result in enumerate(results):
+            if cancel_check:
+                cancel_check()
             if not _result_matches_query(result, query):
                 continue
             media_url = (
@@ -1226,17 +1294,36 @@ def search_searxng_visuals(repository, story_id: str) -> list[VisualCandidate]:
                 break
     if errors and not visuals:
         raise SearXNGError("; ".join(errors[:3]))
+    if progress_callback:
+        progress_callback(0.95, "visual source search complete")
     return visuals
 
 
-def search_visuals(repository, story_id: str) -> list[VisualCandidate]:
+def search_visuals(
+    repository,
+    story_id: str,
+    *,
+    progress_callback=None,
+    cancel_check=None,
+) -> list[VisualCandidate]:
     """Search the episode-isolated media inbox, then SearXNG and fallbacks."""
 
     visuals = search_episode_media_inbox(
         repository, story_id, generate_fallback=False
     )
+    if cancel_check:
+        cancel_check()
+    if progress_callback:
+        progress_callback(0.03, "local episode media scanned; planning web search")
     try:
-        visuals.extend(search_searxng_visuals(repository, story_id))
+        visuals.extend(
+            search_searxng_visuals(
+                repository,
+                story_id,
+                progress_callback=progress_callback,
+                cancel_check=cancel_check,
+            )
+        )
     except SearXNGError:
         # Local media can keep a story moving, but when SearXNG is the only
         # configured source its outage must be visible as a failed job rather
@@ -1246,6 +1333,8 @@ def search_visuals(repository, story_id: str) -> list[VisualCandidate]:
     # Always provide a rights-safe, local option for every script section. Web
     # discovery can be irrelevant or unusable until an editor clears rights;
     # one arbitrary file in the drop folder must not suppress all fallbacks.
+    if cancel_check:
+        cancel_check()
     visuals.extend(generate_script_visual_cards(repository, story_id))
     _advance_to_visuals_review(repository, story_id)
     return visuals

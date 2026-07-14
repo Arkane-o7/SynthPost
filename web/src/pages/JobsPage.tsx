@@ -8,6 +8,7 @@ import { relativeTime, shortId } from '../lib/formatters';
 export const JobsPage: React.FC = () => {
   const studio = useStudio();
   const [typeFilter, setTypeFilter] = React.useState('');
+  const [laneFilter, setLaneFilter] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('');
   const [scope, setScope] = React.useState<'episode' | 'all'>(
     studio.selectedEpisodeId ? 'episode' : 'all',
@@ -32,6 +33,7 @@ export const JobsPage: React.FC = () => {
       j.episode_id !== studio.selectedEpisodeId
     ) return false;
     if (typeFilter && j.job_type !== typeFilter) return false;
+    if (laneFilter && j.queue_lane !== laneFilter) return false;
     if (statusFilter && j.status !== statusFilter) return false;
     return true;
   });
@@ -84,6 +86,12 @@ export const JobsPage: React.FC = () => {
           {jobTypes.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
+        </select>
+        <select value={laneFilter} onChange={(e) => setLaneFilter(e.target.value)}>
+          <option value="">All queues</option>
+          <option value="editorial">Editorial</option>
+          <option value="media">Media</option>
+          <option value="render">Render</option>
         </select>
         <select
           value={statusFilter}

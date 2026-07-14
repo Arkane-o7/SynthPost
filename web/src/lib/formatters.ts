@@ -23,6 +23,18 @@ export function relativeTime(iso: string | null | undefined): string {
   return date.toLocaleDateString();
 }
 
+export function timeUntil(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return iso;
+  const seconds = Math.max(0, Math.ceil((date.getTime() - Date.now()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.ceil(minutes / 60);
+  return `${hours}h`;
+}
+
 /**
  * Format seconds into a human-readable duration string.
  * e.g. 127.4 → "2:07"

@@ -108,10 +108,11 @@ def assess_editorial_fit(
     has_strategic_subject = bool(strategic_terms)
     has_system_scale = bool(system_scale_terms)
     india_origin = source.country == "in"
-    # A specialist global feed can surface a developable India angle even when
-    # India is not named in the headline. India-origin stories must demonstrate
-    # sector/system significance instead of receiving an automatic local bonus.
-    has_india_angle = bool(india_terms) or (
+    has_explicit_india_angle = bool(india_terms)
+    # Global shifts may enter the desk with a hypothesis to investigate, but
+    # they no longer receive a fabricated "India connection" signal. The
+    # assignment desk writes the actual hypothesis and its confidence later.
+    has_developable_india_angle = has_explicit_india_angle or (
         not india_origin and has_strategic_subject and has_system_scale
     )
     has_global_scope = bool(global_terms) or (
@@ -122,7 +123,7 @@ def assess_editorial_fit(
         criteria.append("system_change")
     if impact_terms and has_system_scale:
         criteria.append("meaningful_impact")
-    if has_india_angle:
+    if has_explicit_india_angle:
         criteria.append("india_connection")
     if tradeoff_terms:
         criteria.append("tradeoff_or_uncertainty")
@@ -151,21 +152,21 @@ def assess_editorial_fit(
         has_global_scope or (has_strategic_subject and has_system_scale)
     ):
         rejection_signals.append("local_story_without_global_or_industry_significance")
-    if not has_india_angle:
+    if not has_developable_india_angle:
         rejection_signals.append("no_developable_india_angle")
     rejection_signals = list(dict.fromkeys(rejection_signals))
 
     minimum = int(charter["minimum_eligibility_matches"])
     base = len(criteria) / len(charter["eligibility_criteria"])
     focus_bonus = min(0.18, sum(topic_scores.values()) * 0.025)
-    india_bonus = 0.08 if has_india_angle else 0.0
+    india_bonus = 0.08 if has_explicit_india_angle else 0.0
     penalty = min(0.75, len(rejection_signals) * 0.34)
     score = max(0.0, min(1.0, base + focus_bonus + india_bonus - penalty))
     eligible = (
         len(criteria) >= minimum
         and has_strategic_subject
         and has_system_scale
-        and has_india_angle
+        and has_developable_india_angle
         and not rejection_signals
     )
 
@@ -194,14 +195,9 @@ def assess_editorial_fit(
         strengths=strengths,
         penalties=[signal.replace("_", " ") for signal in rejection_signals],
         rejection_signals=rejection_signals,
-        india_relevance=round(
-            min(
-                1.0,
-                0.3 * len(india_terms)
-                + (0.35 if has_india_angle and not india_terms else 0.0),
-            ),
-            3,
-        ),
+        india_relevance=round(min(1.0, 0.42 + 0.2 * len(india_terms)), 3)
+        if has_explicit_india_angle
+        else 0.0,
         reasons=reasons,
     )
 

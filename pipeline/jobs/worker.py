@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 import traceback as traceback_module
 from contextlib import contextmanager
@@ -14,20 +16,27 @@ from datetime import datetime, timezone
 
 from assembly.stitch_episode import stitch_episode
 from pipeline.db.repository import Repository, get_repository
+from pipeline.db.sqlite import database_path
 from pipeline.discovery.discover import discover
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.models import (
     EpisodeStatus,
+    JobQueueLane,
     JobStatus,
     RenderJob,
     StoryWorkflowState,
     now_iso,
 )
+from pipeline.jobs.policy import classify_failure, retry_time
 from pipeline.research.extract import build_research_pack
 from pipeline.scripts.generation import generate_script
 from pipeline.storage import PROJECT_ROOT, project_relative, story_manifest_path
 from pipeline.timeline.planner import generate_timeline
 from pipeline.visuals.providers import search_visuals
+
+
+class JobCancelled(RuntimeError):
+    pass
 
 
 class JobContext:
@@ -38,7 +47,11 @@ class JobContext:
         log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = log_dir / f"{job.job_id}.log"
         self.job.log_path = project_relative(self.log_path)
-        self.repository.upsert_job(self.job)
+        self._stop_heartbeat = threading.Event()
+        self._cancelled = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+        if not self.repository.update_job_if_status(self.job, JobStatus.running):
+            raise JobCancelled(f"job {job.job_id} was cancelled before it started")
 
     def log(self, message: str) -> None:
         line = f"[{now_iso()}] {message}\n"
@@ -47,10 +60,49 @@ class JobContext:
         print(line, end="")
 
     def progress(self, progress: float, stage: str) -> None:
+        self.raise_if_cancelled()
         self.job.progress = max(0.0, min(100.0, progress))
         self.job.stage = stage
-        self.repository.upsert_job(self.job)
+        if not self.repository.update_job_if_status(self.job, JobStatus.running):
+            self._cancelled.set()
+            raise JobCancelled(f"job {self.job.job_id} was cancelled")
         self.log(f"{self.job.progress:.0f}% {stage}")
+
+    def start_heartbeat(self) -> None:
+        interval = max(
+            1.0, float(os.environ.get("SYNTHPOST_JOB_HEARTBEAT_SECONDS", "5"))
+        )
+
+        def heartbeat() -> None:
+            repository = Repository(self.repository.db_path)
+            try:
+                while not self._stop_heartbeat.wait(interval):
+                    try:
+                        status = repository.heartbeat_job(self.job.job_id)
+                    except Exception as exc:
+                        self.log(f"heartbeat warning: {exc}")
+                        continue
+                    if status != JobStatus.running:
+                        self._cancelled.set()
+                        return
+            finally:
+                repository.close()
+
+        self._heartbeat_thread = threading.Thread(
+            target=heartbeat,
+            name=f"job-heartbeat-{self.job.job_id}",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def stop_heartbeat(self) -> None:
+        self._stop_heartbeat.set()
+        if self._heartbeat_thread:
+            self._heartbeat_thread.join(timeout=2.0)
+
+    def raise_if_cancelled(self) -> None:
+        if self._cancelled.is_set():
+            raise JobCancelled(f"job {self.job.job_id} was cancelled")
 
 
 def handle_discovery(ctx: JobContext) -> dict[str, str]:
@@ -60,6 +112,9 @@ def handle_discovery(ctx: JobContext) -> dict[str, str]:
         ctx.repository,
         episode_id=payload.get("episode_id"),
         category=payload.get("category"),
+        progress_callback=lambda fraction, stage: ctx.progress(
+            8 + fraction * 80, stage
+        ),
     )
     ctx.progress(100, f"discovered {len(candidates)} candidates")
     return {"candidate_count": str(len(candidates))}
@@ -107,7 +162,14 @@ def handle_visual_search(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("visual search job requires story_id")
     ctx.progress(10, "using AI to plan image/video keywords")
-    visuals = search_visuals(ctx.repository, ctx.job.story_id)
+    visuals = search_visuals(
+        ctx.repository,
+        ctx.job.story_id,
+        progress_callback=lambda fraction, stage: ctx.progress(
+            10 + (max(0.0, min(1.0, fraction)) * 80), stage
+        ),
+        cancel_check=ctx.raise_if_cancelled,
+    )
     downloadable = sum(1 for visual in visuals if visual.download_path)
     ctx.progress(
         100,
@@ -259,7 +321,7 @@ JOB_TIMEOUT_SECONDS = {
     "discovery": 5 * 60,
     "research": 30 * 60,
     "script_generate": 20 * 60,
-    "visual_search": 30 * 60,
+    "visual_search": 12 * 60,
     "timeline_generate": 5 * 60,
 }
 
@@ -294,13 +356,35 @@ def job_deadline(job_type: str):
         signal.signal(signal.SIGALRM, previous)
 
 
-def recover_stale_jobs(repository: Repository) -> int:
+def _restore_script_state_after_terminal_failure(
+    repository: Repository, job: RenderJob
+) -> None:
+    if job.job_type != "script_generate" or not job.story_id:
+        return
+    try:
+        candidate = repository.candidate_for_story(job.story_id)
+        if candidate.workflow_state == StoryWorkflowState.script_generating:
+            repository.transition_story(
+                job.story_id, StoryWorkflowState.research_ready
+            )
+    except Exception:
+        pass
+
+
+def recover_stale_jobs(
+    repository: Repository, queue_lane: JobQueueLane | str | None = None
+) -> int:
     """Close abandoned running records left by a crash or laptop restart."""
 
     now = datetime.now(timezone.utc)
     recovered = 0
     for job in repository.list_jobs(limit=500):
         if job.status != JobStatus.running:
+            continue
+        lane_value = (
+            queue_lane.value if isinstance(queue_lane, JobQueueLane) else queue_lane
+        )
+        if lane_value and job.queue_lane.value != lane_value:
             continue
         limit = STALE_JOB_SECONDS.get(job.job_type, 60 * 60)
         try:
@@ -310,85 +394,168 @@ def recover_stale_jobs(repository: Repository) -> int:
         age = max(0.0, (now - updated).total_seconds())
         if age <= limit:
             continue
-        job.status = JobStatus.failed
-        job.stage = "failed_stale_worker"
-        job.error = (
+        stale_error = (
             f"Worker stopped updating this {job.job_type} job for "
             f"{int(age // 60)} minutes; it was released from the queue. Retry it if needed."
         )
-        job.completed_at = now_iso()
-        repository.upsert_job(job)
-        if job.job_type == "script_generate" and job.story_id:
-            try:
-                candidate = repository.candidate_for_story(job.story_id)
-                if candidate.workflow_state == StoryWorkflowState.script_generating:
-                    repository.transition_story(
-                        job.story_id, StoryWorkflowState.research_ready
-                    )
-            except Exception:
-                pass
+        job.last_error = stale_error
+        job.error = stale_error
+        job.failure_kind = "worker_lost"
+        job.traceback = None
+        if job.attempts < job.max_attempts:
+            decision = classify_failure(
+                job.job_type,
+                job.attempts,
+                TimeoutError(stale_error),
+            )
+            job.status = JobStatus.queued
+            job.stage = "retry_wait"
+            job.progress = 0
+            job.available_at = retry_time(decision.delay_seconds)
+            job.completed_at = None
+        else:
+            job.status = JobStatus.failed
+            job.stage = "failed_stale_worker"
+            job.completed_at = now_iso()
+        if not repository.update_job_if_status(job, JobStatus.running):
+            continue
+        if job.status == JobStatus.failed:
+            _restore_script_state_after_terminal_failure(repository, job)
         recovered += 1
     return recovered
 
 
-def run_one(repository: Repository) -> bool:
-    job = repository.claim_next_job()
+def run_one(
+    repository: Repository, queue_lane: JobQueueLane | str | None = None
+) -> bool:
+    job = repository.claim_next_job(queue_lane)
     if not job:
         return False
-    ctx = JobContext(repository, job)
+    try:
+        ctx = JobContext(repository, job)
+    except JobCancelled:
+        return True
     handler = HANDLERS.get(job.job_type)
     if not handler:
         job.status = JobStatus.failed
         job.error = f"No handler registered for job_type={job.job_type}"
         job.stage = "failed"
-        repository.upsert_job(job)
+        repository.update_job_if_status(job, JobStatus.running)
         return True
     try:
+        ctx.start_heartbeat()
         ctx.progress(1, "running")
         with job_deadline(job.job_type):
             outputs = handler(ctx)
+        ctx.raise_if_cancelled()
         job.output_paths.update(outputs)
         job.status = JobStatus.completed
         job.progress = 100
         job.stage = "completed"
         job.completed_at = now_iso()
-        repository.upsert_job(job)
-        ctx.log("completed")
+        if repository.update_job_if_status(job, JobStatus.running):
+            ctx.log("completed")
+        else:
+            ctx.log("completion discarded because the job was cancelled")
+    except JobCancelled as exc:
+        ctx.log(str(exc))
     except Exception as exc:
-        if job.job_type == "script_generate" and job.story_id:
-            try:
-                candidate = repository.candidate_for_story(job.story_id)
-                if candidate.workflow_state == StoryWorkflowState.script_generating:
-                    repository.transition_story(
-                        job.story_id, StoryWorkflowState.research_ready
-                    )
-            except Exception:
-                pass
-        job.status = JobStatus.failed
+        decision = classify_failure(job.job_type, job.attempts, exc)
         job.error = str(exc)
+        job.last_error = str(exc)
+        job.failure_kind = decision.kind
         job.traceback = traceback_module.format_exc()
-        job.stage = "failed"
-        job.completed_at = now_iso()
-        repository.upsert_job(job)
-        ctx.log("FAILED: " + str(exc))
-        ctx.log(job.traceback or "")
+        if decision.retryable and job.attempts < job.max_attempts:
+            job.status = JobStatus.queued
+            job.progress = 0
+            job.stage = "retry_wait"
+            job.available_at = retry_time(decision.delay_seconds)
+            job.completed_at = None
+        else:
+            job.status = JobStatus.failed
+            job.stage = "failed"
+            job.available_at = None
+            job.completed_at = now_iso()
+        if repository.update_job_if_status(job, JobStatus.running):
+            if job.status == JobStatus.queued:
+                ctx.log(
+                    f"RETRY: attempt {job.attempts}/{job.max_attempts} failed "
+                    f"({decision.kind}); next attempt at {job.available_at}"
+                )
+                ctx.log(str(exc))
+            else:
+                _restore_script_state_after_terminal_failure(repository, job)
+                ctx.log("FAILED: " + str(exc))
+                ctx.log(job.traceback or "")
+        else:
+            ctx.log("failure discarded because the job was cancelled")
+    finally:
+        ctx.stop_heartbeat()
     return True
 
 
-def run_loop(*, once: bool = False, interval: float = 1.0) -> None:
-    repository = get_repository()
+@contextmanager
+def worker_process_lock(queue_lane: JobQueueLane | str | None = None):
+    """Guarantee one consumer per lane, or exclusive ownership of all lanes."""
+
+    lane_value = queue_lane.value if isinstance(queue_lane, JobQueueLane) else queue_lane
+    lane_names = [lane_value] if lane_value else [lane.value for lane in JobQueueLane]
+    handles = []
     try:
-        recovered = recover_stale_jobs(repository)
-        if recovered:
-            print(f"Recovered {recovered} stale running job(s).", flush=True)
-        while True:
-            did_work = run_one(repository)
-            if once:
-                return
-            if not did_work:
-                time.sleep(interval)
+        for lane_name in lane_names:
+            lock_path = database_path().with_suffix(f".worker.{lane_name}.lock")
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            handle = lock_path.open("a+", encoding="utf-8")
+            handles.append(handle)
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RuntimeError(
+                    f"Another SynthPost worker already owns the {lane_name} queue; "
+                    "refusing to start a duplicate."
+                ) from exc
+            handle.seek(0)
+            handle.truncate()
+            handle.write(str(os.getpid()))
+            handle.flush()
+        yield
     finally:
-        repository.close()
+        for handle in reversed(handles):
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
+
+
+def run_loop(
+    *,
+    once: bool = False,
+    interval: float = 1.0,
+    queue_lane: JobQueueLane | str | None = None,
+) -> None:
+    with worker_process_lock(queue_lane):
+        repository = get_repository()
+        try:
+            recovered = recover_stale_jobs(repository, queue_lane)
+            if recovered:
+                print(f"Recovered {recovered} stale running job(s).", flush=True)
+            last_recovery = time.monotonic()
+            while True:
+                did_work = run_one(repository, queue_lane)
+                if once:
+                    return
+                if time.monotonic() - last_recovery >= 30:
+                    recovered = recover_stale_jobs(repository, queue_lane)
+                    if recovered:
+                        print(
+                            f"Recovered {recovered} stale running job(s).",
+                            flush=True,
+                        )
+                    last_recovery = time.monotonic()
+                if not did_work:
+                    time.sleep(interval)
+        finally:
+            repository.close()
 
 
 def main() -> None:
@@ -399,8 +566,18 @@ def main() -> None:
         "--once", action="store_true", help="Run one queued job and exit."
     )
     parser.add_argument("--interval", type=float, default=1.0)
+    parser.add_argument(
+        "--lane",
+        choices=["all", *[lane.value for lane in JobQueueLane]],
+        default="all",
+        help="Consume one independent queue lane, or all lanes for compatibility.",
+    )
     args = parser.parse_args()
-    run_loop(once=args.once, interval=args.interval)
+    run_loop(
+        once=args.once,
+        interval=args.interval,
+        queue_lane=None if args.lane == "all" else args.lane,
+    )
 
 
 if __name__ == "__main__":

@@ -854,7 +854,9 @@ const Segment: React.FC<{
             story={story}
             visual={visual}
             mutedAnchor={muteAnchor}
-            startFrom={Math.round(segment.start * fps)}
+            startFrom={Math.round(
+              (segment.narrationStart ?? segment.start) * fps,
+            )}
           />
         ) : null}
 
@@ -864,7 +866,9 @@ const Segment: React.FC<{
             story={story}
             visual={visual}
             progress={progress}
-            startFrom={Math.round(segment.start * fps)}
+            startFrom={Math.round(
+              (segment.narrationStart ?? segment.start) * fps,
+            )}
           />
         ) : null}
 
@@ -873,7 +877,9 @@ const Segment: React.FC<{
             segment={segment}
             story={story}
             mutedAnchor={muteAnchor}
-            startFrom={Math.round(segment.start * fps)}
+            startFrom={Math.round(
+              (segment.narrationStart ?? segment.start) * fps,
+            )}
           />
         ) : null}
 

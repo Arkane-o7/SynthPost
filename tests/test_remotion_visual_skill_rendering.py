@@ -91,6 +91,12 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         self.assertIn(
             "durationInFrames={Math.max(1, endFrame - startFrame)}", timeline_story
         )
+        self.assertIn("segment.narrationStart ?? segment.start", timeline_story)
+        render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
+        types = (REMOTION_SRC / "types.ts").read_text(encoding="utf-8")
+        self.assertIn("let narrationCursor = 0", render_story)
+        self.assertIn('segment.audio?.mode !== "source"', render_story)
+        self.assertIn("narrationStart?: number", types)
 
     def test_retained_templates_scale_1080p_design_canvas_to_preview_profile(
         self,
@@ -162,13 +168,19 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             encoding="utf-8"
         )
         types = (REMOTION_SRC / "types.ts").read_text(encoding="utf-8")
+        self.assertIn("const optionalFiniteNumber", render_story)
+        self.assertIn("value === null || value === undefined", render_story)
         self.assertIn(
-            "trimStart: Number.isFinite(trimStart) ? trimStart : undefined",
+            "const trimStart = optionalFiniteNumber(visualRef.trim_start)",
             render_story,
         )
         self.assertIn(
-            "trimEnd: Number.isFinite(trimEnd) ? trimEnd : undefined", render_story
+            "const trimEnd = optionalFiniteNumber(visualRef.trim_end)", render_story
         )
+        self.assertNotIn(
+            "const trimStart = Number(visualRef.trim_start)", render_story
+        )
+        self.assertNotIn("const trimEnd = Number(visualRef.trim_end)", render_story)
         self.assertIn("trimStart?: number", types)
         self.assertIn("trimEnd?: number", types)
         self.assertIn("startFrom={startFrom || undefined}", visual_layer)

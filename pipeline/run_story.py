@@ -16,24 +16,6 @@ def _approved_timeline(manifest: dict[str, Any]) -> dict[str, Any] | None:
     return timeline if isinstance(timeline, dict) else None
 
 
-def _timeline_has_source_audio(timeline: dict[str, Any]) -> bool:
-    segments = (
-        timeline.get("segments") if isinstance(timeline.get("segments"), list) else []
-    )
-    for segment in segments:
-        if not isinstance(segment, dict):
-            continue
-        audio = segment.get("audio") if isinstance(segment.get("audio"), dict) else {}
-        visual = (
-            segment.get("visual") if isinstance(segment.get("visual"), dict) else {}
-        )
-        if audio.get("mode") in {"source", "mixed"}:
-            return True
-        if visual.get("audio_mode") in {"original", "mixed"}:
-            return True
-    return False
-
-
 def _float_or_zero(value: Any) -> float:
     try:
         return float(value or 0)
@@ -58,23 +40,19 @@ def _avatar_target_duration(manifest: dict[str, Any]) -> float:
 
 
 def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
-    """Align pure-narration timeline segments to the actual avatar duration.
+    """Align narrated regions to the avatar while preserving source inserts.
 
     Timeline drafts are initially estimated from text length. Real TTS often has
     different pacing and paragraph pauses. If we leave the approved timeline at
     the estimate while Remotion sizes the composition to the real anchor video,
     the last frames become blank and template boundaries feel late/early. For
-    pure narration stories we proportionally rescale segment boundaries to the
-    Avatar-Engine duration immediately before compositing.
+    narration regions we proportionally rescale boundaries to the Avatar-Engine
+    duration. Authored source-audio inserts retain their exact duration and are
+    inserted as pauses in the anchor playback clock.
     """
 
     timeline = _approved_timeline(manifest)
     if not timeline or str(timeline.get("status", "")).strip().lower() != "approved":
-        return False
-    if _timeline_has_source_audio(timeline):
-        timeline["timing_sync_warning"] = (
-            "Skipped avatar-duration rescale because source/mixed audio regions are present."
-        )
         return False
     segments = (
         timeline.get("segments") if isinstance(timeline.get("segments"), list) else []
@@ -84,13 +62,24 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
     target_duration = _avatar_target_duration(manifest)
     if target_duration <= 0:
         return False
-    current_end = 0.0
+    narration_duration = 0.0
+    has_source_insert = False
     for segment in segments:
-        if isinstance(segment, dict):
-            current_end = max(current_end, _float_or_zero(segment.get("end_time")))
-    if current_end <= 0 or abs(current_end - target_duration) < 0.08:
+        if not isinstance(segment, dict):
+            continue
+        audio = segment.get("audio") if isinstance(segment.get("audio"), dict) else {}
+        if audio.get("mode") == "source":
+            has_source_insert = True
+            continue
+        segment_duration = _float_or_zero(segment.get("duration"))
+        if segment_duration <= 0:
+            segment_duration = _float_or_zero(
+                segment.get("end_time")
+            ) - _float_or_zero(segment.get("start_time"))
+        narration_duration += max(0.0, segment_duration)
+    if narration_duration <= 0 or abs(narration_duration - target_duration) < 0.08:
         return False
-    scale = target_duration / current_end
+    scale = target_duration / narration_duration
     cursor = 0.0
     for index, segment in enumerate(segments):
         if not isinstance(segment, dict):
@@ -105,9 +94,14 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
             ) - _float_or_zero(segment.get("start_time"))
         if original_duration <= 0:
             original_duration = 1.0
-        duration = max(0.1, original_duration * scale)
+        audio = segment.get("audio") if isinstance(segment.get("audio"), dict) else {}
+        is_source_insert = audio.get("mode") == "source"
+        duration = max(
+            0.1,
+            original_duration if is_source_insert else original_duration * scale,
+        )
         start = cursor
-        end = target_duration if index == len(segments) - 1 else cursor + duration
+        end = cursor + duration
         segment["start_time"] = round(start, 3)
         segment["end_time"] = round(end, 3)
         segment["duration"] = round(max(0.1, end - start), 3)
@@ -117,8 +111,9 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
         if isinstance(timeline.get("audio_plan"), dict)
         else None
     )
+    timeline_duration = round(cursor, 3)
     if audio_plan:
-        audio_plan["duration_seconds"] = round(target_duration, 3)
+        audio_plan["duration_seconds"] = timeline_duration
         regions = (
             audio_plan.get("regions")
             if isinstance(audio_plan.get("regions"), list)
@@ -141,9 +136,15 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
                     - _float_or_zero(segment.get("start_time")),
                     3,
                 )
-    timeline["duration_seconds"] = round(target_duration, 3)
-    timeline["timing_source"] = "avatar_duration_rescaled"
-    timeline.setdefault("original_duration_seconds", round(current_end, 3))
+    timeline["duration_seconds"] = timeline_duration
+    timeline["timing_source"] = (
+        "avatar_narration_rescaled_with_source_pauses"
+        if has_source_insert
+        else "avatar_duration_rescaled"
+    )
+    timeline.setdefault(
+        "original_narration_duration_seconds", round(narration_duration, 3)
+    )
     direction = (
         manifest.get("direction") if isinstance(manifest.get("direction"), dict) else {}
     )

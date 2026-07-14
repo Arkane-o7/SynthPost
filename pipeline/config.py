@@ -51,6 +51,12 @@ def words_per_minute() -> float:
     return env_float("SYNTHPOST_WORDS_PER_MINUTE", 145.0)
 
 
+def source_audio_inserts_enabled() -> bool:
+    """Keep unverified source audio out of production unless explicitly enabled."""
+
+    return env_bool("SYNTHPOST_EXPERIMENTAL_SOURCE_AUDIO", False)
+
+
 def sample_story_path() -> Path:
     return (
         PROJECT_ROOT
