@@ -77,9 +77,9 @@ class ConfigurationBoundaryTests(unittest.TestCase):
 
     def test_parallel_worker_defaults_and_overrides_are_typed(self) -> None:
         defaults = config.load_settings({})
-        self.assertEqual(defaults.jobs.editorial_workers, 2)
-        self.assertEqual(defaults.jobs.media_workers, 2)
-        self.assertEqual(defaults.jobs.render_workers, 2)
+        self.assertEqual(defaults.jobs.editorial_workers, 3)
+        self.assertEqual(defaults.jobs.media_workers, 3)
+        self.assertEqual(defaults.jobs.render_workers, 3)
         self.assertEqual(defaults.render.remotion_concurrency, 4)
 
         configured = config.load_settings(

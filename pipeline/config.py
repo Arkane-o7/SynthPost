@@ -125,9 +125,9 @@ class RenderSettings(SettingsModel):
 
 
 class JobSettings(SettingsModel):
-    editorial_workers: int = Field(default=2, ge=1, le=32)
-    media_workers: int = Field(default=2, ge=1, le=32)
-    render_workers: int = Field(default=2, ge=1, le=16)
+    editorial_workers: int = Field(default=3, ge=1, le=32)
+    media_workers: int = Field(default=3, ge=1, le=32)
+    render_workers: int = Field(default=3, ge=1, le=16)
     editorial_max_attempts: int = Field(default=3, ge=1)
     media_max_attempts: int = Field(default=3, ge=1)
     render_max_attempts: int = Field(default=2, ge=1)
@@ -350,9 +350,9 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
             ),
             jobs=JobSettings(
-                editorial_workers=r.integer("SYNTHPOST_EDITORIAL_WORKERS", 2),
-                media_workers=r.integer("SYNTHPOST_MEDIA_WORKERS", 2),
-                render_workers=r.integer("SYNTHPOST_RENDER_WORKERS", 2),
+                editorial_workers=r.integer("SYNTHPOST_EDITORIAL_WORKERS", 3),
+                media_workers=r.integer("SYNTHPOST_MEDIA_WORKERS", 3),
+                render_workers=r.integer("SYNTHPOST_RENDER_WORKERS", 3),
                 editorial_max_attempts=r.integer(
                     "SYNTHPOST_EDITORIAL_JOB_MAX_ATTEMPTS", 3
                 ),

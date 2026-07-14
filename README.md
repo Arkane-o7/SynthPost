@@ -38,7 +38,7 @@ make dev
 
 Open `http://127.0.0.1:5173`. Add the API key for the selected LLM provider in `.env`; use `SYNTHPOST_LLM_PROVIDER=mock` only for tests and smoke/demo runs.
 
-`make dev` starts FastAPI on port 8765, the configured editorial/media/render process pools, and Vite on port 5173. The default capacity is two workers per lane, so independent projects can research, acquire media, render, and assemble concurrently. Tune `SYNTHPOST_EDITORIAL_WORKERS`, `SYNTHPOST_MEDIA_WORKERS`, and `SYNTHPOST_RENDER_WORKERS` in `.env`, then confirm the effective capacity with `make doctor`.
+`make dev` starts FastAPI on port 8765, the configured editorial/media/render process pools, and Vite on port 5173. The default capacity is three workers per lane, so independent projects can research, acquire media, render, and assemble concurrently. Tune `SYNTHPOST_EDITORIAL_WORKERS`, `SYNTHPOST_MEDIA_WORKERS`, and `SYNTHPOST_RENDER_WORKERS` in `.env`, then confirm the effective capacity with `make doctor`.
 
 Run components separately with `make backend`, `make workers`, `make worker LANE=render SLOT=1`, and `make web`. SynthPost serializes stages that target the same story and prevents episode assembly from overlapping work in that episode; unrelated projects and episodes remain parallel.
 
