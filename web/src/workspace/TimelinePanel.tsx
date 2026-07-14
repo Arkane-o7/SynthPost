@@ -4,7 +4,12 @@ import { useStudio } from "../state/useStudio";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { formatDuration } from "../lib/formatters";
-import type { TimelinePlan, TimelineSegment } from "../contracts";
+import { TimelineTemplatePreview } from "./TimelineTemplatePreview";
+import type {
+  TimelinePlan,
+  TimelineSegment,
+  VisualCandidate,
+} from "../contracts";
 
 const TEMPLATE_IDS = [
   "split_anchor_visual",
@@ -24,15 +29,24 @@ function reorder<T>(items: T[], from: number, to: number): T[] {
 export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const studio = useStudio();
   const [timeline, setTimeline] = React.useState<TimelinePlan | null>(null);
+  const [visuals, setVisuals] = React.useState<VisualCandidate[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const load = React.useCallback(
     () =>
-      api
-        .readTimeline(storyId)
-        .then(setTimeline)
-        .catch(() => setTimeline(null)),
+      Promise.all([
+        api.readTimeline(storyId),
+        api.listVisuals(storyId).catch(() => [] as VisualCandidate[]),
+      ])
+        .then(([nextTimeline, nextVisuals]) => {
+          setTimeline(nextTimeline);
+          setVisuals(nextVisuals);
+        })
+        .catch(() => {
+          setTimeline(null);
+          setVisuals([]);
+        }),
     [storyId, studio.lastJobEventTimestamp],
   );
   React.useEffect(() => {
@@ -72,6 +86,10 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const totalDuration = timeline
     ? timeline.segments.reduce((sum, s) => sum + s.duration, 0)
     : 0;
+  const visualsById = React.useMemo(
+    () => new Map(visuals.map((visual) => [visual.asset_id, visual])),
+    [visuals],
+  );
 
   if (!timeline) {
     return (
@@ -190,7 +208,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             >
               ≡
             </div>
-            <div className="stack">
+            <div className="stack timeline-segment-main">
               <div className="segment-header">
                 <div className="row-tight">
                   <span style={{ fontWeight: 700, fontSize: 13 }}>
@@ -263,6 +281,14 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 )}
               </div>
             </div>
+            <TimelineTemplatePreview
+              segment={seg}
+              visual={
+                seg.visual.asset_id
+                  ? visualsById.get(seg.visual.asset_id)
+                  : undefined
+              }
+            />
           </div>
         ))}
       </div>
