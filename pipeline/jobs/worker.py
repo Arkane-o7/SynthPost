@@ -331,12 +331,10 @@ def handle_assemble_episode(ctx: JobContext) -> dict[str, str]:
     if not test_mode:
         episode = ctx.repository.get_episode(ctx.job.episode_id)
         episode.final_output_path = project_relative(output)
-        episode.status = EpisodeStatus.completed
         episode.render_profile = str(
             payload.get("render_profile") or ctx.job.render_profile or "production"
         )
-        episode.updated_at = now_iso()
-        ctx.repository.upsert_episode(episode)
+        revision_in_progress = False
         for story_id in episode.story_ids:
             try:
                 candidate = ctx.repository.candidate_for_story(story_id)
@@ -344,6 +342,8 @@ def handle_assemble_episode(ctx: JobContext) -> dict[str, str]:
                     ctx.repository.transition_story(
                         story_id, StoryWorkflowState.completed
                     )
+                elif candidate.workflow_state != StoryWorkflowState.completed:
+                    revision_in_progress = True
             except Exception as exc:
                 ctx.log(
                     f"Could not advance story completion state: {exc}",
@@ -351,6 +351,13 @@ def handle_assemble_episode(ctx: JobContext) -> dict[str, str]:
                     level="WARNING",
                     fields={"affected_story_id": story_id},
                 )
+        episode.status = (
+            EpisodeStatus.in_progress
+            if revision_in_progress
+            else EpisodeStatus.completed
+        )
+        episode.updated_at = now_iso()
+        ctx.repository.upsert_episode(episode)
     ctx.progress(100, "episode assembly completed")
     return {"final_output_path": project_relative(output)}
 

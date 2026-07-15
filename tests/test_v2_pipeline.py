@@ -33,6 +33,7 @@ from pipeline.models import (
     ApprovalStatus,
     AudioMode,
     ContentRole,
+    EpisodeStatus,
     JobStatus,
     MediaType,
     NarrativeArcItem,
@@ -65,7 +66,11 @@ from pipeline.models import (
 )
 from pipeline.research.extract import build_research_pack
 from pipeline.run_story import _sync_timeline_to_avatar_duration
-from pipeline.scripts.generation import approve_script, save_manual_script
+from pipeline.scripts.generation import (
+    approve_script,
+    reconcile_script_revision_workflows,
+    save_manual_script,
+)
 from pipeline.scripts.generation import (
     compact_research_pack_for_prompt,
     _validate_narrative_draft,
@@ -115,6 +120,7 @@ from pipeline.workflow import assert_transition, can_transition
 from pipeline.jobs.worker import (
     HANDLERS,
     _restore_script_state_after_terminal_failure,
+    handle_assemble_episode,
     recover_stale_jobs,
     run_one,
 )
@@ -2400,6 +2406,10 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             assert selected.story_id
             selected.workflow_state = StoryWorkflowState.completed
             repository.upsert_candidate(selected)
+            episode = repository.get_episode(episode.episode_id)
+            episode.status = EpisodeStatus.completed
+            episode.final_output_path = "episodes/previous-final.mp4"
+            repository.upsert_episode(episode)
 
             save_manual_script(
                 repository,
@@ -2412,6 +2422,11 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 repository.candidate_for_story(selected.story_id).workflow_state,
                 StoryWorkflowState.script_review,
             )
+            reopened = repository.get_episode(episode.episode_id)
+            self.assertEqual(reopened.status, EpisodeStatus.in_progress)
+            self.assertEqual(
+                reopened.final_output_path, "episodes/previous-final.mp4"
+            )
             approved = approve_script(repository, selected.story_id)
             self.assertEqual(approved.status.value, "approved")
             self.assertTrue(
@@ -2420,6 +2435,162 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     for section in approved.sections
                 )
             )
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_completed_story_regeneration_reopens_before_job_runs(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        database_path = Path(temp.name) / "completed-regenerate.sqlite3"
+        repository = Repository(database_path)
+        try:
+            project = repository.create_project("Completed regeneration")
+            episode = repository.create_episode(project.project_id, "Episode")
+            candidate = add_manual_story(
+                repository,
+                title="Completed story",
+                body="The first production has already completed.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            selected.workflow_state = StoryWorkflowState.completed
+            repository.upsert_candidate(selected)
+            episode = repository.get_episode(episode.episode_id)
+            episode.status = EpisodeStatus.completed
+            episode.final_output_path = "episodes/previous-final.mp4"
+            repository.upsert_episode(episode)
+            repository.upsert_research_pack(
+                ResearchPack(
+                    story_id=selected.story_id,
+                    claims=[
+                        Claim(
+                            claim_id="claim_revision",
+                            claim_text="The completed story has supported research.",
+                            supported=True,
+                        )
+                    ],
+                    research_summary="Research retained for a production revision.",
+                )
+            )
+
+            from pipeline.api.main import start_script_generation
+            from pipeline.api.schemas import GenerateScriptRequest
+
+            with patch("pipeline.api.main.repo", return_value=repository):
+                job = start_script_generation(
+                    selected.story_id,
+                    GenerateScriptRequest(
+                        provider="mock",
+                        target_duration_seconds=60,
+                        narration_mode="signal",
+                    ),
+                )
+
+            repository = Repository(database_path)
+            self.assertEqual(
+                job["payload"]["_previous_workflow_state"], "script_review"
+            )
+            self.assertEqual(
+                repository.candidate_for_story(selected.story_id).workflow_state,
+                StoryWorkflowState.script_generating,
+            )
+            reopened = repository.get_episode(episode.episode_id)
+            self.assertEqual(reopened.status, EpisodeStatus.in_progress)
+            self.assertEqual(
+                reopened.final_output_path, "episodes/previous-final.mp4"
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_inflight_assembly_cannot_recomplete_a_revised_episode(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "assembly-revision.sqlite3")
+        try:
+            project = repository.create_project("Assembly revision")
+            episode = repository.create_episode(project.project_id, "Episode")
+            candidate = add_manual_story(
+                repository,
+                title="Revised during assembly",
+                body="The editor found an issue while assembly was running.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            selected.workflow_state = StoryWorkflowState.script_review
+            repository.upsert_candidate(selected)
+            episode = repository.get_episode(episode.episode_id)
+
+            context = SimpleNamespace(
+                repository=repository,
+                job=SimpleNamespace(
+                    episode_id=episode.episode_id,
+                    payload={"render_profile": "production"},
+                    render_profile="production",
+                ),
+                progress=lambda *_args: None,
+                log=lambda *_args, **_kwargs: None,
+            )
+            output = PROJECT_ROOT / "episodes" / episode.episode_id / "final.mp4"
+            with patch("pipeline.jobs.worker.stitch_episode", return_value=output):
+                handle_assemble_episode(context)
+
+            revised_episode = repository.get_episode(episode.episode_id)
+            self.assertEqual(revised_episode.status, EpisodeStatus.in_progress)
+            self.assertEqual(
+                repository.candidate_for_story(selected.story_id).workflow_state,
+                StoryWorkflowState.script_review,
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_startup_reconciles_legacy_unapproved_completed_revision(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "legacy-revision.sqlite3")
+        try:
+            project = repository.create_project("Legacy revision")
+            episode = repository.create_episode(project.project_id, "Episode")
+            candidate = add_manual_story(
+                repository,
+                title="Legacy completed story",
+                body="An older server persisted a draft without reopening production.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            save_manual_script(
+                repository,
+                selected.story_id,
+                "Legacy revision",
+                "This newer draft must be reviewed before production continues.",
+            )
+            selected = repository.candidate_for_story(selected.story_id)
+            selected.workflow_state = StoryWorkflowState.completed
+            repository.upsert_candidate(selected)
+            episode = repository.get_episode(episode.episode_id)
+            episode.status = EpisodeStatus.completed
+            episode.final_output_path = "episodes/legacy-final.mp4"
+            repository.upsert_episode(episode)
+
+            repaired = reconcile_script_revision_workflows(repository)
+
+            self.assertEqual(repaired, 1)
+            self.assertEqual(
+                repository.candidate_for_story(selected.story_id).workflow_state,
+                StoryWorkflowState.script_review,
+            )
+            reopened = repository.get_episode(episode.episode_id)
+            self.assertEqual(reopened.status, EpisodeStatus.in_progress)
+            self.assertEqual(reopened.final_output_path, "episodes/legacy-final.mp4")
+            self.assertEqual(reconcile_script_revision_workflows(repository), 0)
         finally:
             repository.close()
             temp.cleanup()

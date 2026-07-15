@@ -79,10 +79,14 @@ export const CommandCenter: React.FC<{
     setActiveStage(getActiveStage(story?.workflow_state));
   }, [story?.story_id]);
 
-  // Auto-advance when backend workflow moves forward. Do not snap the user
-  // backward to an older workflow-derived stage while they are already working
-  // in Render/Assembly.
+  // Keep a requested script revision in view even if a stale completed state is
+  // briefly returned while the queued job and workflow update are refreshing.
+  // Otherwise auto-advance as production moves forward.
   React.useEffect(() => {
+    if (hasActiveScriptJob) {
+      setActiveStage("script");
+      return;
+    }
     const nextStage = getActiveStage(story?.workflow_state);
     setActiveStage((currentStage) => {
       const currentIndex = STAGES.findIndex(
@@ -91,7 +95,7 @@ export const CommandCenter: React.FC<{
       const nextIndex = STAGES.findIndex((stage) => stage.key === nextStage);
       return nextIndex > currentIndex ? nextStage : currentStage;
     });
-  }, [story?.workflow_state]);
+  }, [hasActiveScriptJob, story?.workflow_state]);
 
   const act = async (fn: () => Promise<unknown>) => {
     try {

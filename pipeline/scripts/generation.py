@@ -21,6 +21,7 @@ from pipeline.editorial.charter import (
 )
 from pipeline.models import (
     ApprovalStatus,
+    EpisodeStatus,
     GenerationAudit,
     NarrativeArcItem,
     NarrativeBeat,
@@ -70,9 +71,73 @@ def _move_story_to_script_review(repository, story_id: str) -> None:
 
     _assert_story_can_enter_script_review(repository, story_id)
     current = repository.candidate_for_story(story_id).workflow_state
-    if current == StoryWorkflowState.script_review:
+    if current != StoryWorkflowState.script_review:
+        repository.transition_story(story_id, StoryWorkflowState.script_review)
+    _reopen_episode_for_revision(repository, story_id)
+
+
+def _reopen_episode_for_revision(repository, story_id: str) -> None:
+    """Mark a finished episode active again while retaining its previous output."""
+
+    episode = repository.episode_for_story(story_id)
+    if episode.status not in {EpisodeStatus.completed, EpisodeStatus.failed}:
         return
-    repository.transition_story(story_id, StoryWorkflowState.script_review)
+    episode.status = EpisodeStatus.in_progress
+    episode.updated_at = now_iso()
+    repository.upsert_episode(episode)
+
+
+def begin_script_generation(repository, story_id: str) -> StoryWorkflowState:
+    """Enter script generation immediately and return the safe failure state.
+
+    A revision requested from visuals, timeline, render, assembly, or a completed
+    production first invalidates those downstream stages by returning to script
+    review. The queued generation job then owns the temporary generating state.
+    """
+
+    _assert_story_can_enter_script_review(repository, story_id)
+    current = repository.candidate_for_story(story_id).workflow_state
+    restore_state = (
+        current
+        if current
+        in {StoryWorkflowState.research_ready, StoryWorkflowState.script_review}
+        else StoryWorkflowState.script_review
+    )
+    if current not in {
+        StoryWorkflowState.research_ready,
+        StoryWorkflowState.script_review,
+    }:
+        repository.transition_story(story_id, StoryWorkflowState.script_review)
+    repository.transition_story(story_id, StoryWorkflowState.script_generating)
+    _reopen_episode_for_revision(repository, story_id)
+    return restore_state
+
+
+def reconcile_script_revision_workflows(repository) -> int:
+    """Repair legacy stories whose newest script invalidated downstream state."""
+
+    downstream_states = {
+        StoryWorkflowState.script_approved,
+        StoryWorkflowState.visuals_searching,
+        StoryWorkflowState.visuals_review,
+        StoryWorkflowState.timeline_draft,
+        StoryWorkflowState.timeline_review,
+        StoryWorkflowState.timeline_approved,
+        StoryWorkflowState.rendering_avatar,
+        StoryWorkflowState.rendering_composition,
+        StoryWorkflowState.assembling,
+        StoryWorkflowState.completed,
+    }
+    repaired = 0
+    for candidate in repository.list_candidates(limit=10_000):
+        if not candidate.story_id or candidate.workflow_state not in downstream_states:
+            continue
+        latest = repository.latest_script(candidate.story_id)
+        if not latest or latest.status == ScriptStatus.approved:
+            continue
+        _move_story_to_script_review(repository, candidate.story_id)
+        repaired += 1
+    return repaired
 
 
 SCRIPT_PROMPT_VERSION = "synthpost.script.v5"

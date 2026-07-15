@@ -53,7 +53,12 @@ from pipeline.models import (
     TimelineStatus,
 )
 from pipeline.observability import LogContext, format_event
-from pipeline.scripts.generation import approve_script, save_manual_script
+from pipeline.scripts.generation import (
+    approve_script,
+    begin_script_generation,
+    reconcile_script_revision_workflows,
+    save_manual_script,
+)
 from pipeline.storage import (
     PROJECT_ROOT,
     episode_media_inbox_dir,
@@ -134,6 +139,17 @@ def startup() -> None:
         rescored = rescore_existing_candidates(repository)
         if rescored:
             rebuild_assignment_desk(repository, use_ai=False)
+        reconciled = reconcile_script_revision_workflows(repository)
+        if reconciled:
+            print(
+                format_event(
+                    "workflow_reconciled",
+                    f"Reopened {reconciled} stor{'y' if reconciled == 1 else 'ies'} "
+                    "with a newer unapproved script revision",
+                    context=LogContext(stage="startup"),
+                    fields={"story_count": reconciled},
+                )
+            )
     finally:
         repository.close()
 
@@ -468,20 +484,28 @@ def start_script_generation(
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        candidate = repository.candidate_for_story(story_id)
+        active_job = repository.active_job("script_generate", story_id=story_id)
+        if active_job:
+            return active_job.model_dump(mode="json")
+        if not repository.latest_research_pack(story_id):
+            raise ValueError(
+                "Research must be completed before generating a script revision"
+            )
+        restore_state = begin_script_generation(repository, story_id)
         job_payload = payload.model_dump()
-        job_payload["_previous_workflow_state"] = candidate.workflow_state.value
-        if candidate.workflow_state in {
-            StoryWorkflowState.research_ready,
-            StoryWorkflowState.script_review,
-        }:
-            repository.transition_story(story_id, StoryWorkflowState.script_generating)
-        job = repository.create_job(
-            "script_generate",
-            episode_id=episode.episode_id,
-            story_id=story_id,
-            payload=job_payload,
-        )
+        job_payload["_previous_workflow_state"] = restore_state.value
+        try:
+            job = repository.create_job(
+                "script_generate",
+                episode_id=episode.episode_id,
+                story_id=story_id,
+                payload=job_payload,
+            )
+        except Exception:
+            candidate = repository.candidate_for_story(story_id)
+            if candidate.workflow_state == StoryWorkflowState.script_generating:
+                repository.transition_story(story_id, restore_state)
+            raise
         return job.model_dump(mode="json")
     finally:
         repository.close()
@@ -513,6 +537,10 @@ def generation_audits(story_id: str, limit: int = 50) -> list[dict[str, Any]]:
 def save_script(story_id: str, payload: ManualScript) -> dict[str, Any]:
     repository = repo()
     try:
+        if repository.active_job("script_generate", story_id=story_id):
+            raise ValueError(
+                "Wait for the active script generation to finish before saving edits"
+            )
         return save_manual_script(
             repository,
             story_id,
@@ -528,6 +556,10 @@ def save_script(story_id: str, payload: ManualScript) -> dict[str, Any]:
 def api_approve_script(story_id: str) -> dict[str, Any]:
     repository = repo()
     try:
+        if repository.active_job("script_generate", story_id=story_id):
+            raise ValueError(
+                "Wait for the active script generation to finish before approving"
+            )
         script = approve_script(repository, story_id)
         # Auto-trigger visual search after script approval so the pipeline
         # doesn't stall waiting for the user to manually click "Search".

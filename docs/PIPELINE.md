@@ -33,7 +33,9 @@ The selected story remains the lead document. Related coverage is collected thro
 
 Script generation is narrative-first. The configured structured LLM provider first produces a story-level brief that allocates evidence across one progressive arc, then writes the complete uninterrupted narration in a single response. A deterministic quality gate rejects repeated scene openings, near-duplicate beats, repeated phrases, and obvious sentence-start grammar failures; a failed draft receives one whole-narrative continuity repair and must pass the gate afterward.
 
-Only accepted narration is segmented. The segmentation response may reference stable narration beat IDs exactly once and in order, but cannot return or rewrite narration text. Each compact narration beat must link to at least one supported research claim. Section metadata, visual queries, template hints, lower thirds, and chyrons are derived after this boundary. The resulting sections are converted into the existing `ScriptDocument`, so visuals, timelines, manifests, and legacy stored scripts remain compatible. Every provider stage and normalization is recorded as a versioned generation audit. Generating or manually saving a new script revision returns the story to `script_review`, invalidating downstream workflow state without deleting its audit history. Only the newest script and timeline revisions can cross production approval boundaries, so an older approved revision cannot be rendered after a newer draft is saved. Approval is explicit and advances workflow state.
+Only accepted narration is segmented. The segmentation response may reference stable narration beat IDs exactly once and in order, but cannot return or rewrite narration text. Each compact narration beat must link to at least one supported research claim. Section metadata, visual queries, template hints, lower thirds, and chyrons are derived after this boundary. The resulting sections are converted into the existing `ScriptDocument`, so visuals, timelines, manifests, and legacy stored scripts remain compatible. Every provider stage and normalization is recorded as a versioned generation audit.
+
+Generating or manually saving a new script revision returns the story to `script_review`, invalidating downstream workflow state without deleting its audit history. This also applies to rendered and completed productions: regeneration enters `script_generating` as soon as the job is queued, reopens the episode as `in_progress`, and keeps the Script workspace focused. The previous final video remains available as a historical output. After approving the new script, the editor proceeds through visuals, timeline, preview, render, and assembly again. Only the newest script and timeline revisions can cross production approval boundaries, so an older approved revision cannot be rendered after a newer draft is saved. Script edits and approval are blocked while generation is active to prevent competing revisions.
 
 ### Visual discovery and review
 
@@ -57,7 +59,7 @@ Remotion consumes `story.json`. If the output is newer than the manifest, anchor
 
 ### Assembly
 
-FFmpeg normalizes story clips and joins them with brand intro/outro assets. Production and `TEST_MODE` outputs are distinct. Successful production assembly updates the episode and story completion states.
+FFmpeg normalizes story clips and joins them with brand intro/outro assets. Production and `TEST_MODE` outputs are distinct. Successful production assembly updates the episode and story completion states. If an editor starts a script revision while an older assembly is already in flight, that output is retained, but its completion cannot overwrite the reopened `in_progress` episode state.
 
 ## Cache, skip, retry, and failure semantics
 
