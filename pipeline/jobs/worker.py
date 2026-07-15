@@ -185,7 +185,7 @@ def handle_research(ctx: JobContext) -> dict[str, str]:
 def handle_script_generate(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("script job requires story_id")
-    ctx.progress(10, "calling structured LLM provider")
+    ctx.progress(10, "planning coherent production narration")
     script = generate_script(
         ctx.repository,
         ctx.job.story_id,
@@ -194,6 +194,9 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
             ctx.job.payload.get("target_duration_seconds") or 600
         ),
         narration_mode=str(ctx.job.payload.get("narration_mode") or "explained"),
+        progress_callback=lambda fraction, stage: ctx.progress(
+            10 + (max(0.0, min(1.0, fraction)) * 85), stage
+        ),
     )
     ctx.progress(100, "script ready for review")
     return {"script_id": script.script_id}
@@ -404,17 +407,28 @@ def job_deadline(job_type: str):
 
 def _restore_script_state_after_terminal_failure(
     repository: Repository, job: RenderJob
-) -> None:
+) -> str | None:
     if job.job_type != "script_generate" or not job.story_id:
-        return
+        return None
     try:
         candidate = repository.candidate_for_story(job.story_id)
         if candidate.workflow_state == StoryWorkflowState.script_generating:
+            previous_value = job.payload.get("_previous_workflow_state")
+            try:
+                previous_state = StoryWorkflowState(str(previous_value))
+            except ValueError:
+                previous_state = StoryWorkflowState.research_ready
+            if previous_state not in {
+                StoryWorkflowState.research_ready,
+                StoryWorkflowState.script_review,
+            }:
+                previous_state = StoryWorkflowState.research_ready
             repository.transition_story(
-                job.story_id, StoryWorkflowState.research_ready
+                job.story_id, previous_state
             )
-    except Exception:
-        pass
+    except Exception as exc:
+        return safe_text(exc)
+    return None
 
 
 def recover_stale_jobs(
@@ -466,7 +480,15 @@ def recover_stale_jobs(
         if not repository.update_job_if_status(job, JobStatus.running):
             continue
         if job.status == JobStatus.failed:
-            _restore_script_state_after_terminal_failure(repository, job)
+            restore_error = _restore_script_state_after_terminal_failure(
+                repository, job
+            )
+            if restore_error:
+                print(
+                    "[worker] WARNING: could not restore script workflow state "
+                    f"for {job.job_id}: {restore_error}",
+                    flush=True,
+                )
         recovered += 1
     return recovered
 
@@ -545,7 +567,16 @@ def run_one(
                 )
                 ctx.log(str(exc), event="stage_failure", level="WARNING")
             else:
-                _restore_script_state_after_terminal_failure(repository, job)
+                restore_error = _restore_script_state_after_terminal_failure(
+                    repository, job
+                )
+                if restore_error:
+                    ctx.log(
+                        "Could not restore the prior script workflow state: "
+                        + restore_error,
+                        event="workflow_restore_failed",
+                        level="WARNING",
+                    )
                 ctx.log(
                     "FAILED: " + str(exc),
                     event="stage_failed",

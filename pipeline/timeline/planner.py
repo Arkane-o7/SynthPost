@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from pipeline import config
 from pipeline.models import (
@@ -247,15 +248,45 @@ def _is_renderable_visual(visual: VisualCandidate) -> bool:
         return False
     if not resolve_project_path(visual.download_path).is_file():
         return False
-    if visual.media_type in {MediaType.image, MediaType.video} and config.env_bool(
-        "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
+    if (
+        visual.media_type in {MediaType.image, MediaType.video}
+        and config.get_settings().visuals.enforce_broadcast_fit
     ):
         eligible, _reason, _score = broadcast_media_fit(
             visual.width, visual.height, visual.media_type
         )
-        if not eligible:
+        if not eligible and not visual.broadcast_fit_override:
             return False
     return True
+
+
+def _review_recency(visual: VisualCandidate) -> float:
+    if not visual.reviewed_at:
+        return 0.0
+    try:
+        reviewed = datetime.fromisoformat(
+            visual.reviewed_at.replace("Z", "+00:00")
+        )
+        if reviewed.tzinfo is None:
+            reviewed = reviewed.replace(tzinfo=timezone.utc)
+        return reviewed.timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _visual_selection_key(visual: VisualCandidate) -> tuple:
+    explicitly_approved = visual.review_status in {
+        ReviewStatus.approved,
+        ReviewStatus.manual_approved,
+    }
+    return (
+        _is_fallback_visual(visual),
+        0 if explicitly_approved else 1,
+        -_review_recency(visual) if explicitly_approved else 0.0,
+        -visual.relevance_score,
+        -visual.visual_quality_score,
+        -visual.source_authority,
+    )
 
 
 def approved_visuals_by_section(
@@ -269,20 +300,7 @@ def approved_visuals_by_section(
     """
 
     result: dict[str, VisualCandidate] = {}
-    ranked = sorted(
-        visuals,
-        key=lambda visual: (
-            _is_fallback_visual(visual),
-            0
-            if visual.review_status == ReviewStatus.manual_approved
-            else 1
-            if visual.review_status == ReviewStatus.approved
-            else 2,
-            -visual.relevance_score,
-            -visual.visual_quality_score,
-            -visual.source_authority,
-        ),
-    )
+    ranked = sorted(visuals, key=_visual_selection_key)
     for visual in ranked:
         if not _is_renderable_visual(visual):
             continue
@@ -297,19 +315,7 @@ def source_audio_visuals_by_section(
     """Choose an audible local video for each authored source-clip cue."""
 
     result: dict[str, VisualCandidate] = {}
-    ranked = sorted(
-        visuals,
-        key=lambda visual: (
-            0
-            if visual.review_status == ReviewStatus.manual_approved
-            else 1
-            if visual.review_status == ReviewStatus.approved
-            else 2,
-            -visual.relevance_score,
-            -visual.visual_quality_score,
-            -visual.source_authority,
-        ),
-    )
+    ranked = sorted(visuals, key=_visual_selection_key)
     for visual in ranked:
         if (
             visual.media_type != MediaType.video
@@ -738,16 +744,13 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         StoryWorkflowState.visuals_review,
         StoryWorkflowState.script_approved,
     }:
-        try:
-            if candidate.workflow_state == StoryWorkflowState.script_approved:
-                repository.transition_story(
-                    story_id, StoryWorkflowState.visuals_searching
-                )
-                repository.transition_story(story_id, StoryWorkflowState.visuals_review)
-            repository.transition_story(story_id, StoryWorkflowState.timeline_draft)
-            repository.transition_story(story_id, StoryWorkflowState.timeline_review)
-        except Exception:
-            pass
+        if candidate.workflow_state == StoryWorkflowState.script_approved:
+            repository.transition_story(
+                story_id, StoryWorkflowState.visuals_searching
+            )
+            repository.transition_story(story_id, StoryWorkflowState.visuals_review)
+        repository.transition_story(story_id, StoryWorkflowState.timeline_draft)
+        repository.transition_story(story_id, StoryWorkflowState.timeline_review)
     return saved
 
 
@@ -766,13 +769,10 @@ def approve_timeline(repository, story_id: str) -> TimelinePlan:
     plan.status = TimelineStatus.approved
     plan.audio_plan = build_audio_plan(story_id, plan.segments)
     saved = repository.save_timeline(plan)
-    try:
-        current = repository.candidate_for_story(story_id).workflow_state
-        if current == StoryWorkflowState.timeline_review:
-            repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
-        elif current == StoryWorkflowState.timeline_draft:
-            repository.transition_story(story_id, StoryWorkflowState.timeline_review)
-            repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
-    except Exception:
-        pass
+    current = repository.candidate_for_story(story_id).workflow_state
+    if current == StoryWorkflowState.timeline_review:
+        repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
+    elif current == StoryWorkflowState.timeline_draft:
+        repository.transition_story(story_id, StoryWorkflowState.timeline_review)
+        repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
     return saved

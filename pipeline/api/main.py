@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -63,6 +64,7 @@ from pipeline.timeline.planner import approve_timeline, generate_timeline
 from pipeline.timeline.templates import template_registry_json
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
+    SUPPORTED_VISUAL_EXTENSIONS,
     analyze_visual,
     approve_visual,
     download_visual,
@@ -85,6 +87,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(jobs_router)
+
+
+async def _write_streamed_upload(
+    request: Request,
+    destination: Path,
+    *,
+    max_bytes: int,
+) -> int:
+    """Write a request body atomically while enforcing the configured size cap."""
+
+    partial_path = destination.with_name(
+        f".{destination.name}.{uuid4().hex}.uploading"
+    )
+    bytes_written = 0
+    try:
+        with partial_path.open("wb") as handle:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                bytes_written += len(chunk)
+                if bytes_written > max_bytes:
+                    raise ValueError(
+                        "visual upload exceeds SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES"
+                    )
+                handle.write(chunk)
+        if bytes_written == 0:
+            raise ValueError("empty upload body")
+        partial_path.replace(destination)
+        return bytes_written
+    except Exception:
+        partial_path.unlink(missing_ok=True)
+        raise
 
 
 def repo() -> Repository:
@@ -435,6 +469,8 @@ def start_script_generation(
     try:
         episode = repository.episode_for_story(story_id)
         candidate = repository.candidate_for_story(story_id)
+        job_payload = payload.model_dump()
+        job_payload["_previous_workflow_state"] = candidate.workflow_state.value
         if candidate.workflow_state in {
             StoryWorkflowState.research_ready,
             StoryWorkflowState.script_review,
@@ -444,7 +480,7 @@ def start_script_generation(
             "script_generate",
             episode_id=episode.episode_id,
             story_id=story_id,
-            payload=payload.model_dump(),
+            payload=job_payload,
         )
         return job.model_dump(mode="json")
     finally:
@@ -582,9 +618,6 @@ def stage_visual(story_id: str, payload: VisualStageRequest) -> dict[str, Any]:
 async def upload_visual_bytes(
     story_id: str, request: Request, filename: str = "upload.bin"
 ) -> dict[str, Any]:
-    body = await request.body()
-    if not body:
-        raise ValueError("empty upload body")
     repository = repo()
     try:
         episode_id = repository.episode_for_story(story_id).episode_id
@@ -601,8 +634,15 @@ async def upload_visual_bytes(
             )
             or "upload.bin"
         )
-        path = upload_dir / safe
-        path.write_bytes(body)
+        if Path(safe).suffix.lower() not in SUPPORTED_VISUAL_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_VISUAL_EXTENSIONS))
+            raise ValueError(f"unsupported visual file type; expected one of: {supported}")
+        safe_path = Path(safe)
+        path = upload_dir / (
+            f"{safe_path.stem}-{uuid4().hex[:10]}{safe_path.suffix.lower()}"
+        )
+        max_bytes = config.get_settings().visuals.download_max_bytes
+        await _write_streamed_upload(request, path, max_bytes=max_bytes)
         return stage_local_visual(
             repository,
             story_id,
@@ -682,7 +722,7 @@ def api_patch_visual(asset_id: str, patch: VisualPatch) -> dict[str, Any]:
     repository = repo()
     try:
         return update_visual(
-            repository, asset_id, patch.model_dump(exclude_none=True)
+            repository, asset_id, patch.model_dump(exclude_unset=True)
         ).model_dump(mode="json")
     finally:
         repository.close()

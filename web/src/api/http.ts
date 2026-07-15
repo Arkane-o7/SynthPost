@@ -19,10 +19,12 @@ export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const binaryBody =
+    options.body instanceof Uint8Array || options.body instanceof Blob;
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      ...(options.body instanceof Uint8Array
+      ...(binaryBody
         ? {}
         : { "Content-Type": "application/json" }),
       ...(options.headers ?? {}),

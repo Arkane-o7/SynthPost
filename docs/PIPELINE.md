@@ -12,7 +12,7 @@ The queue-backed production pipeline contains eight registered stages. `pipeline
 | Visuals / `visual_search` | media | approved script, episode media inbox, optional SearXNG | `visual_count` | downloaded/staged media, thumbnails, visual records |
 | Timeline / `timeline_generate` | media | approved script and eligible visuals | `timeline_id` | timeline revision and validation messages |
 | Avatar / `render_avatar` | render | approved timeline, renderer manifest, profile | `story_manifest`, `anchor_output_path` | avatar job, audio/lip-sync/render output |
-| Composition / `render_story` | render | renderer manifest, anchor, approved visual paths | `story_manifest` | `preview.png`, `composited*.mp4` |
+| Composition / `render_story` | render | renderer manifest, anchor, eligible local visual paths | `story_manifest` | `preview.png`, `composited*.mp4` |
 | Assembly / `assemble_episode` | render | episode story compositions and brand clips | `final_output_path` | final MP4, assembly work files, episode manifest |
 
 ## Approval boundary
@@ -31,15 +31,21 @@ The selected story remains the lead document. Related coverage is collected thro
 
 ### Script
 
-The configured structured LLM provider receives a versioned prompt and schema. Provider output is normalized and validated before a `ScriptDocument` revision is saved. Manual edits create a new revision. Approval is explicit and advances workflow state.
+Script generation is narrative-first. The configured structured LLM provider first produces a story-level brief that allocates evidence across one progressive arc, then writes the complete uninterrupted narration in a single response. A deterministic quality gate rejects repeated scene openings, near-duplicate beats, repeated phrases, and obvious sentence-start grammar failures; a failed draft receives one whole-narrative continuity repair and must pass the gate afterward.
+
+Only accepted narration is segmented. The segmentation response may reference stable narration beat IDs exactly once and in order, but cannot return or rewrite narration text. Each compact narration beat must link to at least one supported research claim. Section metadata, visual queries, template hints, lower thirds, and chyrons are derived after this boundary. The resulting sections are converted into the existing `ScriptDocument`, so visuals, timelines, manifests, and legacy stored scripts remain compatible. Every provider stage and normalization is recorded as a versioned generation audit. Generating or manually saving a new script revision returns the story to `script_review`, invalidating downstream workflow state without deleting its audit history. Approval is explicit and advances workflow state.
 
 ### Visual discovery and review
 
-Sources run in registry order: the episode-isolated media inbox, then SearXNG if available. Downloaded media is probed for type, size, aspect, audio, and broadcast fit. Search results do not establish rights; yellow assets require manual approval and red assets cannot be approved. Rights-safe generated cards ensure each section has a fallback.
+Sources run in registry order: the episode-isolated media inbox, then SearXNG if available. Downloaded media is probed for actual type, size, aspect, audio, and broadcast fit. A repeated result can be associated with every relevant section, but it is stored and downloaded only once. Re-searching or rescanning preserves acquired media and editor decisions; replacing or reacquiring the bytes of a local file deliberately clears stale approval and returns that asset to review. Same-named uploads and inbox files receive collision-safe destinations instead of overwriting one another.
+
+Search results do not establish rights or content cleanliness. Newly acquired files remain `needs_review` until an editor approves them. A technically eligible local suggestion may be selected automatically, with a timeline warning, because visual approval is optional. Manual approval records the editorial rights and content-review decision and pins that choice above suggestions; the most recently approved candidate wins when an editor changes the pin. Yellow assets require manual approval to be pinned. An explicit manual override reclassifies a red candidate to yellow/manual-approved and remains visible in its metadata. Rejected or blocked assets never render.
+
+Non-downloadable results remain research leads until acquired. Image acquisition first tries the discovered media URL, then the source page's Open Graph image; if both have expired but a cached search preview exists, the editor can still acquire that preview with an explicit quality warning. Missing, rejected, incompatible, or deleted media falls back to the presenter. Fallback records are anchor-only signals; SynthPost does not generate duplicate headline cards as substitute imagery.
 
 ### Timeline
 
-The planner maps script sections, approved visuals, template capabilities, overlays, and audio policy into ordered `TimelineSegment` models. Validation checks timing, rights, file existence, template compatibility, and approval. Timeline approval is required before manifest construction.
+The planner maps script sections, pinned or automatically selected eligible visuals, template capabilities, overlays, and audio policy into ordered `TimelineSegment` models. Validation checks timing, rights, file existence, template compatibility, automatic-selection warnings, and timeline approval. Timeline approval is required before manifest construction.
 
 ### Avatar
 

@@ -108,6 +108,20 @@ class V2ContractTests(unittest.TestCase):
         self.assertIn("export type SourceClipCue", ts)
         self.assertIn("source_clip: SourceClipCue | null", ts)
 
+    def test_visual_contract_exposes_review_recency_for_pin_selection(self) -> None:
+        schema = json.loads(
+            (ROOT / "contracts" / "schemas" / "synthpost.v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        visual = schema["$defs"]["VisualCandidate"]
+        ts = (ROOT / "contracts" / "typescript" / "index.ts").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("reviewed_at", visual["properties"])
+        self.assertIn("reviewed_at: string | null", ts)
+
     def test_job_event_stream_uses_unambiguous_static_route(self) -> None:
         jobs_api = (
             ROOT / "pipeline" / "api" / "routes" / "jobs.py"

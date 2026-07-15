@@ -241,12 +241,11 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   uploadVisual: async (storyId: string, file: File) => {
-    const bytes = new Uint8Array(await file.arrayBuffer());
     return request<VisualCandidate>(
       `/api/stories/${storyId}/visuals/upload-bytes?filename=${encodeURIComponent(file.name)}`,
       {
         method: "POST",
-        body: bytes,
+        body: file,
         headers: { "Content-Type": file.type || "application/octet-stream" },
       },
     );

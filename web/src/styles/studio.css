@@ -1697,7 +1697,18 @@ label {
 }
 
 .visual-attribution {
+    flex: 1 1 auto;
     font-size: 12px;
+}
+
+.visual-attribution-row {
+    align-items: stretch;
+    display: flex;
+    gap: 8px;
+}
+
+.visual-attribution-row button {
+    flex: 0 0 auto;
 }
 
 .visual-card-actions button {

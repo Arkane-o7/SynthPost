@@ -258,6 +258,11 @@ class HostedFallbackProvider:
         except ProviderRateLimitError:
             # A temporary primary-provider token window is not a reason to burn
             # fallback quota. structured_generate will honor its retry delay.
+            # Clear stage-local attribution so a later contract-level fallback
+            # does not mistake this primary failure for a stale provider result
+            # retained from an earlier generation stage.
+            self.last_provider = None
+            self.last_model = None
             raise
         except Exception as exc:
             self.last_primary_error = str(exc)
@@ -321,6 +326,154 @@ class MockProvider:
                 "contains_presenter_package": False,
                 "reasons": blockers or ["no deterministic broadcast packaging detected"],
             }
+        if "narrative brief architect" in prompt.lower():
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            claims = [
+                str(claim.get("claim_id"))
+                for claim in payload.get("claims", [])
+                if claim.get("claim_id")
+            ]
+            primary_claim = claims[:1]
+            return {
+                "headline": "India-rooted systems briefing",
+                "dek": str(
+                    payload.get("research_summary")
+                    or "A grounded explanation of evidence, consequences and uncertainty."
+                )[:180],
+                "category": "news",
+                "thesis": "The documented development matters because implementation will determine its practical impact.",
+                "opening_strategy": "Begin once with the verified development, then advance directly into evidence.",
+                "closing_strategy": "End with the unresolved execution test viewers should watch next.",
+                "arc": [
+                    {
+                        "section_type": "cold_open",
+                        "purpose": "Establish the verified development and central question once.",
+                        "claim_ids": primary_claim,
+                        "must_not_repeat": [],
+                    },
+                    {
+                        "section_type": "context",
+                        "purpose": "Explain the documented system and relevant background.",
+                        "claim_ids": primary_claim,
+                        "must_not_repeat": ["the opening scene"],
+                    },
+                    {
+                        "section_type": "key_developments",
+                        "purpose": "Advance through evidence and implementation details.",
+                        "claim_ids": primary_claim,
+                        "must_not_repeat": ["the basic premise"],
+                    },
+                    {
+                        "section_type": "uncertainty",
+                        "purpose": "Identify the documented constraint and what remains unproven.",
+                        "claim_ids": primary_claim,
+                        "must_not_repeat": ["background already established"],
+                    },
+                    {
+                        "section_type": "conclusion",
+                        "purpose": "Synthesize the evidence and identify the next verifiable test.",
+                        "claim_ids": primary_claim,
+                        "must_not_repeat": ["the opening scene", "the full mechanism"],
+                    },
+                ],
+            }
+        if (
+            "senior narrative writer" in prompt.lower()
+            or "narrative continuity editor" in prompt.lower()
+        ):
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            research = payload.get("research", {})
+            claims = [
+                str(claim.get("claim_id"))
+                for claim in research.get("claims", [])
+                if claim.get("claim_id")
+            ]
+            primary_claim = claims[:1]
+            target_match = re.search(r"(?:about|approximately)\s+(\d+)\s+spoken words", prompt)
+            target_words = int(target_match.group(1)) if target_match else 145
+            templates = [
+                "A documented Indian pilot is moving from proposal to a practical test, creating a clear question about whether implementation can match its ambition.",
+                "The available research establishes the core development without requiring speculation about results that have not yet been demonstrated.",
+                "That distinction matters because an announced design and a proven operating system are different stages of evidence.",
+                "Existing infrastructure, technical constraints and operator decisions now shape what can happen beyond the initial demonstration.",
+                "For passengers and planners, the practical value depends on reliability, capacity and costs rather than the novelty of the underlying idea.",
+                "The evidence also shows that execution will require coordination across engineering, procurement and day-to-day operations.",
+                "Those requirements create a measurable test: performance must remain consistent when the pilot encounters ordinary operating conditions.",
+                "Until those results are available, the responsible conclusion is neither dismissal nor celebration but careful attention to verified progress.",
+                "A successful trial could inform wider investment, while a weak result would expose which assumptions need to be revised.",
+                "The next meaningful update will therefore be operational data that compares the documented promise with repeatable performance.",
+            ]
+            chosen: list[str] = []
+            word_total = 0
+            for sentence in templates:
+                chosen.append(sentence)
+                word_total += len(sentence.split())
+                if word_total >= target_words * 0.9:
+                    break
+            while word_total < target_words * 0.85:
+                sentence = (
+                    "Further documented testing must connect the stated objective to observable operating evidence before broader conclusions are justified."
+                )
+                chosen.append(sentence)
+                word_total += len(sentence.split())
+            return {
+                "headline": "India-rooted systems briefing",
+                "dek": str(
+                    research.get("research_summary")
+                    or "A grounded SynthPost explanation."
+                )[:180],
+                "category": "news",
+                "beats": [
+                    {
+                        "beat_id": f"beat_{index:03d}",
+                        "text": sentence,
+                        "claim_ids": primary_claim,
+                    }
+                    for index, sentence in enumerate(chosen, start=1)
+                ],
+            }
+        if "narrative segmentation editor" in prompt.lower():
+            marker = "INPUT JSON:\n"
+            payload = json.loads(prompt.split(marker, 1)[1])
+            beat_ids = [
+                str(beat.get("beat_id"))
+                for beat in payload.get("draft", {}).get("beats", [])
+                if beat.get("beat_id")
+            ]
+            section_types = [
+                "cold_open",
+                "context",
+                "key_developments",
+                "uncertainty",
+                "conclusion",
+            ][: len(beat_ids)]
+            sections = []
+            start = 0
+            for index, section_type in enumerate(section_types):
+                remaining_sections = len(section_types) - index
+                remaining_beats = len(beat_ids) - start
+                take = max(1, round(remaining_beats / remaining_sections))
+                end = len(beat_ids) if index == len(section_types) - 1 else start + take
+                assigned = beat_ids[start:end]
+                start = end
+                sections.append(
+                    {
+                        "section_type": section_type,
+                        "beat_ids": assigned,
+                        "suggested_visual_types": ["image", "video"],
+                        "suggested_search_queries": [
+                            f"India {section_type.replace('_', ' ')} editorial photo",
+                            f"India {section_type.replace('_', ' ')} official raw footage",
+                        ],
+                        "suggested_template_ids": ["split_anchor_visual"],
+                        "lower_third": section_type.replace("_", " ").title(),
+                        "chyron": f"{section_type.replace('_', ' ').title()} explained",
+                        "source_clip": None,
+                    }
+                )
+            return {"sections": sections}
         if "long-form section expansion" in prompt.lower():
             marker = "INPUT JSON:\n"
             payload = json.loads(prompt.split(marker, 1)[1])
@@ -496,6 +649,7 @@ def structured_generate(
     current_prompt = prompt
     for attempt in range(max_retries + 1):
         started = time.time()
+        raw: dict[str, Any] | None = None
         try:
             raw = provider.generate_json(current_prompt, schema)
             value = validator(raw)
@@ -531,18 +685,19 @@ def structured_generate(
                 current_prompt = prompt
                 continue
         except Exception as exc:
-            attempts.append(
-                {
-                    "attempt": attempt + 1,
-                    "ok": False,
-                    "prompt": current_prompt,
-                    "error": str(exc),
-                    "provider": getattr(provider, "last_provider", None)
-                    or provider.name,
-                    "model": getattr(provider, "last_model", None),
-                    "elapsed_seconds": round(time.time() - started, 3),
-                }
-            )
+            failure = {
+                "attempt": attempt + 1,
+                "ok": False,
+                "prompt": current_prompt,
+                "error": str(exc),
+                "provider": getattr(provider, "last_provider", None)
+                or provider.name,
+                "model": getattr(provider, "last_model", None),
+                "elapsed_seconds": round(time.time() - started, 3),
+            }
+            if isinstance(raw, dict):
+                failure["raw"] = raw
+            attempts.append(failure)
             if "request too large" in str(exc).casefold():
                 break
             current_prompt = (

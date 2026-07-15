@@ -238,6 +238,7 @@ export type VisualCandidate = {
   attribution_text: string | null;
   manual_review_flag: boolean;
   review_status: 'suggested' | 'approved' | 'manual_approved' | 'rejected' | 'blocked';
+  reviewed_at: string | null;
   warnings: string[];
   source_class: string;
   source_identity: string | null;
@@ -260,6 +261,7 @@ export type VisualCandidate = {
   content_analysis_provider: string | null;
   content_analysis_evidence: string[];
   approval_blockers: string[];
+  broadcast_fit_override: boolean;
   trim_start: number | null;
   trim_end: number | null;
   motion: Record<string, unknown>;

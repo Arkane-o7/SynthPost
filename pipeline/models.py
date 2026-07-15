@@ -387,6 +387,65 @@ class SourceClipCue(StrictModel):
     quote: str = Field(default="", max_length=500)
 
 
+class NarrativeArcItem(StrictModel):
+    """One editorial job in a narrative brief, before prose is written."""
+
+    section_type: SectionType
+    purpose: str = Field(min_length=4, max_length=320)
+    claim_ids: list[str] = Field(default_factory=list)
+    must_not_repeat: list[str] = Field(default_factory=list)
+
+
+class NarrativeBrief(StrictModel):
+    """A story-level plan that allocates evidence across one continuous arc."""
+
+    headline: str
+    dek: str = ""
+    category: str = "news"
+    thesis: str = Field(min_length=4, max_length=600)
+    opening_strategy: str = Field(min_length=4, max_length=400)
+    closing_strategy: str = Field(min_length=4, max_length=400)
+    arc: list[NarrativeArcItem]
+
+
+class NarrativeBeat(StrictModel):
+    """A stable sentence or major clause inside uninterrupted narration."""
+
+    beat_id: str
+    text: str = Field(min_length=2, max_length=1200)
+    claim_ids: list[str] = Field(default_factory=list)
+
+
+class NarrativeDraft(StrictModel):
+    """The authoritative narration before presentation sections are assigned."""
+
+    headline: str
+    dek: str = ""
+    category: str = "news"
+    beats: list[NarrativeBeat]
+
+    @property
+    def text(self) -> str:
+        return " ".join(beat.text.strip() for beat in self.beats if beat.text.strip())
+
+
+class NarrativeSegmentPlan(StrictModel):
+    """Presentation metadata referencing narration beats without rewriting them."""
+
+    section_type: SectionType
+    beat_ids: list[str]
+    suggested_visual_types: list[str] = Field(default_factory=list)
+    suggested_search_queries: list[str] = Field(default_factory=list)
+    suggested_template_ids: list[str] = Field(default_factory=list)
+    lower_third: str = ""
+    chyron: str = ""
+    source_clip: SourceClipCue | None = None
+
+
+class NarrativeSegmentation(StrictModel):
+    sections: list[NarrativeSegmentPlan]
+
+
 class ScriptSection(StrictModel):
     section_id: str
     section_type: SectionType
@@ -551,6 +610,7 @@ class VisualCandidate(StrictModel):
     attribution_text: str | None = None
     manual_review_flag: bool = True
     review_status: ReviewStatus = ReviewStatus.suggested
+    reviewed_at: str | None = None
     warnings: list[str] = Field(default_factory=list)
     source_class: str = "unknown"
     source_identity: str | None = None
@@ -575,6 +635,7 @@ class VisualCandidate(StrictModel):
     content_analysis_provider: str | None = None
     content_analysis_evidence: list[str] = Field(default_factory=list)
     approval_blockers: list[str] = Field(default_factory=list)
+    broadcast_fit_override: bool = False
     trim_start: float | None = None
     trim_end: float | None = None
     motion: dict[str, Any] = Field(default_factory=dict)
@@ -582,6 +643,23 @@ class VisualCandidate(StrictModel):
 
     @model_validator(mode="after")
     def enforce_rights_state(self) -> "VisualCandidate":
+        normalized_warnings: list[str] = []
+        obsolete_local_fragments = (
+            "download failed",
+            "research lead only",
+            "requested format is not available",
+            "yt-dlp completed without a supported video file",
+        )
+        for warning in self.warnings:
+            if warning.lower().startswith("download rejected for broadcast layout:"):
+                warning = "broadcast layout warning:" + warning.split(":", 1)[1]
+            if self.download_path and any(
+                fragment in warning.lower() for fragment in obsolete_local_fragments
+            ):
+                continue
+            if warning not in normalized_warnings:
+                normalized_warnings.append(warning)
+        self.warnings = normalized_warnings
         if self.rights_tier == RightsTier.red and self.review_status in {
             ReviewStatus.approved,
             ReviewStatus.manual_approved,

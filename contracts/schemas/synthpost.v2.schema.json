@@ -255,6 +255,8 @@
         "attribution_text": {"type": ["string", "null"]},
         "manual_review_flag": {"type": "boolean"},
         "review_status": {"enum": ["suggested", "approved", "manual_approved", "rejected", "blocked"]},
+        "reviewed_at": {"type": ["string", "null"]},
+        "broadcast_fit_override": {"type": "boolean"},
         "warnings": {"type": "array"},
         "trim_start": {"type": ["number", "null"]},
         "trim_end": {"type": ["number", "null"]},

@@ -49,14 +49,6 @@ OFFICIAL_SOURCE_PHRASES = (
 )
 
 
-def _env_csv(name: str) -> set[str]:
-    return {
-        value.strip().lower()
-        for value in (config.env(name, "") or "").split(",")
-        if value.strip()
-    }
-
-
 def _phrase_present(text: str, phrase: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
     needle = re.sub(r"[^a-z0-9]+", " ", phrase.lower()).strip()
@@ -87,7 +79,8 @@ class SourceAssessment:
 
 
 def probe_video_source(url: str) -> dict[str, Any]:
-    binary = config.env("SYNTHPOST_YT_DLP", "yt-dlp") or "yt-dlp"
+    settings = config.get_settings().visuals
+    binary = settings.yt_dlp_binary
     resolved = shutil.which(binary)
     if not resolved:
         raise ValueError("yt-dlp is unavailable for source metadata preflight")
@@ -104,7 +97,7 @@ def probe_video_source(url: str) -> dict[str, Any]:
         check=False,
         capture_output=True,
         text=True,
-        timeout=config.env_float("SYNTHPOST_SEARXNG_VIDEO_TIMEOUT", 300.0),
+        timeout=settings.video_timeout_seconds,
     )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip().splitlines()
@@ -155,12 +148,13 @@ def assess_video_source(
         ]
     )
     brands = detected_news_brands(identity_text)
-    approved_ids = _env_csv("SYNTHPOST_VIDEO_APPROVED_CHANNEL_IDS")
-    approved_names = _env_csv("SYNTHPOST_VIDEO_APPROVED_SOURCE_NAMES")
-    blocked_names = _env_csv("SYNTHPOST_VIDEO_BLOCKED_SOURCE_NAMES")
+    visual_settings = config.get_settings().visuals
+    approved_ids = visual_settings.approved_video_channel_ids
+    approved_names = visual_settings.approved_video_source_names
+    blocked_names = visual_settings.blocked_video_source_names
     normalized_identity = identity.lower()
     explicitly_approved = bool(
-        (channel_id and channel_id.lower() in approved_ids)
+        (channel_id and channel_id in approved_ids)
         or any(value in normalized_identity for value in approved_names)
     )
     explicitly_blocked = bool(
@@ -255,7 +249,7 @@ def extract_representative_frames(
 
 
 def _ocr_frame(path: Path, frame_index: int) -> list[dict[str, Any]]:
-    binary = shutil.which(config.env("SYNTHPOST_TESSERACT", "tesseract") or "tesseract")
+    binary = shutil.which(config.get_settings().visuals.tesseract_binary)
     if not binary:
         raise ValueError("tesseract is unavailable for visual overlay analysis")
     completed = subprocess.run(
@@ -378,7 +372,7 @@ def _validate_ai_result(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ai_classify(evidence: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    if not config.env_bool("SYNTHPOST_AI_VISUAL_CLEANLINESS", True):
+    if not config.get_settings().visuals.ai_cleanliness:
         raise ValueError("AI visual cleanliness classification is disabled")
     provider = configured_provider()
     prompt = f"""

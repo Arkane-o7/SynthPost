@@ -64,20 +64,20 @@ Required means required for the named feature, not for opening the local Studio.
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
 | `SYNTHPOST_AI_VISUAL_QUERY_PLANNING` | `1` | no | `0` | Deterministic query planner is the fallback. |
-| `SYNTHPOST_AI_VISUAL_CLEANLINESS` | `1` | no | `0` | Enables AI evidence review where supported; deterministic blockers still win. |
+| `SYNTHPOST_AI_VISUAL_CLEANLINESS` | `1` | no | `0` | Compatibility switch for the legacy/manual cleanliness analyzer; the normal Studio review flow remains editor-controlled. |
 | `SYNTHPOST_INCLUDE_VISUAL_LEADS` | `1` | no | `1` | Retain non-downloadable results as editor leads. |
 | `SYNTHPOST_DISABLE_WEB_VISUALS` | `0` | no | `1` | Disables web source acquisition. |
-| `SYNTHPOST_GENERATE_FALLBACK_VISUALS` | `1` | no | `1` | Generate rights-safe local cards for uncovered sections. |
+| `SYNTHPOST_GENERATE_FALLBACK_VISUALS` | `1` | no | `1` | Create anchor-only fallback records for uncovered sections; no synthetic image card is rendered. |
 | `SYNTHPOST_SEARXNG_VISUAL_MAX_QUERIES` | `12` | no | `8` | Hard request cap. |
 | `SYNTHPOST_SEARXNG_IMAGE_RESULTS_PER_QUERY` | `3` | no | `3` | Image result cap per query. |
 | `SYNTHPOST_SEARXNG_VIDEO_RESULTS_PER_QUERY` | `2` | no | `2` | Video result cap per query. |
-| `SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS` | `1` | no | `0` | Requires yt-dlp; downloaded media still needs review. |
+| `SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS` | `1` | no | `0` | Requires yt-dlp; downloaded media is eligible for automatic selection, while approval pins an editor-reviewed choice. |
 | `SYNTHPOST_SEARXNG_VIDEO_DOWNLOAD_LIMIT` | `6` | no | `3` | Per-job download cap. |
 | `SYNTHPOST_SEARXNG_VIDEO_CLIP_SECONDS` | `45` | no | `30` | Clip acquisition length. |
 | `SYNTHPOST_SEARXNG_VIDEO_MAX_DURATION` | `900` | no | `600` | Reject longer source pages before download. |
 | `SYNTHPOST_SEARXNG_VIDEO_TIMEOUT` | `300` | no | `300` | Acquisition/analysis subprocess timeout. |
 | `SYNTHPOST_VISUAL_DOWNLOAD_TIMEOUT` | `30` | no | `45` | Direct image timeout. |
-| `SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES` | `104857600` | no | `52428800` | Applies to downloaded media; prevents unbounded files. |
+| `SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES` | `104857600` | no | `52428800` | Applies to downloaded and browser-uploaded media; prevents unbounded files. |
 | `SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT` | `1` | no | `1` | Keep enabled for render-ready approval. |
 | `SYNTHPOST_VISUAL_MIN_WIDTH` | `1280` | no | `1920` | Minimum render-ready width. |
 | `SYNTHPOST_VISUAL_MIN_HEIGHT` | `720` | no | `1080` | Minimum render-ready height. |

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +12,7 @@ from pydantic import ValidationError
 from fastapi.testclient import TestClient
 
 from pipeline import config
-from pipeline.api.main import app
+from pipeline.api.main import _write_streamed_upload, app
 from pipeline.api.routes.jobs import public_job
 from pipeline.api.schemas import ProjectPatch, SourcePatch
 from pipeline.diagnostics import exit_code, run_diagnostics
@@ -101,6 +102,42 @@ class ConfigurationBoundaryTests(unittest.TestCase):
         ):
             config.load_settings({"SYNTHPOST_EDITORIAL_WORKERS": "0"})
 
+    def test_visual_configuration_is_typed_and_allows_disabling_a_media_kind(self) -> None:
+        settings = config.load_settings(
+            {
+                "SYNTHPOST_DISABLE_WEB_VISUALS": "1",
+                "SYNTHPOST_GENERATE_FALLBACK_VISUALS": "0",
+                "SYNTHPOST_SEARXNG_IMAGE_RESULTS_PER_QUERY": "0",
+                "SYNTHPOST_SEARXNG_VIDEO_TIMEOUT": "420",
+                "SYNTHPOST_SEARXNG_VIDEO_MAX_DURATION": "1800",
+            }
+        )
+        self.assertTrue(settings.visuals.disable_web_visuals)
+        self.assertFalse(settings.visuals.generate_fallback_visuals)
+        self.assertEqual(settings.visuals.image_results_per_query, 0)
+        self.assertEqual(settings.visuals.video_timeout_seconds, 420)
+        self.assertEqual(settings.visuals.video_max_duration_seconds, 1800)
+
+    def test_visual_source_lists_are_normalized_in_typed_configuration(self) -> None:
+        settings = config.load_settings(
+            {
+                "SYNTHPOST_VIDEO_APPROVED_CHANNEL_IDS": " UC123,uc123, UC456 ",
+                "SYNTHPOST_VIDEO_APPROVED_SOURCE_NAMES": "NASA, ISRO",
+                "SYNTHPOST_VIDEO_BLOCKED_SOURCE_NAMES": "Example Network",
+            }
+        )
+
+        self.assertEqual(
+            settings.visuals.approved_video_channel_ids,
+            ("UC123", "uc123", "UC456"),
+        )
+        self.assertEqual(
+            settings.visuals.approved_video_source_names, ("nasa", "isro")
+        )
+        self.assertEqual(
+            settings.visuals.blocked_video_source_names, ("example network",)
+        )
+
 
 class StageContractTests(unittest.TestCase):
     def test_every_worker_handler_has_exactly_one_contract(self) -> None:
@@ -158,6 +195,77 @@ class ObservabilityTests(unittest.TestCase):
 
 
 class APIContractTests(unittest.TestCase):
+    def test_visual_upload_stream_is_atomic(self) -> None:
+        class StreamingRequest:
+            async def stream(self):
+                for chunk in (b"first", b"", b"-second"):
+                    yield chunk
+
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "visual.png"
+            written = asyncio.run(
+                _write_streamed_upload(
+                    StreamingRequest(), destination, max_bytes=32
+                )
+            )
+
+            self.assertEqual(written, 12)
+            self.assertEqual(destination.read_bytes(), b"first-second")
+            self.assertEqual(list(Path(temp).glob(".visual.png.*.uploading")), [])
+
+    def test_visual_upload_stream_rejects_oversize_without_replacing_file(self) -> None:
+        class OversizedRequest:
+            async def stream(self):
+                yield b"too-large"
+
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "visual.png"
+            destination.write_bytes(b"existing")
+
+            with self.assertRaisesRegex(ValueError, "DOWNLOAD_MAX_BYTES"):
+                asyncio.run(
+                    _write_streamed_upload(
+                        OversizedRequest(), destination, max_bytes=4
+                    )
+                )
+
+            self.assertEqual(destination.read_bytes(), b"existing")
+            self.assertEqual(list(Path(temp).glob(".visual.png.*.uploading")), [])
+
+    def test_concurrent_visual_uploads_never_share_a_partial_file(self) -> None:
+        class InterleavedRequest:
+            def __init__(self, prefix: bytes, suffix: bytes):
+                self.prefix = prefix
+                self.suffix = suffix
+
+            async def stream(self):
+                yield self.prefix
+                await asyncio.sleep(0.01)
+                yield self.suffix
+
+        async def upload_both(destination: Path) -> None:
+            await asyncio.gather(
+                _write_streamed_upload(
+                    InterleavedRequest(b"first-", b"upload"),
+                    destination,
+                    max_bytes=32,
+                ),
+                _write_streamed_upload(
+                    InterleavedRequest(b"second-", b"upload"),
+                    destination,
+                    max_bytes=32,
+                ),
+            )
+
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "visual.png"
+            asyncio.run(upload_both(destination))
+
+            self.assertIn(
+                destination.read_bytes(), {b"first-upload", b"second-upload"}
+            )
+            self.assertEqual(list(Path(temp).glob(".visual.png.*.uploading")), [])
+
     def test_patch_contract_rejects_identity_and_unknown_fields(self) -> None:
         with self.assertRaises(ValidationError):
             ProjectPatch.model_validate({"project_id": "replacement"})

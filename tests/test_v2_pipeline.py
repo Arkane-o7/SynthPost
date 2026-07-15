@@ -30,10 +30,15 @@ from pipeline.manifest_builder import (
     timeline_narration_text,
 )
 from pipeline.models import (
+    ApprovalStatus,
     AudioMode,
     ContentRole,
     JobStatus,
     MediaType,
+    NarrativeArcItem,
+    NarrativeBeat,
+    NarrativeBrief,
+    NarrativeDraft,
     NarrationMode,
     Claim,
     ResearchPack,
@@ -63,13 +68,19 @@ from pipeline.run_story import _sync_timeline_to_avatar_duration
 from pipeline.scripts.generation import approve_script, save_manual_script
 from pipeline.scripts.generation import (
     compact_research_pack_for_prompt,
+    _validate_narrative_draft,
+    _validate_narrative_segmentation,
     expand_long_form_script,
     generation_prompt,
+    narrative_quality_issues,
+    narrative_research_pack_for_prompt,
+    script_from_narrative,
     script_from_llm_json,
     section_word_targets,
     generate_script,
+    validate_grounding,
 )
-from pipeline.llm.providers import MockProvider
+from pipeline.llm.providers import MockProvider, StructuredGenerationError
 from pipeline.storage import (
     PROJECT_ROOT,
     episode_media_inbox_dir,
@@ -91,15 +102,22 @@ from pipeline.timeline.templates import (
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
     _result_matches_query,
+    _validate_ai_visual_plan,
     _visual_search_plan,
     _visual_search_queries,
     _visual_search_tasks,
     approve_visual,
     search_episode_media_inbox,
     stage_local_visual,
+    update_visual,
 )
 from pipeline.workflow import assert_transition, can_transition
-from pipeline.jobs.worker import HANDLERS, recover_stale_jobs, run_one
+from pipeline.jobs.worker import (
+    HANDLERS,
+    _restore_script_state_after_terminal_failure,
+    recover_stale_jobs,
+    run_one,
+)
 from pipeline.jobs.policy import classify_failure
 from assembly.stitch_episode import story_manifests
 
@@ -527,6 +545,57 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             for directory in project_dirs:
                 shutil.rmtree(directory, ignore_errors=True)
 
+    def test_same_named_inbox_files_get_distinct_story_media_paths(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "same-name-media.sqlite3")
+        project_dir: Path | None = None
+        episode_id = ""
+        try:
+            project = repository.create_project("Same-name media")
+            project_dir = PROJECT_ROOT / "projects" / project.project_id
+            episode = repository.create_episode(project.project_id, "Episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Same-name media story",
+                body="Two source folders may contain files with the same name.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            inbox = episode_media_inbox_dir(project.project_id, episode.episode_id)
+            first = inbox / "first" / "image.jpg"
+            second = inbox / "second" / "image.jpg"
+            first.parent.mkdir(parents=True, exist_ok=True)
+            second.parent.mkdir(parents=True, exist_ok=True)
+            first.write_bytes(b"first-image")
+            second.write_bytes(b"second-image")
+
+            first_visual = stage_local_visual(repository, selected.story_id, first)
+            second_visual = stage_local_visual(repository, selected.story_id, second)
+
+            self.assertNotEqual(first_visual.asset_id, second_visual.asset_id)
+            self.assertNotEqual(first_visual.download_path, second_visual.download_path)
+            self.assertEqual(
+                resolve_project_path(first_visual.download_path or "").read_bytes(),
+                b"first-image",
+            )
+            self.assertEqual(
+                resolve_project_path(second_visual.download_path or "").read_bytes(),
+                b"second-image",
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+            if episode_id:
+                shutil.rmtree(
+                    PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True
+                )
+            if project_dir is not None:
+                shutil.rmtree(project_dir, ignore_errors=True)
+
     def test_staging_external_media_imports_it_into_the_active_episode(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "media-import.sqlite3")
@@ -574,6 +643,56 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True
                 )
 
+    def test_local_media_rescan_preserves_decision_until_file_changes(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "media-rescan.sqlite3")
+        episode_id = ""
+        project_dir: Path | None = None
+        try:
+            project = repository.create_project("Rescan decisions")
+            project_dir = PROJECT_ROOT / "projects" / project.project_id
+            episode = repository.create_episode(project.project_id, "Episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Local media rescan",
+                body="The same local visual may be scanned more than once.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            source = Path(temp.name) / "editor-image.jpg"
+            source.write_bytes(b"first-image")
+
+            staged = stage_local_visual(repository, selected.story_id, source)
+            approved = approve_visual(repository, staged.asset_id, manual=True)
+            rescanned = stage_local_visual(repository, selected.story_id, source)
+
+            self.assertEqual(rescanned.review_status, ReviewStatus.manual_approved)
+            self.assertEqual(rescanned.reviewed_at, approved.reviewed_at)
+
+            source.write_bytes(b"replacement-image-with-different-size")
+            replaced = stage_local_visual(repository, selected.story_id, source)
+
+            self.assertEqual(replaced.asset_id, staged.asset_id)
+            self.assertEqual(replaced.review_status, ReviewStatus.suggested)
+            self.assertIsNone(replaced.reviewed_at)
+            self.assertEqual(
+                resolve_project_path(replaced.thumbnail_path or "").read_bytes(),
+                source.read_bytes(),
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+            if episode_id:
+                shutil.rmtree(
+                    PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True
+                )
+            if project_dir is not None:
+                shutil.rmtree(project_dir, ignore_errors=True)
+
     def test_long_form_script_expands_in_section_sized_chunks(self) -> None:
         outline = ScriptDocument(
             story_id="story_long_form",
@@ -615,6 +734,340 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertEqual(
             expanded.chyrons,
             [section.chyron for section in expanded.sections],
+        )
+
+    def test_narrative_quality_gate_rejects_vimag_style_restarts(self) -> None:
+        draft = NarrativeDraft(
+            headline="Vimag Labs magnet-free motor",
+            beats=[
+                NarrativeBeat(
+                    beat_id="beat_001",
+                    text=(
+                        "In a modest Bengaluru lab, engineers watch a prototype "
+                        "motor spin silently without a permanent magnet."
+                    ),
+                ),
+                NarrativeBeat(
+                    beat_id="beat_002",
+                    text=(
+                        "In a Bengaluru lab, engineers fire up a prototype motor "
+                        "that never touches a rare-earth magnet."
+                    ),
+                ),
+                NarrativeBeat(
+                    beat_id="beat_003",
+                    text=(
+                        "In a Bengaluru lab, engineers watch the prototype motor "
+                        "spin silently as electronic controls create its field."
+                    ),
+                ),
+                NarrativeBeat(
+                    beat_id="beat_004",
+                    text=(
+                        "In a Bangalore lab, engineers fire a pulse through the "
+                        "prototype motor and watch the rotor spin."
+                    ),
+                ),
+                NarrativeBeat(
+                    beat_id="beat_005",
+                    text=(
+                        "The production test remains unresolved. investors will "
+                        "watch the company's rollout for evidence."
+                    ),
+                ),
+            ],
+        )
+
+        issues = narrative_quality_issues(draft)
+
+        self.assertTrue(
+            any("same scene or framing" in issue for issue in issues), issues
+        )
+        self.assertTrue(
+            any("lowercase" in issue for issue in issues), issues
+        )
+
+    def test_narrative_research_projection_excludes_unrelated_search_claims(self) -> None:
+        pack = {
+            "research_summary": "Vimag Labs develops a magnet-free electric motor. Reviewed sources.",
+            "claims": [
+                {
+                    "claim_id": "claim_motor",
+                    "claim_text": "Vimag Labs develops a magnet-free electric motor.",
+                    "evidence_ids": ["ev_motor"],
+                    "supported": True,
+                },
+                {
+                    "claim_id": "claim_patent",
+                    "claim_text": "The magnet-free motor uses electronic field control.",
+                    "evidence_ids": ["ev_patent"],
+                    "supported": True,
+                },
+                {
+                    "claim_id": "claim_health",
+                    "claim_text": "India announced a separate medical research programme.",
+                    "evidence_ids": ["ev_health"],
+                    "supported": True,
+                },
+            ],
+            "evidence": [
+                {
+                    "evidence_id": "ev_motor",
+                    "document_id": "doc_motor",
+                    "excerpt": "Vimag's magnet-free electric motor is being tested.",
+                },
+                {
+                    "evidence_id": "ev_patent",
+                    "document_id": "doc_motor",
+                    "excerpt": "The motor controls its magnetic field electronically.",
+                },
+                {
+                    "evidence_id": "ev_health",
+                    "document_id": "doc_health",
+                    "excerpt": "A medical research programme was announced.",
+                },
+            ],
+            "documents": [
+                {
+                    "document_id": "doc_motor",
+                    "title": "Vimag magnet-free electric motor",
+                },
+                {
+                    "document_id": "doc_health",
+                    "title": "India medical research programme",
+                },
+            ],
+            "systems": ["ai", "electric motor supply chain"],
+            "trade_offs": [
+                "The motor controls its magnetic field electronically.",
+                "Magnet export restrictions forced automakers to cut production.",
+            ],
+        }
+
+        projected = narrative_research_pack_for_prompt(pack)
+
+        self.assertEqual(
+            {claim["claim_id"] for claim in projected["claims"]},
+            {"claim_motor", "claim_patent"},
+        )
+        self.assertEqual(
+            {document["document_id"] for document in projected["documents"]},
+            {"doc_motor"},
+        )
+        self.assertNotIn("ai", projected["systems"])
+        self.assertNotIn(
+            "Magnet export restrictions forced automakers to cut production.",
+            projected["trade_offs"],
+        )
+        self.assertIn(
+            "The motor controls its magnetic field electronically.",
+            projected["trade_offs"],
+        )
+
+    def test_narrative_contract_rejects_spoken_claim_ids(self) -> None:
+        pack = {
+            "research_summary": "Vimag Labs develops a magnet-free motor.",
+            "claims": [
+                {
+                    "claim_id": "claim_001",
+                    "claim_text": "Vimag Labs develops a magnet-free motor.",
+                    "supported": True,
+                    "evidence_ids": [],
+                }
+            ],
+            "evidence": [],
+            "documents": [],
+        }
+        raw = {
+            "headline": "Magnet-free motor",
+            "dek": "A documented development.",
+            "category": "news",
+            "beats": [
+                {
+                    "beat_id": "one",
+                    "text": "Vimag says its motor avoids permanent magnets (claim_001).",
+                    "claim_ids": ["claim_001"],
+                },
+                {
+                    "beat_id": "two",
+                    "text": "Electronic controls generate the field instead.",
+                    "claim_ids": ["claim_001"],
+                },
+                {
+                    "beat_id": "three",
+                    "text": "Commercial performance remains to be tested.",
+                    "claim_ids": ["claim_001"],
+                },
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "internal claim/evidence ID"):
+            _validate_narrative_draft(raw, pack, target_duration_seconds=10)
+
+    def test_narrative_contract_requires_claim_link_on_every_beat(self) -> None:
+        pack = {
+            "research_summary": "Vimag Labs develops a magnet-free motor.",
+            "claims": [
+                {
+                    "claim_id": "claim_001",
+                    "claim_text": "Vimag Labs develops a magnet-free motor.",
+                    "supported": True,
+                    "evidence_ids": [],
+                }
+            ],
+            "evidence": [],
+            "documents": [],
+        }
+        raw = {
+            "headline": "Magnet-free motor",
+            "dek": "A documented development.",
+            "category": "news",
+            "beats": [
+                {
+                    "beat_id": "one",
+                    "text": "Vimag says its motor avoids permanent magnets.",
+                    "claim_ids": ["claim_001"],
+                },
+                {
+                    "beat_id": "two",
+                    "text": "The next step is commercial validation.",
+                    "claim_ids": [],
+                },
+                {
+                    "beat_id": "three",
+                    "text": "That result will determine what follows.",
+                    "claim_ids": ["claim_001"],
+                },
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "link at least one supported claim"):
+            _validate_narrative_draft(raw, pack, target_duration_seconds=10)
+
+    def test_narrative_contract_rejects_paragraph_sized_section_beats(self) -> None:
+        pack = {
+            "research_summary": "India is testing a documented rail pilot.",
+            "claims": [
+                {
+                    "claim_id": "claim_001",
+                    "claim_text": "India is testing a documented rail pilot.",
+                    "supported": True,
+                    "evidence_ids": [],
+                }
+            ],
+            "evidence": [],
+            "documents": [],
+        }
+        paragraph = " ".join(["Documented operations continue under review"] * 14) + "."
+        raw = {
+            "headline": "Rail pilot",
+            "dek": "A documented test.",
+            "category": "news",
+            "beats": [
+                {
+                    "beat_id": str(index),
+                    "text": paragraph,
+                    "claim_ids": ["claim_001"],
+                }
+                for index in range(3)
+            ],
+        }
+
+        with self.assertRaisesRegex(ValueError, "sentence or major clause"):
+            _validate_narrative_draft(raw, pack, target_duration_seconds=10)
+
+    def test_segmentation_groups_beats_without_rewriting_narration(self) -> None:
+        draft = NarrativeDraft(
+            headline="A coherent briefing",
+            dek="One continuous narration.",
+            beats=[
+                NarrativeBeat(
+                    beat_id=f"beat_{index:03d}",
+                    text=text,
+                    claim_ids=["claim_001"],
+                )
+                for index, text in enumerate(
+                    [
+                        "A verified pilot has started in India.",
+                        "Its operating evidence now becomes the central test.",
+                        "Existing infrastructure defines the practical constraint.",
+                        "Operators must compare reliability with the documented goal.",
+                        "The result remains uncertain until repeatable data arrives.",
+                        "That evidence will determine whether expansion is justified.",
+                    ],
+                    start=1,
+                )
+            ],
+        )
+        raw = {
+            "sections": [
+                {
+                    "section_type": "cold_open",
+                    "beat_ids": ["beat_001", "beat_002"],
+                    "suggested_visual_types": ["video"],
+                    "suggested_search_queries": [
+                        "India pilot facility editorial photo",
+                        "India pilot official raw footage",
+                    ],
+                    "suggested_template_ids": ["fullscreen_anchor"],
+                    "lower_third": "A documented pilot begins",
+                    "chyron": "The central test",
+                    "source_clip": None,
+                },
+                {
+                    "section_type": "context",
+                    "beat_ids": ["beat_003", "beat_004"],
+                    "suggested_visual_types": ["diagram"],
+                    "suggested_search_queries": [
+                        "India pilot infrastructure diagram",
+                        "India operators official B-roll",
+                    ],
+                    "suggested_template_ids": ["split_anchor_visual"],
+                    "lower_third": "Infrastructure shapes execution",
+                    "chyron": "The operating constraint",
+                    "source_clip": None,
+                },
+                {
+                    "section_type": "conclusion",
+                    "beat_ids": ["beat_005", "beat_006"],
+                    "suggested_visual_types": ["context"],
+                    "suggested_search_queries": [
+                        "India pilot test results document",
+                        "India pilot results official video",
+                    ],
+                    "suggested_template_ids": ["fullscreen_news_visual"],
+                    "lower_third": "Evidence will decide expansion",
+                    "chyron": "What to watch",
+                    "source_clip": None,
+                },
+            ]
+        }
+        segmentation = _validate_narrative_segmentation(raw, draft)
+        script = script_from_narrative(
+            "story_narrative",
+            draft,
+            segmentation,
+            {
+                "claims": [
+                    {
+                        "claim_id": "claim_001",
+                        "supported": True,
+                        "evidence_ids": [],
+                    }
+                ],
+                "evidence": [],
+                "documents": [],
+            },
+        )
+
+        self.assertEqual(" ".join(script.text.split()), draft.text)
+        self.assertEqual(
+            [
+                beat_id
+                for section in segmentation.sections
+                for beat_id in section.beat_ids
+            ],
+            [beat.beat_id for beat in draft.beats],
         )
 
     def test_narration_mode_is_independent_from_duration(self) -> None:
@@ -891,6 +1344,47 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         self.assertIn("fullscreen_news_visual", section.suggested_template_ids)
 
+    def test_grounding_reports_each_number_missing_from_research(self) -> None:
+        script = ScriptDocument(
+            story_id="story_numeric_grounding",
+            headline="Pilot update",
+            sections=[
+                ScriptSection(
+                    section_id="sec_001",
+                    section_type="key_developments",
+                    text="The supported 5 million pilot will begin in 2035.",
+                    claim_ids=["claim_001"],
+                )
+            ],
+        )
+        pack = {
+            "numbers": ["5 million"],
+            "claims": [
+                {
+                    "claim_id": "claim_001",
+                    "claim_text": "The pilot is backed by 5 million in funding.",
+                    "supported": True,
+                    "evidence_ids": ["ev_001"],
+                }
+            ],
+            "evidence": [
+                {
+                    "evidence_id": "ev_001",
+                    "excerpt": "Funding for the pilot totals 5 million.",
+                }
+            ],
+        }
+
+        warnings = validate_grounding(script, pack)
+
+        self.assertEqual(
+            warnings,
+            [
+                "script contains numbers that were not observed in the research "
+                "pack: 2035"
+            ],
+        )
+
     def test_editorial_template_policy_creates_balanced_story_rhythm(self) -> None:
         hero = VisualCandidate(
             asset_id="visual_hero",
@@ -1050,6 +1544,116 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         explicit = approved_visuals_by_section([fallback, strongest, pinned])
         self.assertEqual(explicit["sec_context"].asset_id, pinned.asset_id)
+
+        older_approval = strongest.model_copy(
+            update={
+                "review_status": ReviewStatus.manual_approved,
+                "reviewed_at": "2026-07-14T10:00:00Z",
+            }
+        )
+        latest_approval = weaker.model_copy(
+            update={
+                "review_status": ReviewStatus.manual_approved,
+                "reviewed_at": "2026-07-14T11:00:00Z",
+            }
+        )
+        repinned = approved_visuals_by_section(
+            [fallback, older_approval, latest_approval]
+        )
+        self.assertEqual(repinned["sec_context"].asset_id, latest_approval.asset_id)
+
+    def test_visual_patch_validates_sections_and_trim_window(self) -> None:
+        visual = VisualCandidate(
+            asset_id="visual_patch",
+            story_id="story_patch",
+            section_ids=["sec_context"],
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.video,
+            duration_seconds=10.0,
+        )
+        script = ScriptDocument(
+            story_id=visual.story_id,
+            headline="Patch validation",
+            sections=[
+                ScriptSection(
+                    section_id="sec_context",
+                    section_type="context",
+                    text="A section.",
+                )
+            ],
+        )
+
+        class VisualRepository:
+            def get_visual(self, _asset_id: str):
+                return visual
+
+            def latest_script(self, _story_id: str, *, approved: bool = False):
+                return script
+
+            def upsert_visual(self, updated: VisualCandidate):
+                self.saved = updated
+
+        repository = VisualRepository()
+        updated = update_visual(
+            repository,
+            visual.asset_id,
+            {
+                "section_ids": ["sec_context", "sec_context"],
+                "trim_start": 2.0,
+                "trim_end": 8.0,
+            },
+        )
+        self.assertEqual(updated.section_ids, ["sec_context"])
+        with self.assertRaisesRegex(ValueError, "unknown visual section_ids"):
+            update_visual(
+                repository, visual.asset_id, {"section_ids": ["sec_missing"]}
+            )
+        with self.assertRaisesRegex(ValueError, "greater than trim_start"):
+            update_visual(
+                repository,
+                visual.asset_id,
+                {"trim_start": 8.0, "trim_end": 2.0},
+            )
+        with self.assertRaisesRegex(ValueError, "cannot exceed media duration"):
+            update_visual(repository, visual.asset_id, {"trim_end": 11.0})
+        with self.assertRaisesRegex(ValueError, "fallback content role"):
+            update_visual(
+                repository,
+                visual.asset_id,
+                {"content_role": ContentRole.fallback},
+            )
+
+        visual.media_type = MediaType.image
+        visual.trim_start = None
+        visual.trim_end = None
+        with self.assertRaisesRegex(ValueError, "only be set on video"):
+            update_visual(repository, visual.asset_id, {"trim_start": 1.0})
+
+        visual.review_status = ReviewStatus.manual_approved
+        visual.attribution_text = "Unit source"
+        with self.assertRaisesRegex(ValueError, "cannot have an empty attribution"):
+            update_visual(repository, visual.asset_id, {"attribution_text": None})
+
+    def test_legacy_visual_warnings_are_normalized_for_local_media(self) -> None:
+        visual = VisualCandidate(
+            story_id="story_warning_compat",
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.image,
+            warnings=[
+                "image download failed: expired URL",
+                "download rejected for broadcast layout: aspect ratio 0.700 is outside range",
+                "broadcast layout warning: aspect ratio 0.700 is outside range",
+            ],
+        )
+
+        self.assertEqual(
+            visual.warnings,
+            [
+                "broadcast layout warning: aspect ratio 0.700 is outside range",
+            ],
+        )
 
     def test_suggested_visual_is_valid_for_render_without_approval(self) -> None:
         plan = TimelinePlan(
@@ -1506,6 +2110,116 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertIn("visual search keyword planner", provider.prompt)
         self.assertIn("India hydrogen train pilot", provider.prompt)
 
+    def test_visual_query_plan_removes_unsupported_years(self) -> None:
+        plans = _validate_ai_visual_plan(
+            {
+                "queries": [
+                    {
+                        "section_id": "sec_001_context",
+                        "image_query": "Vimag Labs magnet free motor 2030 prototype",
+                        "video_query": "Vimag Labs 2030 motor official demonstration",
+                        "video_priority": True,
+                        "rationale": "show the physical motor",
+                    }
+                ]
+            },
+            section_ids={"sec_001_context"},
+            provider_name="unit-ai",
+            supported_years={"2025"},
+        )
+
+        self.assertEqual(
+            plans[0].image_query, "Vimag Labs magnet free motor prototype"
+        )
+        self.assertEqual(
+            plans[0].video_query,
+            "Vimag Labs motor official demonstration",
+        )
+        self.assertNotIn("2030", plans[0].image_query)
+        self.assertNotIn("2030", plans[0].video_query)
+
+    def test_visual_query_plan_falls_back_when_ai_planning_fails(self) -> None:
+        class QueryProvider:
+            name = "unit-ai"
+
+        class QueryRepository:
+            def latest_script(self, story_id: str, *, approved: bool = False):
+                return ScriptDocument(
+                    story_id=story_id,
+                    headline="Vimag magnet-free motor",
+                    status="approved",
+                    sections=[
+                        ScriptSection(
+                            section_id="sec_001_context",
+                            section_type="context",
+                            text="Vimag demonstrates its magnet-free motor.",
+                            suggested_search_queries=[
+                                "Vimag magnet free motor prototype",
+                                "Vimag motor demonstration footage",
+                            ],
+                        )
+                    ],
+                )
+
+            def candidate_for_story(self, story_id: str):
+                return type(
+                    "Candidate", (), {"title": "Vimag magnet-free motor"}
+                )()
+
+        error = StructuredGenerationError(
+            "invalid AI query plan",
+            [{"attempt": 1, "ok": False, "error": "invalid plan"}],
+        )
+        with (
+            patch(
+                "pipeline.visuals.providers.configured_provider",
+                return_value=QueryProvider(),
+            ),
+            patch(
+                "pipeline.visuals.providers.structured_generate",
+                side_effect=error,
+            ),
+        ):
+            plans = _visual_search_plan(QueryRepository(), "story_unit")
+
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(
+            plans[0].image_query, "Vimag magnet free motor prototype"
+        )
+        self.assertIn("stored script query fallback", plans[0].rationale)
+
+    def test_manual_approval_overrides_broadcast_fit(self) -> None:
+        visual = VisualCandidate(
+            asset_id="visual_portrait",
+            story_id="story_unit",
+            section_ids=["sec_001_context"],
+            provider="unit",
+            download_path="README.md",
+            media_type=MediaType.video,
+            width=608,
+            height=1080,
+            rights_tier=RightsTier.yellow,
+            attribution_text="Source: unit",
+        )
+
+        class VisualRepository:
+            def get_visual(self, asset_id: str):
+                self.asserted_id = asset_id
+                return visual
+
+            def upsert_visual(self, updated: VisualCandidate):
+                self.saved = updated
+
+        repository = VisualRepository()
+        approved = approve_visual(repository, visual.asset_id, manual=True)
+
+        self.assertEqual(approved.review_status, ReviewStatus.manual_approved)
+        self.assertTrue(approved.broadcast_fit_override)
+        self.assertIn(
+            "sec_001_context",
+            approved_visuals_by_section([approved]),
+        )
+
     def test_visual_query_cap_counts_actual_searxng_requests(self) -> None:
         plans = [
             type(
@@ -1662,6 +2376,88 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             assert_transition(
                 StoryWorkflowState.discovered, StoryWorkflowState.completed
             )
+        self.assertTrue(
+            can_transition(
+                StoryWorkflowState.completed, StoryWorkflowState.script_review
+            )
+        )
+
+    def test_new_script_revision_invalidates_completed_workflow_state(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "script-revision.sqlite3")
+        try:
+            project = repository.create_project("Script revision")
+            episode = repository.create_episode(project.project_id, "Episode")
+            candidate = add_manual_story(
+                repository,
+                title="Completed story",
+                body="The existing production has already completed.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            selected.workflow_state = StoryWorkflowState.completed
+            repository.upsert_candidate(selected)
+
+            save_manual_script(
+                repository,
+                selected.story_id,
+                "Revised story",
+                "A revised script now requires a fresh editorial review.",
+            )
+
+            self.assertEqual(
+                repository.candidate_for_story(selected.story_id).workflow_state,
+                StoryWorkflowState.script_review,
+            )
+            approved = approve_script(repository, selected.story_id)
+            self.assertEqual(approved.status.value, "approved")
+            self.assertTrue(
+                all(
+                    section.approval_status == ApprovalStatus.approved
+                    for section in approved.sections
+                )
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_failed_regeneration_restores_previous_script_review_state(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "script-rollback.sqlite3")
+        try:
+            project = repository.create_project("Script rollback")
+            episode = repository.create_episode(project.project_id, "Episode")
+            candidate = add_manual_story(
+                repository,
+                title="Review story",
+                body="The current draft is awaiting editorial review.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            selected.workflow_state = StoryWorkflowState.script_generating
+            repository.upsert_candidate(selected)
+            job = repository.create_job(
+                "script_generate",
+                episode_id=episode.episode_id,
+                story_id=selected.story_id,
+                payload={"_previous_workflow_state": "script_review"},
+            )
+
+            _restore_script_state_after_terminal_failure(repository, job)
+
+            self.assertEqual(
+                repository.candidate_for_story(selected.story_id).workflow_state,
+                StoryWorkflowState.script_review,
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
 
     def test_url_canonicalization_and_duplicate_grouping_are_deterministic(
         self,
@@ -2021,16 +2817,97 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 )
 
             audits = repository.list_generation_audits(selected.story_id)
-            self.assertEqual({audit.stage for audit in audits}, {"script_draft", "headline_editor"})
+            self.assertEqual(
+                {audit.stage for audit in audits},
+                {
+                    "narrative_brief",
+                    "narrative_draft",
+                    "narrative_segmentation",
+                    "headline_editor",
+                },
+            )
             self.assertTrue(all(audit.prompt_text for audit in audits))
             self.assertTrue(all(audit.response for audit in audits))
             self.assertTrue(any(audit.normalization_events for audit in audits))
             self.assertIn(f"editorial_charter={CHARTER_VERSION}", script.warnings)
             self.assertEqual(script.narration_mode, NarrationMode.deep_dive)
             self.assertIn("narration_mode=deep_dive", script.warnings)
-            script_audit = next(audit for audit in audits if audit.stage == "script_draft")
+            script_audit = next(
+                audit for audit in audits if audit.stage == "narrative_draft"
+            )
             self.assertIn("Format: SynthPost Deep Dive", script_audit.prompt_text)
+            self.assertIn("narrative_first=true", script.warnings)
+            self.assertIn("narrative_quality_gate=passed", script.warnings)
             self.assertTrue(all(section.headline_cues for section in script.sections))
+        finally:
+            repository.close()
+            temp.cleanup()
+
+    def test_headline_failure_keeps_accepted_narrative_script(self) -> None:
+        class InvalidHeadlineProvider(MockProvider):
+            def generate_json(self, prompt, schema, *, temperature=None):
+                if "senior headline editor" in prompt.lower():
+                    return {
+                        "headline": "Hydrogen rail test",
+                        "dek": "A grounded test.",
+                        "sections": [],
+                    }
+                return super().generate_json(
+                    prompt, schema, temperature=temperature
+                )
+
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "headline-fallback.sqlite3")
+        try:
+            project = repository.create_project("Headline fallback")
+            episode = repository.create_episode(project.project_id, "Fallback test")
+            candidate = add_manual_story(
+                repository,
+                title="India tests a new hydrogen rail system",
+                body="India is testing documented hydrogen rail infrastructure.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            repository.upsert_research_pack(
+                ResearchPack(
+                    story_id=selected.story_id,
+                    claims=[
+                        Claim(
+                            claim_id="claim_001",
+                            claim_text="India is testing hydrogen rail infrastructure.",
+                            supported=True,
+                        )
+                    ],
+                    research_summary="A documented Indian hydrogen rail pilot.",
+                )
+            )
+            with patch(
+                "pipeline.scripts.generation.configured_provider",
+                return_value=InvalidHeadlineProvider(),
+            ), patch(
+                "pipeline.scripts.generation.config.env_bool", return_value=False
+            ):
+                script = generate_script(
+                    repository,
+                    selected.story_id,
+                    target_duration_seconds=60,
+                    narration_mode="signal",
+                )
+
+            self.assertIn(
+                "headline_editor=fallback_to_narrative_metadata", script.warnings
+            )
+            self.assertTrue(script.sections)
+            self.assertTrue(all(section.headline_cues for section in script.sections))
+            headline_audit = next(
+                audit
+                for audit in repository.list_generation_audits(selected.story_id)
+                if audit.stage == "headline_editor"
+            )
+            self.assertEqual(headline_audit.status, "failed")
         finally:
             repository.close()
             temp.cleanup()
