@@ -2945,7 +2945,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
 
-    def test_mock_provider_supports_default_ten_minute_narrative(self) -> None:
+    def test_mock_provider_supports_configured_narrative_durations(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "mock-long-form.sqlite3")
         try:
@@ -2975,25 +2975,26 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 )
             )
 
-            script = generate_script(
-                repository,
-                selected.story_id,
-                provider_name="mock",
-                target_duration_seconds=600,
-                narration_mode="explained",
-            )
-
-            self.assertIn("narrative_quality_gate=passed", script.warnings)
-            self.assertGreater(len(script.text.split()), 1_200)
+            for duration, minimum_words in ((600, 1_200), (7_200, 14_000)):
+                script = generate_script(
+                    repository,
+                    selected.story_id,
+                    provider_name="mock",
+                    target_duration_seconds=duration,
+                    narration_mode="explained",
+                )
+                self.assertIn("narrative_quality_gate=passed", script.warnings)
+                self.assertGreater(len(script.text.split()), minimum_words)
             draft_audit = next(
                 audit
                 for audit in repository.list_generation_audits(selected.story_id)
                 if audit.stage == "narrative_draft"
+                and "Target duration: 7200 seconds" in audit.prompt_text
             )
             draft = _validate_narrative_draft(
                 draft_audit.response,
                 repository.latest_research_pack(selected.story_id) or {},
-                target_duration_seconds=600,
+                target_duration_seconds=7_200,
             )
             self.assertEqual(narrative_quality_issues(draft), [])
         finally:

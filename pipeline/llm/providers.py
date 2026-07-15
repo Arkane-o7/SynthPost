@@ -579,9 +579,10 @@ class MockProvider:
                 action = actions[(index * 3) % len(actions)]
                 relation = relations[(index * 5) % len(relations)]
                 sentence = (
-                    f"{subject.capitalize()} {action} {system} through {method}. "
-                    f"The review {relation} {outcome} to {condition}. For "
-                    f"{subject}, this creates a basis to judge {system} and {outcome}."
+                    f"{subject.capitalize()} {action} {system} through the {method}, "
+                    f"and the review {relation} {outcome} to {condition}. For the "
+                    f"decision, this creates a basis for {subject} to {action} "
+                    f"{system} and {outcome}."
                 )
                 chosen.append(sentence)
                 word_total += len(sentence.split())
