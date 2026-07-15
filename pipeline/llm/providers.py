@@ -412,9 +412,176 @@ class MockProvider:
                 word_total += len(sentence.split())
                 if word_total >= target_words * 0.9:
                     break
+            subjects = [
+                "engineers",
+                "operators",
+                "planners",
+                "auditors",
+                "researchers",
+                "manufacturers",
+                "regulators",
+                "technicians",
+                "analysts",
+                "investigators",
+                "designers",
+                "inspectors",
+                "coordinators",
+                "suppliers",
+                "reviewers",
+                "specialists",
+                "evaluators",
+            ]
+            systems = [
+                "field performance",
+                "operating reliability",
+                "supply resilience",
+                "technical integration",
+                "production readiness",
+                "maintenance demand",
+                "capacity planning",
+                "cost discipline",
+                "safety evidence",
+                "deployment timing",
+                "quality control",
+                "infrastructure fit",
+                "procurement risk",
+                "service continuity",
+                "workforce preparation",
+                "component durability",
+                "implementation evidence",
+                "commercial viability",
+                "system efficiency",
+            ]
+            methods = [
+                "repeatable trials",
+                "measured comparisons",
+                "documented inspections",
+                "controlled demonstrations",
+                "independent checks",
+                "operational reviews",
+                "structured pilots",
+                "field observations",
+                "verified benchmarks",
+                "practical exercises",
+                "staged evaluations",
+                "recorded outcomes",
+                "technical audits",
+                "deployment rehearsals",
+                "production samples",
+                "service simulations",
+                "evidence reviews",
+                "performance monitoring",
+                "implementation studies",
+                "reliability assessments",
+                "comparative analysis",
+                "readiness testing",
+                "process validation",
+            ]
+            outcomes = [
+                "credible adoption",
+                "stable delivery",
+                "lower exposure",
+                "repeatable performance",
+                "responsible expansion",
+                "practical savings",
+                "safer operation",
+                "durable capacity",
+                "clear accountability",
+                "informed investment",
+                "measurable progress",
+                "reliable service",
+                "stronger coordination",
+                "better procurement",
+                "consistent quality",
+                "faster learning",
+                "sound planning",
+                "resilient production",
+                "transparent decisions",
+                "effective maintenance",
+                "scalable execution",
+                "verified improvement",
+                "sustainable operation",
+                "commercial confidence",
+                "public value",
+                "technical maturity",
+                "operational confidence",
+                "balanced growth",
+                "reduced uncertainty",
+            ]
+            conditions = [
+                "routine demand",
+                "limited budgets",
+                "regional constraints",
+                "real schedules",
+                "variable workloads",
+                "public scrutiny",
+                "supplier pressure",
+                "maintenance cycles",
+                "changing conditions",
+                "scale requirements",
+                "daily service",
+                "field constraints",
+                "production limits",
+                "staffing needs",
+                "weather exposure",
+                "network demand",
+                "market pressure",
+                "regulatory review",
+                "longer trials",
+                "customer use",
+                "factory routines",
+                "distribution limits",
+                "resource scarcity",
+                "technical change",
+                "competitive pressure",
+                "local requirements",
+                "operational stress",
+                "deployment delays",
+                "quality variation",
+                "future expansion",
+                "independent oversight",
+            ]
+            actions = [
+                "inspect",
+                "measure",
+                "compare",
+                "trace",
+                "evaluate",
+                "monitor",
+                "test",
+                "review",
+                "map",
+                "verify",
+                "study",
+                "benchmark",
+                "observe",
+            ]
+            relations = [
+                "relates",
+                "compares",
+                "connects",
+                "contrasts",
+                "matches",
+                "links",
+                "balances",
+                "tests",
+                "frames",
+                "weighs",
+                "checks",
+            ]
             while word_total < target_words * 0.85:
+                index = len(chosen)
+                subject = subjects[index % len(subjects)]
+                system = systems[(index * 5) % len(systems)]
+                method = methods[(index * 7) % len(methods)]
+                outcome = outcomes[(index * 11) % len(outcomes)]
+                condition = conditions[(index * 13) % len(conditions)]
+                action = actions[(index * 3) % len(actions)]
+                relation = relations[(index * 5) % len(relations)]
                 sentence = (
-                    "Further documented testing must connect the stated objective to observable operating evidence before broader conclusions are justified."
+                    f"{subject.capitalize()} {action} {system} through {method}. "
+                    f"The review {relation} {outcome} to {condition}. For "
+                    f"{subject}, this creates a basis to judge {system} and {outcome}."
                 )
                 chosen.append(sentence)
                 word_total += len(sentence.split())

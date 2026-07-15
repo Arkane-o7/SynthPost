@@ -31,6 +31,7 @@ from pipeline.models import (
     MediaType,
     ReviewStatus,
     RightsTier,
+    ScriptStatus,
     StoryWorkflowState,
     VisualCandidate,
     now_iso,
@@ -470,9 +471,7 @@ def _validated_section_ids(
         raise ValueError("visual section_ids cannot contain empty values")
     if not normalized:
         return []
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     if not script:
         raise ValueError("visuals cannot be assigned to sections before a script exists")
     known = {section.section_id for section in script.sections}
@@ -664,9 +663,7 @@ def generate_script_visual_cards(repository, story_id: str) -> list[VisualCandid
         if visual.provider in {"generated_visual_card", "synthpost_anchor_fallback"}
     ]
 
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     if not script:
         return []
 
@@ -761,9 +758,7 @@ def search_episode_media_inbox(
 def _visual_search_queries(repository, story_id: str) -> list[tuple[str | None, str]]:
     """Build a deterministic per-section fallback when AI planning is disabled."""
 
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     candidate = repository.candidate_for_story(story_id)
     queries: list[tuple[str | None, str]] = []
     seen: set[str] = set()
@@ -820,9 +815,7 @@ def _image_query(seed: str) -> str:
 
 
 def _fallback_visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     section_by_id = (
         {section.section_id: section for section in script.sections}
         if script
@@ -982,9 +975,7 @@ def _validate_ai_visual_plan(
 
 
 def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     candidate = repository.candidate_for_story(story_id)
     if not script:
         return _fallback_visual_search_plan(repository, story_id)
@@ -1225,6 +1216,8 @@ def _find_visual(repository, story_id: str, asset_id: str) -> VisualCandidate | 
 def _merge_rediscovered_visual(
     repository,
     discovered: VisualCandidate,
+    *,
+    media_reacquired: bool = False,
 ) -> VisualCandidate:
     """Keep acquired media and editor decisions when search finds an asset again.
 
@@ -1272,7 +1265,11 @@ def _merge_rediscovered_visual(
         and discovered.download_path
         and discovered.download_path != existing.download_path
     )
-    if existing_media_is_available and not media_identity_changed:
+    if (
+        existing_media_is_available
+        and not media_identity_changed
+        and not media_reacquired
+    ):
         for field_name in (
             "download_path",
             "quarantine_path",
@@ -1314,7 +1311,11 @@ def _merge_rediscovered_visual(
         or existing.trim_start is not None
         or existing.trim_end is not None
     )
-    if editor_state_exists and not media_identity_changed:
+    if (
+        editor_state_exists
+        and not media_identity_changed
+        and not media_reacquired
+    ):
         for field_name in (
             "rights_tier",
             "rights_confidence",
@@ -1366,6 +1367,13 @@ def _stage_searxng_result(
     thumbnail: Path | None = None
     visual_settings = config.get_settings().visuals
     existing = _find_visual(repository, story_id, asset_id)
+    existing_media_was_missing = False
+    if existing:
+        existing_media_value = existing.download_path or existing.quarantine_path
+        existing_media_was_missing = bool(
+            existing_media_value
+            and not resolve_project_path(existing_media_value).is_file()
+        )
     if existing and existing.download_path:
         existing_path = resolve_project_path(existing.download_path)
         if existing_path.is_file():
@@ -1496,7 +1504,11 @@ def _stage_searxng_result(
         if thumbnail:
             thumbnail.unlink(missing_ok=True)
         return None
-    visual = _merge_rediscovered_visual(repository, visual)
+    visual = _merge_rediscovered_visual(
+        repository,
+        visual,
+        media_reacquired=existing_media_was_missing and bool(download_path),
+    )
     repository.upsert_visual(visual)
     return visual
 
@@ -1685,6 +1697,11 @@ def search_visuals(
 ) -> list[VisualCandidate]:
     """Search the episode-isolated media inbox, then SearXNG and fallbacks."""
 
+    script = repository.latest_script(story_id)
+    if not script or script.status != ScriptStatus.approved:
+        raise ValueError(
+            "The latest script revision must be approved before searching for visuals"
+        )
     visuals: list[VisualCandidate] = []
     for source in configured_visual_sources():
         if not source.available():

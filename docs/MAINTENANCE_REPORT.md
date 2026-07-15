@@ -182,7 +182,7 @@ The following checks were run against the current working tree:
 |---|---|
 | `make check` | passed |
 | Configuration/doctor validation | passed; worker capacity reported as 3/3/3 |
-| Python unit suite | 163 tests passed |
+| Python unit suite | 165 tests passed |
 | Avatar Engine unit suite | 80 tests passed |
 | Python `compileall` | passed |
 | Remotion TypeScript check | passed |

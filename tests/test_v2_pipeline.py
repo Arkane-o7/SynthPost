@@ -2424,6 +2424,39 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
 
+    def test_rejected_script_transition_does_not_persist_a_revision(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "script-transition.sqlite3")
+        try:
+            project = repository.create_project("Cancelled script")
+            episode = repository.create_episode(project.project_id, "Episode")
+            candidate = add_manual_story(
+                repository,
+                title="Cancelled story",
+                body="This story was removed from production.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            repository.transition_story(
+                selected.story_id, StoryWorkflowState.cancelled
+            )
+
+            with self.assertRaisesRegex(ValueError, "workflow state cancelled"):
+                save_manual_script(
+                    repository,
+                    selected.story_id,
+                    "Should not persist",
+                    "This invalid revision must not be written.",
+                )
+
+            self.assertIsNone(repository.latest_script(selected.story_id))
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_failed_regeneration_restores_previous_script_review_state(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "script-rollback.sqlite3")
@@ -2912,6 +2945,61 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
 
+    def test_mock_provider_supports_default_ten_minute_narrative(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "mock-long-form.sqlite3")
+        try:
+            project = repository.create_project("Mock long form")
+            episode = repository.create_episode(project.project_id, "Offline demo")
+            candidate = add_manual_story(
+                repository,
+                title="India tests a documented transport pilot",
+                body="The pilot is entering a documented operating trial.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            repository.upsert_research_pack(
+                ResearchPack(
+                    story_id=selected.story_id,
+                    claims=[
+                        Claim(
+                            claim_id="claim_001",
+                            claim_text="The transport pilot is entering an operating trial.",
+                            supported=True,
+                        )
+                    ],
+                    research_summary="A documented Indian transport pilot.",
+                )
+            )
+
+            script = generate_script(
+                repository,
+                selected.story_id,
+                provider_name="mock",
+                target_duration_seconds=600,
+                narration_mode="explained",
+            )
+
+            self.assertIn("narrative_quality_gate=passed", script.warnings)
+            self.assertGreater(len(script.text.split()), 1_200)
+            draft_audit = next(
+                audit
+                for audit in repository.list_generation_audits(selected.story_id)
+                if audit.stage == "narrative_draft"
+            )
+            draft = _validate_narrative_draft(
+                draft_audit.response,
+                repository.latest_research_pack(selected.story_id) or {},
+                target_duration_seconds=600,
+            )
+            self.assertEqual(narrative_quality_issues(draft), [])
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_rights_validation_blocks_red_asset(self) -> None:
         with self.assertRaises(ValueError):
             VisualCandidate(
@@ -3217,6 +3305,21 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             )
             self.assertEqual(manifest["approved_timeline"]["status"], "approved")
             self.assertEqual(manifest["composition"]["template"], "timeline_story")
+            save_manual_script(
+                repository,
+                story_id,
+                "A newer editorial revision",
+                "This revised narration must invalidate the old renderer inputs.",
+            )
+            with self.assertRaisesRegex(ValueError, "latest script revision"):
+                build_story_manifest(
+                    repository, story_id, render_profile="preview", test_mode=True
+                )
+            approve_script(repository, story_id)
+            with self.assertRaisesRegex(ValueError, "newer production revision"):
+                build_story_manifest(
+                    repository, story_id, render_profile="preview", test_mode=True
+                )
             self.assertTrue(
                 (
                     PROJECT_ROOT

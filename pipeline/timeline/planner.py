@@ -13,6 +13,7 @@ from pipeline.models import (
     MediaType,
     ReviewStatus,
     RightsTier,
+    ScriptStatus,
     SegmentAnchor,
     SegmentAudio,
     SegmentOverlays,
@@ -486,11 +487,13 @@ def _estimated_narration_duration(text: str) -> float:
 
 
 def generate_timeline(repository, story_id: str) -> TimelinePlan:
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     if not script:
         raise ValueError(f"No script exists for story: {story_id}")
+    if script.status != ScriptStatus.approved:
+        raise ValueError(
+            "The latest script revision must be approved before generating a timeline"
+        )
     visuals = repository.list_visuals(story_id)
     by_section = approved_visuals_by_section(visuals)
     source_audio_by_section = source_audio_visuals_by_section(visuals)

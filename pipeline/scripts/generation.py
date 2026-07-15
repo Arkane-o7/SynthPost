@@ -55,9 +55,7 @@ SECTION_ORDER = [
 ]
 
 
-def _move_story_to_script_review(repository, story_id: str) -> None:
-    """Invalidate downstream workflow state after a new script revision exists."""
-
+def _assert_story_can_enter_script_review(repository, story_id: str) -> None:
     current = repository.candidate_for_story(story_id).workflow_state
     if current == StoryWorkflowState.script_review:
         return
@@ -65,6 +63,15 @@ def _move_story_to_script_review(repository, story_id: str) -> None:
         raise ValueError(
             f"Story cannot enter script review from workflow state {current.value}"
         )
+
+
+def _move_story_to_script_review(repository, story_id: str) -> None:
+    """Invalidate downstream workflow state after a new script revision exists."""
+
+    _assert_story_can_enter_script_review(repository, story_id)
+    current = repository.candidate_for_story(story_id).workflow_state
+    if current == StoryWorkflowState.script_review:
+        return
     repository.transition_story(story_id, StoryWorkflowState.script_review)
 
 
@@ -2151,6 +2158,7 @@ def generate_script(
     pack = repository.latest_research_pack(story_id)
     if not pack:
         raise ValueError(f"No research pack exists for story: {story_id}")
+    _assert_story_can_enter_script_review(repository, story_id)
     provider = configured_provider(provider_name)
     selected_mode = NarrationMode(
         normalize_narration_mode(
@@ -2337,6 +2345,7 @@ def generate_script(
 def save_manual_script(
     repository, story_id: str, headline: str, text: str, *, category: str = "manual"
 ) -> ScriptDocument:
+    _assert_story_can_enter_script_review(repository, story_id)
     previous = repository.latest_script(story_id)
     script = split_manual_script(story_id, headline, text, category=category)
     if previous:

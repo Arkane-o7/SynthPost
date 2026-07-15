@@ -939,6 +939,32 @@ class SearXNGPipelineTests(unittest.TestCase):
             self.assertFalse(
                 any("expired URL" in warning for warning in rediscovered.warnings)
             )
+            rediscovered.broadcast_fit_override = True
+            repository.upsert_visual(rediscovered)
+            resolve_project_path(rediscovered.download_path or "").unlink()
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=successful_download,
+            ), patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={"width": 1600, "height": 900},
+            ):
+                reacquired = _stage_searxng_result(
+                    repository,
+                    story_id,
+                    "sec_003",
+                    result,
+                    MediaType.image,
+                    0,
+                )
+
+            assert reacquired
+            self.assertEqual(reacquired.review_status, ReviewStatus.suggested)
+            self.assertIsNone(reacquired.reviewed_at)
+            self.assertFalse(reacquired.broadcast_fit_override)
+            self.assertEqual(reacquired.content_cleanliness_status, "needs_review")
         finally:
             repository.close()
             temp.cleanup()

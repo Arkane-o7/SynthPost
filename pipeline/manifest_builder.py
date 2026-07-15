@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pipeline import config
@@ -14,6 +15,7 @@ from pipeline.models import (
     ContentRole,
     MediaType,
     ReviewStatus,
+    ScriptStatus,
     TimelinePlan,
     TimelineStatus,
 )
@@ -239,15 +241,37 @@ def build_story_manifest(
 ) -> dict[str, Any]:
     episode = repository.episode_for_story(story_id)
     candidate = repository.candidate_for_story(story_id)
-    script = repository.latest_script(story_id, approved=True)
-    if not script:
+    script = repository.latest_script(story_id)
+    if not script or script.status != ScriptStatus.approved:
         raise ValueError(
-            "An approved script is required before building the renderer manifest"
+            "The latest script revision must be approved before building the "
+            "renderer manifest"
         )
-    timeline = repository.latest_timeline(story_id, approved=True)
-    if not timeline:
+    timeline = repository.latest_timeline(story_id)
+    if not timeline or timeline.status != TimelineStatus.approved:
         raise ValueError(
-            "An approved timeline is required before building the renderer manifest"
+            "The latest timeline revision must be approved before building the "
+            "renderer manifest"
+        )
+    try:
+        script_created_at = datetime.fromisoformat(
+            script.created_at.replace("Z", "+00:00")
+        )
+        timeline_created_at = datetime.fromisoformat(
+            timeline.created_at.replace("Z", "+00:00")
+        )
+    except ValueError:
+        # Retain compatibility with legacy records whose timestamps were not
+        # normalized. Current records always use ISO-8601 UTC timestamps.
+        script_created_at = timeline_created_at = None
+    if (
+        script_created_at is not None
+        and timeline_created_at is not None
+        and timeline_created_at < script_created_at
+    ):
+        raise ValueError(
+            "The approved timeline was invalidated by a newer production revision; "
+            "generate and approve the current timeline before rendering"
         )
     visuals = repository.list_visuals(story_id)
     timeline = hydrate_timeline_visuals(timeline, visuals)
