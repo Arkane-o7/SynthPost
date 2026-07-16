@@ -446,6 +446,14 @@ class NarrativeSegmentation(StrictModel):
     sections: list[NarrativeSegmentPlan]
 
 
+class ScriptBeat(StrictModel):
+    """A stable production cue inside one approved script section."""
+
+    beat_id: str
+    text: str = Field(min_length=2, max_length=1200)
+    claim_ids: list[str] = Field(default_factory=list)
+
+
 class ScriptSection(StrictModel):
     section_id: str
     section_type: SectionType
@@ -458,10 +466,39 @@ class ScriptSection(StrictModel):
     lower_third: str = ""
     chyron: str = ""
     headline_cues: list[str] = Field(default_factory=list)
+    beats: list[ScriptBeat] = Field(default_factory=list)
     source_clip: SourceClipCue | None = None
     editorial_notes: list[str] = Field(default_factory=list)
     approval_status: ApprovalStatus = ApprovalStatus.review
     locked: bool = False
+
+    @model_validator(mode="after")
+    def normalize_production_beats(self) -> "ScriptSection":
+        expected_texts = narration_beats(self.text) or [self.text.strip()]
+        current_text = " ".join(beat.text.strip() for beat in self.beats)
+        expected_text = " ".join(text.strip() for text in expected_texts)
+        ids_are_unique = len({beat.beat_id for beat in self.beats}) == len(self.beats)
+        if (
+            not self.beats
+            or not ids_are_unique
+            or " ".join(current_text.split()) != " ".join(expected_text.split())
+        ):
+            self.rebuild_beats()
+        return self
+
+    def rebuild_beats(self) -> None:
+        """Recreate stable beat IDs after an editor changes section narration."""
+
+        texts = narration_beats(self.text) or [self.text.strip()]
+        self.beats = [
+            ScriptBeat(
+                beat_id=f"{self.section_id}_beat_{index:02d}",
+                text=text,
+                claim_ids=list(self.claim_ids),
+            )
+            for index, text in enumerate(texts, start=1)
+            if text.strip()
+        ]
 
 
 class ScriptDocument(StrictModel):
@@ -577,6 +614,89 @@ class ScriptDocument(StrictModel):
             section.text.strip() for section in self.sections if section.text.strip()
         )
 
+
+class NarrationBeatTiming(StrictModel):
+    """Sample-derived timing for one Kokoro production beat."""
+
+    beat_id: str
+    section_id: str
+    text: str
+    kind: Literal["narration", "source_fallback"] = "narration"
+    start_time: float = Field(ge=0)
+    speech_end_time: float = Field(gt=0)
+    end_time: float = Field(gt=0)
+    pause_after_seconds: float = Field(default=0.0, ge=0)
+    start_sample: int = Field(ge=0)
+    speech_end_sample: int = Field(gt=0)
+    end_sample: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "NarrationBeatTiming":
+        if not (
+            self.start_time < self.speech_end_time <= self.end_time
+            and self.start_sample < self.speech_end_sample <= self.end_sample
+        ):
+            raise ValueError("narration beat timing must be positive and ordered")
+        return self
+
+
+class NarrationSectionTiming(StrictModel):
+    """Exact continuous-audio window owned by one script section."""
+
+    section_id: str
+    beat_ids: list[str]
+    start_time: float = Field(ge=0)
+    speech_end_time: float = Field(gt=0)
+    end_time: float = Field(gt=0)
+    duration_seconds: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "NarrationSectionTiming":
+        if not self.beat_ids:
+            raise ValueError("narration section timing requires at least one beat")
+        if not self.start_time < self.speech_end_time <= self.end_time:
+            raise ValueError("narration section timing must be positive and ordered")
+        if abs((self.end_time - self.start_time) - self.duration_seconds) > 0.01:
+            raise ValueError("narration section duration must match its time window")
+        return self
+
+
+class NarrationArtifact(StrictModel):
+    """Canonical local narration audio and its exact beat-level clock."""
+
+    contract_version: Literal["synthpost.narration.v1"] = "synthpost.narration.v1"
+    story_id: str
+    episode_id: str
+    script_id: str
+    script_version: int
+    input_hash: str
+    provider: Literal["kokoro"] = "kokoro"
+    model: str = "Kokoro-82M"
+    voice_id: str
+    voice_speed: float = Field(gt=0)
+    language_code: str
+    sample_rate: int = Field(gt=0)
+    timing_source: Literal["kokoro_exact_samples"] = "kokoro_exact_samples"
+    test_mode: bool = False
+    audio_path: str
+    duration_seconds: float = Field(gt=0)
+    beats: list[NarrationBeatTiming]
+    sections: list[NarrationSectionTiming]
+    warnings: list[str] = Field(default_factory=list)
+    created_at: str = Field(default_factory=now_iso)
+
+    @model_validator(mode="after")
+    def validate_timeline(self) -> "NarrationArtifact":
+        if not self.beats or not self.sections:
+            raise ValueError("narration artifact requires beats and sections")
+        previous_end = 0.0
+        for beat in self.beats:
+            if beat.start_time < previous_end - 0.002:
+                raise ValueError("narration beats must be monotonic")
+            previous_end = beat.end_time
+        if abs(previous_end - self.duration_seconds) > 0.01:
+            raise ValueError("narration duration must match the final beat")
+        return self
 
 class VisualCandidate(StrictModel):
     asset_id: str = Field(default_factory=lambda: new_id("visual"))

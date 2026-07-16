@@ -42,6 +42,7 @@ from pipeline.discovery.assignment_desk import rebuild_assignment_desk
 from pipeline.discovery.seeds import seed_sources
 from pipeline.editorial.charter import load_editorial_charter
 from pipeline.manifest_builder import build_story_manifest
+from pipeline.narration.service import load_narration_artifact
 from pipeline.models import (
     ReviewStatus,
     ScriptDocument,
@@ -561,26 +562,63 @@ def api_approve_script(story_id: str) -> dict[str, Any]:
                 "Wait for the active script generation to finish before approving"
             )
         script = approve_script(repository, story_id)
-        # Auto-trigger visual search after script approval so the pipeline
-        # doesn't stall waiting for the user to manually click "Search".
-        try:
-            if not repository.active_job("visual_search", story_id=story_id):
-                episode = repository.episode_for_story(story_id)
-                repository.create_job(
-                    "visual_search",
-                    episode_id=episode.episode_id,
-                    story_id=story_id,
+        # Narration and visual discovery both become eligible after approval.
+        # The queue's same-story serialization still prevents overlapping writes.
+        episode = repository.episode_for_story(story_id)
+        for job_type in ("narration_generate", "visual_search"):
+            try:
+                if not repository.active_job(job_type, story_id=story_id):
+                    repository.create_job(
+                        job_type,
+                        episode_id=episode.episode_id,
+                        story_id=story_id,
+                    )
+            except Exception as exc:
+                print(
+                    format_event(
+                        "post_script_job_enqueue_failed",
+                        f"Failed to auto-queue {job_type}: {exc}",
+                        level="WARNING",
+                        context=LogContext(
+                            story_id=story_id, stage="script_approve"
+                        ),
+                    )
                 )
-        except Exception as exc:
-            print(
-                format_event(
-                    "visual_search_enqueue_failed",
-                    f"Failed to auto-queue visual search: {exc}",
-                    level="WARNING",
-                    context=LogContext(story_id=story_id, stage="script_approve"),
-                )
-            )
         return script.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.get("/api/stories/{story_id}/narration")
+def read_narration(story_id: str) -> dict[str, Any] | None:
+    repository = repo()
+    try:
+        artifact = load_narration_artifact(
+            repository, story_id, require_current=False
+        )
+        return artifact.model_dump(mode="json") if artifact else None
+    finally:
+        repository.close()
+
+
+@app.post("/api/stories/{story_id}/narration/generate")
+def queue_narration(story_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        script = repository.latest_script(story_id)
+        if not script or script.status != ScriptStatus.approved:
+            raise ValueError(
+                "Approve the latest script before generating Kokoro narration"
+            )
+        episode = repository.episode_for_story(story_id)
+        job = repository.active_job(
+            "narration_generate", story_id=story_id
+        ) or repository.create_job(
+            "narration_generate",
+            episode_id=episode.episode_id,
+            story_id=story_id,
+        )
+        return job.model_dump(mode="json")
     finally:
         repository.close()
 

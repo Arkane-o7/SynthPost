@@ -21,6 +21,7 @@ from pipeline.db.repository import NotFoundError, Repository, get_repository
 from pipeline.db.sqlite import database_path
 from pipeline.discovery.discover import discover
 from pipeline.manifest_builder import build_story_manifest
+from pipeline.narration.service import generate_narration
 from pipeline.models import (
     EpisodeStatus,
     JobQueueLane,
@@ -222,6 +223,28 @@ def handle_visual_search(ctx: JobContext) -> dict[str, str]:
     return {"visual_count": str(len(visuals))}
 
 
+def handle_narration_generate(ctx: JobContext) -> dict[str, str]:
+    if not ctx.job.story_id:
+        raise ValueError("narration job requires story_id")
+    ctx.progress(5, "loading approved script and Kokoro voice")
+    artifact = generate_narration(
+        ctx.repository,
+        ctx.job.story_id,
+        force=bool(ctx.job.payload.get("force", False)),
+        test_mode=bool(ctx.job.payload.get("test_mode", False)),
+    )
+    ctx.progress(100, "sample-exact Kokoro narration ready")
+    return {
+        "narration_path": artifact.audio_path,
+        "alignment_path": project_relative(
+            story_manifest_path(artifact.episode_id, artifact.story_id).parent
+            / "narration"
+            / f"script_v{artifact.script_version:03d}"
+            / "alignment.json"
+        ),
+    }
+
+
 def handle_timeline_generate(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("timeline job requires story_id")
@@ -366,6 +389,7 @@ HANDLERS: dict[str, Callable[[JobContext], dict[str, str]]] = {
     "discovery": handle_discovery,
     "research": handle_research,
     "script_generate": handle_script_generate,
+    "narration_generate": handle_narration_generate,
     "visual_search": handle_visual_search,
     "timeline_generate": handle_timeline_generate,
     "render_avatar": handle_render_avatar,
@@ -377,6 +401,7 @@ JOB_TIMEOUT_SECONDS = {
     "discovery": 5 * 60,
     "research": 30 * 60,
     "script_generate": 20 * 60,
+    "narration_generate": 30 * 60,
     "visual_search": 12 * 60,
     "timeline_generate": 5 * 60,
 }

@@ -2,6 +2,7 @@ import type {
   Episode,
   GenerationAudit,
   NarrationMode,
+  NarrationArtifact,
   Project,
   RenderJob,
   ResearchPack,
@@ -213,6 +214,12 @@ export const api = {
     }),
   approveScript: (storyId: string) =>
     request<ScriptDocument>(`/api/stories/${storyId}/script/approve`, {
+      method: "POST",
+    }),
+  readNarration: (storyId: string) =>
+    request<NarrationArtifact | null>(`/api/stories/${storyId}/narration`),
+  generateNarration: (storyId: string) =>
+    request<RenderJob>(`/api/stories/${storyId}/narration/generate`, {
       method: "POST",
     }),
 

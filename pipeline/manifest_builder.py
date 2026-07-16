@@ -19,6 +19,7 @@ from pipeline.models import (
     TimelinePlan,
     TimelineStatus,
 )
+from pipeline.narration.service import load_narration_artifact
 from pipeline.provenance import file_sha256, now_iso
 from pipeline.storage import project_relative, resolve_project_path
 from pipeline.timeline.validation import assert_timeline_valid
@@ -274,11 +275,22 @@ def build_story_manifest(
             "generate and approve the current timeline before rendering"
         )
     visuals = repository.list_visuals(story_id)
+    narration = load_narration_artifact(repository, story_id, require_current=True)
+    assert narration is not None
     timeline = hydrate_timeline_visuals(timeline, visuals)
     assert_timeline_valid(timeline, require_approved=True, check_media_exists=True)
     narration_text = timeline_narration_text(timeline)
     if not narration_text:
         raise ValueError("Approved timeline contains no anchor narration")
+    canonical_text = " ".join(beat.text.strip() for beat in narration.beats)
+    narration_matches = " ".join(narration_text.split()) == " ".join(
+        canonical_text.split()
+    )
+    if not narration_matches and not config.source_audio_inserts_enabled():
+        raise ValueError(
+            "The approved timeline narration does not match the canonical Kokoro "
+            "audio. Regenerate and approve the timeline before rendering."
+        )
     artifacts = materialize_story_artifacts(repository, story_id)
     story_path = story_manifest_path(episode.episode_id, story_id)
     output_path = story_path.with_name(
@@ -355,6 +367,8 @@ def build_story_manifest(
             "source_artifacts": artifacts,
         },
     }
+    if narration_matches:
+        manifest["narration"] = narration.model_dump(mode="json")
     write_json(story_path, manifest)
     repository.record_artifact(
         ArtifactRecord(

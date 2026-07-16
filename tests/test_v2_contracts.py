@@ -24,6 +24,7 @@ class V2ContractTests(unittest.TestCase):
             "SourceDocument",
             "ResearchPack",
             "ScriptDocument",
+            "NarrationArtifact",
             "VisualCandidate",
             "TimelinePlan",
             "RenderJob",
@@ -46,6 +47,7 @@ class V2ContractTests(unittest.TestCase):
             "SourceDocument",
             "ResearchPack",
             "ScriptDocument",
+            "NarrationArtifact",
             "VisualCandidate",
             "TimelinePlan",
             "RenderJob",
@@ -68,9 +70,11 @@ class V2ContractTests(unittest.TestCase):
         self.assertIn("lower_third", section["required"])
         self.assertIn("chyron", section["required"])
         self.assertIn("headline_cues", section["required"])
+        self.assertIn("beats", section["properties"])
         self.assertIn("lower_third: string", ts)
         self.assertIn("chyron: string", ts)
         self.assertIn("headline_cues: string[]", ts)
+        self.assertIn("beats: ScriptBeat[]", ts)
 
     def test_script_contract_exposes_independent_narration_mode(self) -> None:
         schema = json.loads(

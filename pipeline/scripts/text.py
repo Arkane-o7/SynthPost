@@ -48,7 +48,7 @@ def narration_beats(text: str, *, max_words: int = 24) -> list[str]:
         clauses = [
             clause.strip()
             for clause in re.split(
-                r"(?<=[;:])\s+|\s+[—–]\s+|,\s+(?=(?:and|but|while|which|as)\b)",
+                r"(?<=[;:—–])\s+|(?<=,)\s+(?=(?:and|but|while|which|as)\b)",
                 sentence,
                 flags=re.IGNORECASE,
             )

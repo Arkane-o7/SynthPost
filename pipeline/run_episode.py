@@ -12,6 +12,7 @@ from pipeline.discovery.discover import add_manual_story
 from pipeline.discovery.seeds import seed_sources
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.models import ContentRole, EpisodeStatus, RightsTier
+from pipeline.narration.service import generate_narration
 from pipeline.observability import safe_text
 from pipeline.research.extract import build_research_pack
 from pipeline.scripts.generation import approve_script, save_manual_script
@@ -32,7 +33,9 @@ def ensure_demo_project(repository):
     )
 
 
-def create_demo_episode(*, render_profile: str = "preview") -> tuple[str, str]:
+def create_demo_episode(
+    *, render_profile: str = "preview", test_mode: bool = False
+) -> tuple[str, str]:
     repository = get_repository()
     try:
         seed_sources(repository)
@@ -74,6 +77,7 @@ This demo uses local editor-approved media from the retained renderer assets, wh
             category="technology",
         )
         approve_script(repository, story_id)
+        generate_narration(repository, story_id)
         visual_path = (
             PROJECT_ROOT
             / "compositor"
@@ -105,7 +109,7 @@ This demo uses local editor-approved media from the retained renderer assets, wh
         generate_timeline(repository, story_id)
         approve_timeline(repository, story_id)
         build_story_manifest(
-            repository, story_id, render_profile=render_profile, test_mode=False
+            repository, story_id, render_profile=render_profile, test_mode=test_mode
         )
         return episode.episode_id, story_id
     finally:
@@ -242,7 +246,10 @@ def main() -> None:
 
     episode_id = args.episode_id
     if args.create_demo or args.smoke or not episode_id:
-        episode_id, story_id = create_demo_episode(render_profile=args.render_profile)
+        episode_id, story_id = create_demo_episode(
+            render_profile=args.render_profile,
+            test_mode=args.test_mode or args.smoke,
+        )
         print(f"[run_episode] Created demo episode={episode_id} story={story_id}")
     if args.smoke or episode_id:
         final = run_episode(

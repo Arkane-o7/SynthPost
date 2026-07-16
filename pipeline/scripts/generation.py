@@ -2439,6 +2439,7 @@ def save_manual_script(
                 edited.text, edited.source_clip
             )
             edited.editorial_notes = list(original.editorial_notes)
+            edited.rebuild_beats()
         script.estimated_duration_seconds = round(
             sum(section.estimated_duration_seconds for section in script.sections), 2
         )

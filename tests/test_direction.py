@@ -21,6 +21,15 @@ class DirectionTemplateTests(unittest.TestCase):
         shutil.rmtree(
             PROJECT_ROOT / "episodes" / "ep_unit_direction", ignore_errors=True
         )
+        shutil.rmtree(
+            PROJECT_ROOT
+            / "avatar-engine"
+            / "assets"
+            / "temp"
+            / "synthpost"
+            / "ep_unit_direction",
+            ignore_errors=True,
+        )
 
     def test_full_screen_anchor_uses_landscape_intro(self) -> None:
         self.assertEqual(camera_for_template("full_screen_anchor"), "landscape_intro")
@@ -138,6 +147,52 @@ class DirectionTemplateTests(unittest.TestCase):
         self.assertEqual(job["face_mode"], "2d")
         self.assertEqual(job["camera_cuts"][0]["camera"], "landscape_intro")
         self.assertIn("output_path", job)
+
+    def test_avatar_jobs_reuse_canonical_audio_and_exact_beat_clock(self) -> None:
+        audio_path = (
+            "episodes/ep_unit_direction/stories/story_001/"
+            "narration/script_v001/narration.wav"
+        )
+        canonical_audio = PROJECT_ROOT / audio_path
+        canonical_audio.parent.mkdir(parents=True, exist_ok=True)
+        canonical_audio.write_bytes(b"canonical-wav")
+        manifest = {
+            "episode_id": "ep_unit_direction",
+            "story_id": "story_001",
+            "script": {"text": "First beat. Second beat."},
+            "narration": {
+                "audio_path": audio_path,
+                "duration_seconds": 2.5,
+                "beats": [
+                    {"beat_id": "b1", "start_time": 0.0, "end_time": 1.1},
+                    {"beat_id": "b2", "start_time": 1.1, "end_time": 2.5},
+                ],
+            },
+            "composition": {"template": "split_main"},
+        }
+
+        browser_job = avatar_job_from_manifest(
+            manifest, 2.5, render_profile="preview", renderer="rocketbox"
+        )
+        self.assertEqual(browser_job["audio_source"], "canonical_narration")
+        self.assertEqual(
+            browser_job["audio_path"],
+            "assets/temp/synthpost/ep_unit_direction/story_001/voice.wav",
+        )
+        self.assertEqual(browser_job["canonical_audio_path"], audio_path)
+        self.assertEqual(
+            browser_job["animation"]["gesture_events"][0]["time"], 1.1
+        )
+
+        blender_job = avatar_job_from_manifest(
+            manifest, 2.5, render_profile="preview", renderer="blender"
+        )
+        self.assertEqual(blender_job["audio_source"], "canonical_narration")
+        self.assertEqual(blender_job["canonical_audio_path"], audio_path)
+        self.assertEqual(
+            blender_job["performance_beats"][1]["timing_source"],
+            "kokoro_exact_samples",
+        )
 
 
 if __name__ == "__main__":

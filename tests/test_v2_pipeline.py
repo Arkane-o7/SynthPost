@@ -40,6 +40,9 @@ from pipeline.models import (
     NarrativeBeat,
     NarrativeBrief,
     NarrativeDraft,
+    NarrationArtifact,
+    NarrationBeatTiming,
+    NarrationSectionTiming,
     NarrationMode,
     Claim,
     ResearchPack,
@@ -65,6 +68,7 @@ from pipeline.models import (
     timed_section_headline_cues,
 )
 from pipeline.research.extract import build_research_pack
+from pipeline.narration.service import generate_narration
 from pipeline.run_story import _sync_timeline_to_avatar_duration
 from pipeline.scripts.generation import (
     approve_script,
@@ -126,6 +130,64 @@ from pipeline.jobs.worker import (
 )
 from pipeline.jobs.policy import classify_failure
 from assembly.stitch_episode import story_manifests
+
+
+def exact_test_narration(script: ScriptDocument) -> NarrationArtifact:
+    """Build a compact sample-derived artifact for isolated planner tests."""
+
+    raw = [
+        (section, beat)
+        for section in script.sections
+        for beat in section.beats
+    ]
+    timings: list[NarrationBeatTiming] = []
+    cursor = 0
+    for section, beat in raw:
+        speech_end = cursor + 24_000
+        end = speech_end + (1_920 if beat is not raw[-1][1] else 0)
+        timings.append(
+            NarrationBeatTiming(
+                beat_id=beat.beat_id,
+                section_id=section.section_id,
+                text=beat.text,
+                start_time=cursor / 24_000,
+                speech_end_time=speech_end / 24_000,
+                end_time=end / 24_000,
+                pause_after_seconds=(end - speech_end) / 24_000,
+                start_sample=cursor,
+                speech_end_sample=speech_end,
+                end_sample=end,
+            )
+        )
+        cursor = end
+    sections = []
+    for section in script.sections:
+        beats = [beat for beat in timings if beat.section_id == section.section_id]
+        sections.append(
+            NarrationSectionTiming(
+                section_id=section.section_id,
+                beat_ids=[beat.beat_id for beat in beats],
+                start_time=beats[0].start_time,
+                speech_end_time=beats[-1].speech_end_time,
+                end_time=beats[-1].end_time,
+                duration_seconds=beats[-1].end_time - beats[0].start_time,
+            )
+        )
+    return NarrationArtifact(
+        story_id=script.story_id,
+        episode_id="episode_test",
+        script_id=script.script_id,
+        script_version=script.version,
+        input_hash="test",
+        voice_id="af_heart",
+        voice_speed=1.1,
+        language_code="a",
+        sample_rate=24_000,
+        audio_path=__file__,
+        duration_seconds=cursor / 24_000,
+        beats=timings,
+        sections=sections,
+    )
 
 
 class V2WorkflowAndPipelineTests(unittest.TestCase):
@@ -1142,6 +1204,14 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertLess(float(cues[0]["end"]), float(cues[1]["end"]))
         self.assertEqual(len({str(cue["text"]) for cue in cues}), 3)
 
+    def test_narration_beats_preserve_approved_punctuation(self) -> None:
+        text = (
+            "The plan is explicit: review the script, approve the visuals, "
+            "and only then render — while keeping the original wording intact."
+        )
+        beats = narration_beats(text, max_words=8)
+        self.assertEqual(" ".join(beats), text)
+
     def test_fullscreen_audio_policy_keeps_narration_for_broll_video(
         self,
     ) -> None:
@@ -1245,7 +1315,11 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             workflow_state=StoryWorkflowState.timeline_review
         )
 
-        production_plan = generate_timeline(repository, script.story_id)
+        with patch(
+            "pipeline.timeline.planner.load_narration_artifact",
+            return_value=exact_test_narration(script),
+        ):
+            production_plan = generate_timeline(repository, script.story_id)
         self.assertEqual(len(production_plan.segments), 1)
         production_segment = production_plan.segments[0]
         self.assertEqual(production_segment.audio.mode, AudioMode.narration)
@@ -1258,6 +1332,9 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
 
         with patch(
             "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ), patch(
+            "pipeline.timeline.planner.load_narration_artifact",
+            return_value=exact_test_narration(script),
         ):
             plan = generate_timeline(repository, script.story_id)
 
@@ -1281,6 +1358,9 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         repository.list_visuals.return_value = []
         with patch(
             "pipeline.config.source_audio_inserts_enabled", return_value=True
+        ), patch(
+            "pipeline.timeline.planner.load_narration_artifact",
+            return_value=exact_test_narration(script),
         ):
             fallback_plan = generate_timeline(repository, script.story_id)
         fallback = fallback_plan.segments[-1]
@@ -3187,6 +3267,61 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertEqual(choose_template("intro", None, 0), "fullscreen_anchor")
         self.assertEqual(choose_template("context", None, 1), "fallback_anchor")
 
+    def test_anchor_timeline_retains_preferred_visual_for_editor_template_switch(
+        self,
+    ) -> None:
+        section = ScriptSection(
+            section_id="sec_001_cold_open",
+            section_type="cold_open",
+            text="A presenter opens the story while an approved image remains available.",
+            estimated_duration_seconds=8,
+            claim_ids=["claim_001"],
+            lower_third="Approved visual remains available",
+        )
+        script = ScriptDocument(
+            story_id="story_anchor_preferred_visual",
+            headline="Preferred visual test",
+            status="approved",
+            sections=[section],
+            estimated_duration_seconds=8,
+        )
+        visual = VisualCandidate(
+            asset_id="visual_anchor_preferred",
+            story_id=script.story_id,
+            section_ids=[section.section_id],
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.image,
+            content_role=ContentRole.context,
+            width=1920,
+            height=1080,
+            attribution_text="Unit source",
+            rights_tier=RightsTier.green,
+            review_status=ReviewStatus.approved,
+        )
+        repository = Mock()
+        repository.latest_script.return_value = script
+        repository.list_visuals.return_value = [visual]
+        repository.save_timeline.side_effect = lambda plan: plan
+        repository.candidate_for_story.return_value = SimpleNamespace(
+            workflow_state=StoryWorkflowState.timeline_review
+        )
+
+        with patch(
+            "pipeline.timeline.planner.load_narration_artifact",
+            return_value=exact_test_narration(script),
+        ):
+            plan = generate_timeline(repository, script.story_id)
+
+        segment = plan.segments[0]
+        self.assertEqual(segment.template.template_id, "fullscreen_anchor")
+        self.assertIsNone(segment.visual.asset_id)
+        self.assertEqual(segment.visual.media_type, MediaType.fallback)
+        self.assertEqual(
+            segment.overlays.data["preferred_visual_asset_id"],
+            visual.asset_id,
+        )
+
     def test_non_quote_card_templates_are_blacklisted_for_production(self) -> None:
         blacklisted = {
             "document_callout",
@@ -3447,7 +3582,14 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             visual.content_cleanliness_status = "passed"
             repository.upsert_visual(visual)
             approve_visual(repository, visual.asset_id)
-            plan = generate_timeline(repository, story_id)
+            narration_artifact = generate_narration(
+                repository, story_id, test_mode=True
+            )
+            with patch(
+                "pipeline.timeline.planner.load_narration_artifact",
+                return_value=narration_artifact,
+            ):
+                plan = generate_timeline(repository, story_id)
             first_segment_cues = plan.segments[0].overlays.data["headline_cues"]
             self.assertEqual(len(first_segment_cues), 2)
             self.assertEqual(first_segment_cues[0]["start"], 0.0)
@@ -3471,10 +3613,18 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             )
             errors, _warnings = validate_timeline(plan)
             self.assertEqual(errors, [])
-            approved = approve_timeline(repository, story_id)
-            manifest = build_story_manifest(
-                repository, story_id, render_profile="preview", test_mode=True
-            )
+            with patch(
+                "pipeline.timeline.planner.load_narration_artifact",
+                return_value=narration_artifact,
+            ):
+                approved = approve_timeline(repository, story_id)
+            with patch(
+                "pipeline.manifest_builder.load_narration_artifact",
+                return_value=narration_artifact,
+            ):
+                manifest = build_story_manifest(
+                    repository, story_id, render_profile="preview", test_mode=True
+                )
             self.assertEqual(manifest["approved_timeline"]["status"], "approved")
             self.assertEqual(manifest["composition"]["template"], "timeline_story")
             save_manual_script(

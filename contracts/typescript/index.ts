@@ -167,6 +167,12 @@ export type SourceClipCue = {
   quote: string;
 };
 
+export type ScriptBeat = {
+  beat_id: string;
+  text: string;
+  claim_ids: string[];
+};
+
 export type ScriptSection = {
   section_id: string;
   section_type: 'cold_open' | 'intro' | 'context' | 'key_developments' | 'why_it_matters' | 'stakes' | 'uncertainty' | 'conclusion' | 'outro';
@@ -179,10 +185,55 @@ export type ScriptSection = {
   lower_third: string;
   chyron: string;
   headline_cues: string[];
+  beats: ScriptBeat[];
   source_clip: SourceClipCue | null;
   editorial_notes: string[];
   approval_status: string;
   locked?: boolean;
+};
+
+export type NarrationBeatTiming = {
+  beat_id: string;
+  section_id: string;
+  text: string;
+  kind: 'narration' | 'source_fallback';
+  start_time: number;
+  speech_end_time: number;
+  end_time: number;
+  pause_after_seconds: number;
+  start_sample: number;
+  speech_end_sample: number;
+  end_sample: number;
+};
+
+export type NarrationArtifact = {
+  contract_version: 'synthpost.narration.v1';
+  story_id: string;
+  episode_id: string;
+  script_id: string;
+  script_version: number;
+  input_hash: string;
+  provider: 'kokoro';
+  model: string;
+  voice_id: string;
+  voice_speed: number;
+  language_code: string;
+  sample_rate: number;
+  timing_source: 'kokoro_exact_samples';
+  test_mode: boolean;
+  audio_path: string;
+  duration_seconds: number;
+  beats: NarrationBeatTiming[];
+  sections: Array<{
+    section_id: string;
+    beat_ids: string[];
+    start_time: number;
+    speech_end_time: number;
+    end_time: number;
+    duration_seconds: number;
+  }>;
+  warnings: string[];
+  created_at: string;
 };
 
 export type NarrationMode = 'signal' | 'explained' | 'deep_dive' | 'india_builds';
@@ -291,6 +342,8 @@ export type TimelineSegment = {
     trim_end?: number | null;
     has_audio?: boolean | null;
     attribution_text?: string | null;
+    content_cleanliness_status?: 'not_scanned' | 'needs_review' | 'passed' | 'rejected';
+    approval_blockers?: string[];
   };
   template: { template_id: string; layout?: string | null };
   audio: { mode: 'narration' | 'source' | 'mixed' | 'silent'; narration_volume: number; source_volume: number; ducking: boolean };

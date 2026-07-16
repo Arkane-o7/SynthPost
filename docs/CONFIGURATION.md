@@ -112,6 +112,8 @@ Required means required for the named feature, not for opening the local Studio.
 | `SYNTHPOST_AVATAR_RENDER_BACKGROUND` | `charcoal` | no | `chroma_green` | Render background mode. |
 | `SYNTHPOST_AVATAR_VOICE_ID` | `af_heart` | TTS | `af_bella` | Local Kokoro voice ID. |
 | `SYNTHPOST_AVATAR_VOICE_SPEED` | `1.10` | no | `1.0` | Positive multiplier. |
+| `SYNTHPOST_NARRATION_BEAT_PAUSE_MS` | `80` | no | `100` | Silence inserted between production beats. Included in the exact sample clock; range 0–2000 ms. |
+| `SYNTHPOST_NARRATION_SECTION_PAUSE_MS` | `220` | no | `250` | Silence inserted between script sections. Included in the exact sample clock; range 0–5000 ms. |
 | `SYNTHPOST_AVATAR_LANG_CODE` | `a` | no | `a` | TTS language code. |
 | `SYNTHPOST_AVATAR_DISTANCE_MULTIPLIER` | `0.86` | no | `0.9` | Camera framing calibration. |
 | `SYNTHPOST_AVATAR_TARGET_HEIGHT_FACTOR` | `0.52` | no | `0.52` | Camera target calibration. |

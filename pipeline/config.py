@@ -119,6 +119,8 @@ class AvatarSettings(SettingsModel):
     voice_speed: float = Field(default=1.10, gt=0)
     language_code: str = "a"
     words_per_minute: float = Field(default=145.0, gt=0)
+    narration_beat_pause_ms: int = Field(default=80, ge=0, le=2000)
+    narration_section_pause_ms: int = Field(default=220, ge=0, le=5000)
     browser_timeout_padding_seconds: float = Field(default=900.0, ge=0)
 
 
@@ -371,6 +373,12 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 voice_speed=r.number("SYNTHPOST_AVATAR_VOICE_SPEED", 1.10),
                 language_code=r.text("SYNTHPOST_AVATAR_LANG_CODE", "a"),
                 words_per_minute=r.number("SYNTHPOST_WORDS_PER_MINUTE", 145.0),
+                narration_beat_pause_ms=r.integer(
+                    "SYNTHPOST_NARRATION_BEAT_PAUSE_MS", 80
+                ),
+                narration_section_pause_ms=r.integer(
+                    "SYNTHPOST_NARRATION_SECTION_PAUSE_MS", 220
+                ),
                 browser_timeout_padding_seconds=r.number(
                     "AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S", 900.0
                 ),

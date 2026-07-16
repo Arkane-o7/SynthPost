@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import wave
@@ -181,9 +182,35 @@ def performance_beats_for(script: str, duration: float) -> list[dict[str, Any]]:
     return beats
 
 
-def gesture_events_for(script: str, duration: float) -> list[dict[str, Any]]:
+def exact_performance_beats(
+    narration: dict[str, Any], script: str, duration: float
+) -> list[dict[str, Any]]:
+    raw_beats = narration.get("beats")
+    if not isinstance(raw_beats, list) or not raw_beats:
+        return performance_beats_for(script, duration)
+    beats: list[dict[str, Any]] = []
+    for index, timing in enumerate(raw_beats):
+        if not isinstance(timing, dict):
+            continue
+        gesture, expression = GESTURE_PATTERN[index % len(GESTURE_PATTERN)]
+        beats.append(
+            {
+                "beat_id": timing.get("beat_id"),
+                "start": float(timing.get("start_time") or 0.0),
+                "end": float(timing.get("end_time") or 0.0),
+                "gesture": gesture,
+                "expression": expression,
+                "timing_source": "kokoro_exact_samples",
+            }
+        )
+    return beats or performance_beats_for(script, duration)
+
+
+def gesture_events_for(
+    script: str, duration: float, narration: dict[str, Any] | None = None
+) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    for beat in performance_beats_for(script, duration):
+    for beat in exact_performance_beats(narration or {}, script, duration):
         event_type = BROWSER_GESTURE_MAP.get(str(beat.get("gesture", "")))
         if not event_type:
             continue
@@ -357,7 +384,24 @@ def browser_avatar_job_from_manifest(
             "avatar_preview_path", default_preview_path(output_path).as_posix()
         )
     )
-    audio_path, viseme_path = browser_avatar_media_paths(episode_id, story_id)
+    generated_audio_path, viseme_path = browser_avatar_media_paths(episode_id, story_id)
+    narration = as_dict(manifest.get("narration"))
+    canonical_audio = str(narration.get("audio_path") or "").strip()
+    if canonical_audio:
+        canonical_source = resolve_project_path(canonical_audio)
+        if not canonical_source.exists():
+            raise FileNotFoundError(
+                f"Canonical Kokoro narration is missing: {canonical_source}"
+            )
+        engine_audio = resolve_engine_path(generated_audio_path)
+        engine_audio.parent.mkdir(parents=True, exist_ok=True)
+        if (
+            not engine_audio.exists()
+            or engine_audio.stat().st_size != canonical_source.stat().st_size
+            or engine_audio.stat().st_mtime_ns != canonical_source.stat().st_mtime_ns
+        ):
+            shutil.copy2(canonical_source, engine_audio)
+    audio_path = generated_audio_path
     camera_name = str(
         direction.get("avatar_camera")
         or camera_for_template(composition.get("template"))
@@ -373,6 +417,10 @@ def browser_avatar_job_from_manifest(
         "script_text": script_text,
         "voice": voice,
         "audio_path": audio_path,
+        "canonical_audio_path": canonical_audio or None,
+        "audio_source": (
+            "canonical_narration" if canonical_audio else "avatar_engine_tts"
+        ),
         "viseme_path": viseme_path,
         "avatar": {
             "asset_path": avatar_asset_path(),
@@ -403,7 +451,9 @@ def browser_avatar_job_from_manifest(
         },
         "animation": {
             "idle_loop": "procedural_anchor",
-            "gesture_events": gesture_events_for(script_text, duration),
+            "gesture_events": gesture_events_for(
+                script_text, duration, narration
+            ),
         },
         "face": {
             "mode": "3d_viseme",
@@ -435,6 +485,7 @@ def legacy_blender_job_from_manifest(
         f"episodes/{episode_id}/stories/{story_id}/anchor.mp4",
     )
 
+    narration = as_dict(manifest.get("narration"))
     return {
         "job_id": story_id,
         "renderer": "blender",
@@ -446,10 +497,16 @@ def legacy_blender_job_from_manifest(
         "render_profile": profile.name,
         "voice": voice_config(as_dict(direction.get("voice")) or None),
         "camera_cuts": camera_cuts_for(duration, composition.get("template")),
-        "performance_beats": performance_beats_for(
-            str(script.get("text", "")), duration
+        "performance_beats": exact_performance_beats(
+            narration, str(script.get("text", "")), duration
         ),
         "output_path": resolve_project_path(anchor_output_path).as_posix(),
+        "canonical_audio_path": narration.get("audio_path"),
+        "audio_source": (
+            "canonical_narration"
+            if narration.get("audio_path")
+            else "avatar_engine_tts"
+        ),
     }
 
 
@@ -626,9 +683,13 @@ def build_direction(
     if not script_text:
         raise ValueError("Cannot build direction because script.text is empty.")
 
-    estimated_duration = estimate_duration_seconds(script_text)
-    duration_source = "words_per_minute"
-    if is_browser_renderer(renderer):
+    narration = as_dict(manifest.get("narration"))
+    narration_duration = float(narration.get("duration_seconds") or 0.0)
+    estimated_duration = narration_duration or estimate_duration_seconds(script_text)
+    duration_source = (
+        "kokoro_exact_samples" if narration_duration else "words_per_minute"
+    )
+    if is_browser_renderer(renderer) and not narration_duration:
         audio_duration, audio_path = existing_browser_audio_duration(
             str(manifest["episode_id"]), str(manifest["story_id"])
         )
@@ -676,7 +737,7 @@ def build_direction(
             estimated_duration, manifest.get("composition", {}).get("template")
         ),
         "performance_beats": job.get("performance_beats")
-        or performance_beats_for(script_text, estimated_duration),
+        or exact_performance_beats(narration, script_text, estimated_duration),
         "anchor_output_path": project_relative(output_path),
         "avatar_job_path": project_relative(job_path),
         "estimated_duration_seconds": round(estimated_duration, 2),
@@ -827,8 +888,15 @@ def prepare_browser_avatar_inputs(
     viseme_path = resolve_engine_path(str(job.get("viseme_path", "")), engine_dir)
     commands: list[list[str]] = []
 
+    canonical_audio = job.get("audio_source") == "canonical_narration"
     tts_inputs = [job_path, config_path]
-    if force or not path_is_fresh(audio_path, tts_inputs):
+    if canonical_audio:
+        if not audio_path.exists():
+            raise FileNotFoundError(
+                f"Canonical Kokoro narration is missing: {audio_path}"
+            )
+        print(safe_text(f"[tts] Using canonical Kokoro narration: {audio_path}"))
+    elif force or not path_is_fresh(audio_path, tts_inputs):
         tts_cmd = [
             avatar_python(),
             "scripts/generate_tts.py",
@@ -1299,7 +1367,21 @@ def run_legacy_blender_avatar_engine(
         "--config",
         "config/default.yaml",
     ]
-    if force:
+    job = read_avatar_job(job_path)
+    canonical_audio = str(job.get("canonical_audio_path") or "").strip()
+    if canonical_audio:
+        source_audio = resolve_project_path(canonical_audio)
+        if not source_audio.exists():
+            raise FileNotFoundError(
+                f"Canonical Kokoro narration is missing: {source_audio}"
+            )
+        legacy_audio = engine_dir / "assets" / "temp" / str(job["job_id"]) / "audio.wav"
+        legacy_audio.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_audio, legacy_audio)
+        command.append("--skip-tts")
+        if force:
+            command.extend(["--force-lipsync", "--force-render", "--force-export"])
+    elif force:
         command.append("--force-all")
     if test_mode:
         command.append("--test-mode")

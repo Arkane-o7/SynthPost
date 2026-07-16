@@ -9,7 +9,9 @@ from urllib.error import HTTPError, URLError
 from pipeline import config
 
 
-EDITORIAL_JOB_TYPES = frozenset({"discovery", "research", "script_generate"})
+EDITORIAL_JOB_TYPES = frozenset(
+    {"discovery", "research", "script_generate", "narration_generate"}
+)
 MEDIA_JOB_TYPES = frozenset({"visual_search", "timeline_generate"})
 RENDER_JOB_TYPES = frozenset({"render_avatar", "render_story", "assemble_episode"})
 
