@@ -14,6 +14,7 @@ class StageName(str, Enum):
     discovery = "discovery"
     research = "research"
     script = "script_generate"
+    narration = "narration_generate"
     visuals = "visual_search"
     timeline = "timeline_generate"
     avatar = "render_avatar"
@@ -83,6 +84,14 @@ STAGE_CONTRACTS: dict[str, StageContract] = {
         requires_story=True,
         output_keys=("script_id",),
         artifact_owner="SQLite script_revisions + scripts/script_vNNN.json",
+    ),
+    StageName.narration.value: StageContract(
+        StageName.narration,
+        JobQueueLane.editorial,
+        requires_episode=False,
+        requires_story=True,
+        output_keys=("narration_path", "alignment_path"),
+        artifact_owner="narration/script_vNNN/{narration.wav,alignment.json}",
     ),
     StageName.visuals.value: StageContract(
         StageName.visuals,

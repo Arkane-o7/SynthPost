@@ -202,6 +202,15 @@
         "quote": {"type": "string"}
       }
     },
+    "ScriptBeat": {
+      "type": "object",
+      "required": ["beat_id", "text", "claim_ids"],
+      "properties": {
+        "beat_id": {"type": "string"},
+        "text": {"type": "string"},
+        "claim_ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "ScriptSection": {
       "type": "object",
       "required": ["section_id", "section_type", "text", "estimated_duration_seconds", "claim_ids", "suggested_visual_types", "suggested_search_queries", "suggested_template_ids", "lower_third", "chyron", "headline_cues", "source_clip", "editorial_notes", "approval_status"],
@@ -217,9 +226,65 @@
         "lower_third": {"type": "string", "maxLength": 80},
         "chyron": {"type": "string", "maxLength": 64},
         "headline_cues": {"type": "array", "items": {"type": "string", "maxLength": 80}},
+        "beats": {"type": "array", "items": {"$ref": "#/$defs/ScriptBeat"}},
         "source_clip": {"anyOf": [{"$ref": "#/$defs/SourceClipCue"}, {"type": "null"}]},
         "editorial_notes": {"type": "array"},
         "approval_status": {"type": "string"}
+      }
+    },
+    "NarrationBeatTiming": {
+      "type": "object",
+      "required": ["beat_id", "section_id", "text", "kind", "start_time", "speech_end_time", "end_time", "pause_after_seconds", "start_sample", "speech_end_sample", "end_sample"],
+      "properties": {
+        "beat_id": {"type": "string"},
+        "section_id": {"type": "string"},
+        "text": {"type": "string"},
+        "kind": {"enum": ["narration", "source_fallback"]},
+        "start_time": {"type": "number"},
+        "speech_end_time": {"type": "number"},
+        "end_time": {"type": "number"},
+        "pause_after_seconds": {"type": "number"},
+        "start_sample": {"type": "integer"},
+        "speech_end_sample": {"type": "integer"},
+        "end_sample": {"type": "integer"}
+      }
+    },
+    "NarrationSectionTiming": {
+      "type": "object",
+      "required": ["section_id", "beat_ids", "start_time", "speech_end_time", "end_time", "duration_seconds"],
+      "properties": {
+        "section_id": {"type": "string"},
+        "beat_ids": {"type": "array", "items": {"type": "string"}},
+        "start_time": {"type": "number"},
+        "speech_end_time": {"type": "number"},
+        "end_time": {"type": "number"},
+        "duration_seconds": {"type": "number"}
+      }
+    },
+    "NarrationArtifact": {
+      "type": "object",
+      "required": ["contract_version", "story_id", "episode_id", "script_id", "script_version", "input_hash", "provider", "model", "voice_id", "voice_speed", "language_code", "sample_rate", "timing_source", "test_mode", "audio_path", "duration_seconds", "beats", "sections", "warnings", "created_at"],
+      "properties": {
+        "contract_version": {"const": "synthpost.narration.v1"},
+        "story_id": {"type": "string"},
+        "episode_id": {"type": "string"},
+        "script_id": {"type": "string"},
+        "script_version": {"type": "integer"},
+        "input_hash": {"type": "string"},
+        "provider": {"const": "kokoro"},
+        "model": {"type": "string"},
+        "voice_id": {"type": "string"},
+        "voice_speed": {"type": "number"},
+        "language_code": {"type": "string"},
+        "sample_rate": {"type": "integer"},
+        "timing_source": {"const": "kokoro_exact_samples"},
+        "test_mode": {"type": "boolean"},
+        "audio_path": {"type": "string"},
+        "duration_seconds": {"type": "number"},
+        "beats": {"type": "array", "items": {"$ref": "#/$defs/NarrationBeatTiming"}},
+        "sections": {"type": "array", "items": {"$ref": "#/$defs/NarrationSectionTiming"}},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "created_at": {"type": "string"}
       }
     },
     "VisualCandidate": {
@@ -255,6 +320,8 @@
         "attribution_text": {"type": ["string", "null"]},
         "manual_review_flag": {"type": "boolean"},
         "review_status": {"enum": ["suggested", "approved", "manual_approved", "rejected", "blocked"]},
+        "reviewed_at": {"type": ["string", "null"]},
+        "broadcast_fit_override": {"type": "boolean"},
         "warnings": {"type": "array"},
         "trim_start": {"type": ["number", "null"]},
         "trim_end": {"type": ["number", "null"]},

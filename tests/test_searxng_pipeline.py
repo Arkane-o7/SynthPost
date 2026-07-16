@@ -8,10 +8,19 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 from pipeline.db.repository import Repository
 from pipeline.discovery.discover import add_manual_story
-from pipeline.models import MediaType, SourceDefinition, SourceDocument, SourceType, StoryCandidate
+from pipeline.models import (
+    MediaType,
+    ReviewStatus,
+    SourceDefinition,
+    SourceDocument,
+    SourceType,
+    StoryCandidate,
+    VisualCandidate,
+)
 from pipeline.news.discovery import (
     diversified_articles,
     discover_news,
@@ -19,17 +28,21 @@ from pipeline.news.discovery import (
 )
 from pipeline.research.extract import build_research_pack
 from pipeline.search.searxng_client import SearXNGResult, search
-from pipeline.storage import PROJECT_ROOT
+from pipeline.storage import PROJECT_ROOT, resolve_project_path
 from pipeline.visuals.content_analysis import (
     SourceAssessment,
     analyze_media_cleanliness,
     assess_video_source,
 )
 from pipeline.visuals.providers import (
+    VisualQueryPlan,
+    _image_suffix_from_bytes,
+    _prefer_original_social_image_url,
     _stage_searxng_result,
     approve_visual,
     broadcast_media_fit,
     download_visual,
+    search_searxng_visuals,
 )
 
 
@@ -48,6 +61,24 @@ class _JSONResponse:
 
 
 class SearXNGPipelineTests(unittest.TestCase):
+    def test_image_payload_signature_wins_over_mislabeled_mime_type(self) -> None:
+        self.assertEqual(_image_suffix_from_bytes(b"\x89PNG\r\n\x1a\nrest"), ".png")
+        self.assertEqual(_image_suffix_from_bytes(b"\xff\xd8\xffrest"), ".jpg")
+        self.assertEqual(_image_suffix_from_bytes(b"RIFF1234WEBPrest"), ".webp")
+        self.assertIsNone(_image_suffix_from_bytes(b"<html>not an image"))
+
+    def test_facebook_social_image_prefers_original_size(self) -> None:
+        resized = (
+            "https://scontent.example.fbcdn.net/image.jpg?"
+            "stp=dst-jpg&cstp=mx1600x737&ctp=p600x600&oh=signed"
+        )
+
+        original = _prefer_original_social_image_url(resized)
+
+        self.assertNotIn("ctp=", original)
+        self.assertIn("cstp=mx1600x737", original)
+        self.assertIn("oh=signed", original)
+
     def test_research_queries_use_headline_topic_and_summary(self) -> None:
         candidate = StoryCandidate(
             title="Central bank cuts interest rates after inflation slows",
@@ -295,7 +326,7 @@ class SearXNGPipelineTests(unittest.TestCase):
                 category="videos",
                 source_domain="video.example",
             )
-            def fake_download(_url: str, stem: Path) -> Path:
+            def fake_download(_url: str, stem: Path, **_kwargs) -> Path:
                 path = stem.with_suffix(".mp4")
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"broadcaster-review-clip")
@@ -328,7 +359,7 @@ class SearXNGPipelineTests(unittest.TestCase):
             assert visual
             download.assert_called_once()
             self.assertEqual(visual.source_class, "editor_review")
-            self.assertEqual(visual.content_cleanliness_status, "passed")
+            self.assertEqual(visual.content_cleanliness_status, "needs_review")
             self.assertEqual(visual.review_status.value, "suggested")
             self.assertEqual(visual.rights_tier.value, "yellow")
             self.assertIsNotNone(visual.download_path)
@@ -383,7 +414,7 @@ class SearXNGPipelineTests(unittest.TestCase):
                 source_domain="video.example",
             )
 
-            def fake_download(_url: str, stem: Path) -> Path:
+            def fake_download(_url: str, stem: Path, **_kwargs) -> Path:
                 path = stem.with_suffix(".mp4")
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"render-ready-test-clip")
@@ -452,10 +483,11 @@ class SearXNGPipelineTests(unittest.TestCase):
                 )
 
             assert portrait
-            self.assertIsNone(portrait.download_path)
-            self.assertEqual(portrait.visual_quality_score, 0.15)
+            self.assertIsNotNone(portrait.download_path)
+            self.assertEqual(portrait.visual_quality_score, 0.0)
+            self.assertFalse(portrait.broadcast_fit_override)
             self.assertTrue(
-                any("rejected for broadcast layout" in item for item in portrait.warnings)
+                any("broadcast layout warning" in item for item in portrait.warnings)
             )
         finally:
             repository.close()
@@ -641,7 +673,7 @@ class SearXNGPipelineTests(unittest.TestCase):
                 )
             assert lead
 
-            def fake_download(_url: str, stem: Path) -> Path:
+            def fake_download(_url: str, stem: Path, **_kwargs) -> Path:
                 path = stem.with_suffix(".mp4")
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"video")
@@ -665,17 +697,436 @@ class SearXNGPipelineTests(unittest.TestCase):
 
             self.assertIsNotNone(downloaded.download_path)
             self.assertTrue(downloaded.has_audio)
-            self.assertEqual(downloaded.content_cleanliness_status, "passed")
+            self.assertEqual(downloaded.content_cleanliness_status, "needs_review")
             self.assertFalse(
                 any("download failed" in warning for warning in downloaded.warnings)
             )
             approved = approve_visual(repository, lead.asset_id, manual=True)
             self.assertEqual(approved.review_status.value, "manual_approved")
+            self.assertEqual(approved.content_cleanliness_status, "passed")
+            approved.broadcast_fit_override = True
+            repository.upsert_visual(approved)
+            resolve_project_path(approved.download_path or "").unlink()
+            with patch(
+                "pipeline.visuals.providers._download_remote_video",
+                side_effect=fake_download,
+            ), patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={
+                    "duration_seconds": 20.0,
+                    "width": 1920,
+                    "height": 1080,
+                    "audio_codec": "aac",
+                },
+            ):
+                reacquired = download_visual(repository, lead.asset_id)
+
+            self.assertEqual(reacquired.review_status, ReviewStatus.suggested)
+            self.assertIsNone(reacquired.reviewed_at)
+            self.assertFalse(reacquired.broadcast_fit_override)
+            self.assertEqual(reacquired.content_cleanliness_status, "needs_review")
         finally:
             repository.close()
             temp.cleanup()
             if episode_id:
                 shutil.rmtree(PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True)
+
+    def test_image_download_uses_source_page_when_direct_url_is_gone(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "test.sqlite3")
+        episode_id = ""
+        try:
+            project = repository.create_project("Image fallback")
+            episode = repository.create_episode(project.project_id, "Episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Motor market report",
+                body="A new market report tracks permanent magnet motor sales.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            story_id = selected.story_id
+            assert story_id
+            direct_url = "https://cdn.example/gone.webp"
+            resolved_url = "https://cdn.example/current.webp"
+            result = SearXNGResult(
+                title="Permanent magnet motor market report",
+                url="https://publisher.example/report",
+                image_url=direct_url,
+                engine="duckduckgo images",
+                category="images",
+                source_domain="publisher.example",
+            )
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=ValueError("gone"),
+            ):
+                lead = _stage_searxng_result(
+                    repository, story_id, None, result, MediaType.image, 0
+                )
+            assert lead
+
+            def fake_download(url: str, stem: Path) -> Path:
+                if url == direct_url:
+                    raise HTTPError(url, 404, "Not Found", {}, None)
+                path = stem.with_suffix(".webp")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"image")
+                return path
+
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=fake_download,
+            ), patch(
+                "pipeline.visuals.providers._resolve_page_image_url",
+                return_value=resolved_url,
+            ) as resolve_page, patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={"width": 1600, "height": 900},
+            ):
+                downloaded = download_visual(repository, lead.asset_id)
+
+            resolve_page.assert_called_once_with(result.url)
+            self.assertIsNotNone(downloaded.download_path)
+            self.assertEqual(downloaded.width, 1600)
+            self.assertEqual(downloaded.height, 900)
+        finally:
+            repository.close()
+            temp.cleanup()
+            if episode_id:
+                shutil.rmtree(PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True)
+
+    def test_image_download_can_use_cached_search_preview_as_last_resort(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "test.sqlite3")
+        episode_id = ""
+        try:
+            project = repository.create_project("Cached preview fallback")
+            episode = repository.create_episode(project.project_id, "Episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Motor market report",
+                body="A market report illustrates changes in motor demand.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            preview = Path(temp.name) / "cached-preview.png"
+            preview.write_bytes(b"\x89PNG\r\n\x1a\npreview")
+            lead = VisualCandidate(
+                story_id=selected.story_id,
+                provider="searxng:images",
+                source_url="https://publisher.example/missing",
+                source_metadata={"image_url": "https://cdn.example/missing.png"},
+                thumbnail_path=str(preview),
+                media_type=MediaType.image,
+                attribution_text="Source: publisher.example",
+            )
+            repository.upsert_visual(lead)
+
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=HTTPError(
+                    "https://cdn.example/missing.png", 404, "Not Found", {}, None
+                ),
+            ), patch(
+                "pipeline.visuals.providers._resolve_page_image_url",
+                side_effect=ValueError("no Open Graph image"),
+            ), patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={"width": 640, "height": 360},
+            ):
+                downloaded = download_visual(repository, lead.asset_id)
+
+            self.assertTrue(downloaded.download_path)
+            self.assertTrue(
+                any("cached search preview" in warning for warning in downloaded.warnings)
+            )
+            self.assertEqual(
+                (PROJECT_ROOT / str(downloaded.download_path)).read_bytes(),
+                preview.read_bytes(),
+            )
+        finally:
+            repository.close()
+            temp.cleanup()
+            if episode_id:
+                shutil.rmtree(PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True)
+
+    def test_rediscovery_does_not_downgrade_acquired_visual(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "test.sqlite3")
+        episode_id = ""
+        try:
+            project = repository.create_project("Visual rediscovery")
+            episode = repository.create_episode(project.project_id, "Episode")
+            episode_id = episode.episode_id
+            candidate = add_manual_story(
+                repository,
+                title="Motor technology",
+                body="Engineers demonstrated a new electric motor.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            story_id = selected.story_id
+            assert story_id
+            result = SearXNGResult(
+                title="Electric motor",
+                url="https://publisher.example/motor",
+                image_url="https://cdn.example/motor.webp",
+                engine="example images",
+                category="images",
+                source_domain="publisher.example",
+            )
+
+            def successful_download(_url: str, stem: Path) -> Path:
+                path = stem.with_suffix(".webp")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"image")
+                return path
+
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=successful_download,
+            ), patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={"width": 1600, "height": 900},
+            ):
+                acquired = _stage_searxng_result(
+                    repository,
+                    story_id,
+                    "sec_001",
+                    result,
+                    MediaType.image,
+                    0,
+                )
+            assert acquired
+            approved = approve_visual(repository, acquired.asset_id, manual=True)
+
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=ValueError("expired URL"),
+            ):
+                rediscovered = _stage_searxng_result(
+                    repository,
+                    story_id,
+                    "sec_002",
+                    result,
+                    MediaType.image,
+                    1,
+                )
+
+            assert rediscovered
+            self.assertEqual(rediscovered.download_path, approved.download_path)
+            self.assertEqual(rediscovered.review_status, ReviewStatus.manual_approved)
+            self.assertEqual(rediscovered.width, 1600)
+            self.assertEqual(rediscovered.section_ids, ["sec_001", "sec_002"])
+            self.assertFalse(
+                any("expired URL" in warning for warning in rediscovered.warnings)
+            )
+            rediscovered.broadcast_fit_override = True
+            repository.upsert_visual(rediscovered)
+            resolve_project_path(rediscovered.download_path or "").unlink()
+            with patch(
+                "pipeline.visuals.providers._download_remote_image",
+                side_effect=successful_download,
+            ), patch(
+                "pipeline.visuals.providers.create_thumbnail", return_value=None
+            ), patch(
+                "pipeline.visuals.providers.media_metadata",
+                return_value={"width": 1600, "height": 900},
+            ):
+                reacquired = _stage_searxng_result(
+                    repository,
+                    story_id,
+                    "sec_003",
+                    result,
+                    MediaType.image,
+                    0,
+                )
+
+            assert reacquired
+            self.assertEqual(reacquired.review_status, ReviewStatus.suggested)
+            self.assertIsNone(reacquired.reviewed_at)
+            self.assertFalse(reacquired.broadcast_fit_override)
+            self.assertEqual(reacquired.content_cleanliness_status, "needs_review")
+        finally:
+            repository.close()
+            temp.cleanup()
+            if episode_id:
+                shutil.rmtree(PROJECT_ROOT / "episodes" / episode_id, ignore_errors=True)
+
+    def test_repeated_search_result_is_linked_to_each_relevant_section(self) -> None:
+        result = SearXNGResult(
+            title="Vimag motor prototype demonstration",
+            url="https://publisher.example/motor",
+            image_url="https://cdn.example/motor.png",
+            engine="example images",
+            category="images",
+            source_domain="publisher.example",
+        )
+        plans = [
+            VisualQueryPlan(
+                section_id="sec_001",
+                image_query="Vimag motor prototype",
+                video_query="Vimag motor prototype official video",
+                video_priority=False,
+                rationale="unit",
+            ),
+            VisualQueryPlan(
+                section_id="sec_002",
+                image_query="Vimag motor demonstration",
+                video_query="Vimag motor demonstration official video",
+                video_priority=False,
+                rationale="unit",
+            ),
+        ]
+
+        class VisualRepository:
+            def __init__(self):
+                self.visuals: list[VisualCandidate] = []
+
+            def list_visuals(self, _story_id: str):
+                return self.visuals
+
+            def upsert_visual(self, visual: VisualCandidate):
+                self.visuals = [
+                    item for item in self.visuals if item.asset_id != visual.asset_id
+                ] + [visual]
+
+        repository = VisualRepository()
+
+        def stage(_repo, story_id, section_id, *_args, **_kwargs):
+            visual = VisualCandidate(
+                asset_id="visual_shared",
+                story_id=story_id,
+                section_ids=[section_id],
+                provider="unit",
+                media_type=MediaType.image,
+            )
+            repository.upsert_visual(visual)
+            return visual
+
+        with patch.dict(
+            os.environ,
+            {
+                "SYNTHPOST_SEARXNG_URL": "http://127.0.0.1:8888",
+                "SYNTHPOST_SEARXNG_VISUAL_MAX_QUERIES": "2",
+                "SYNTHPOST_SEARXNG_IMAGE_RESULTS_PER_QUERY": "1",
+                "SYNTHPOST_SEARXNG_VIDEO_RESULTS_PER_QUERY": "0",
+            },
+        ), patch(
+            "pipeline.visuals.providers._visual_search_plan", return_value=plans
+        ), patch(
+            "pipeline.visuals.providers.searxng_search", return_value=[result]
+        ), patch(
+            "pipeline.visuals.providers._stage_searxng_result", side_effect=stage
+        ) as stage_result:
+            visuals = search_searxng_visuals(repository, "story_shared")
+
+        stage_result.assert_called_once()
+        self.assertEqual(len(visuals), 1)
+        self.assertEqual(visuals[0].section_ids, ["sec_001", "sec_002"])
+
+    def test_existing_video_does_not_consume_new_download_quota(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        try:
+            local_video = Path(temp.name) / "existing.mp4"
+            local_video.write_bytes(b"video")
+            existing = VisualCandidate(
+                asset_id="visual_existing",
+                story_id="story_video_budget",
+                section_ids=["sec_001"],
+                provider="unit",
+                download_path=str(local_video),
+                media_type=MediaType.video,
+            )
+            fresh = existing.model_copy(
+                update={
+                    "asset_id": "visual_fresh",
+                    "section_ids": ["sec_002"],
+                }
+            )
+            repository = SimpleNamespace(
+                list_visuals=lambda _story_id: [existing],
+                upsert_visual=lambda _visual: None,
+            )
+            plans = [
+                VisualQueryPlan(
+                    section_id="sec_001",
+                    image_query="existing video image",
+                    video_query="existing motor official video",
+                    video_priority=True,
+                    rationale="unit",
+                ),
+                VisualQueryPlan(
+                    section_id="sec_002",
+                    image_query="fresh video image",
+                    video_query="fresh motor official video",
+                    video_priority=True,
+                    rationale="unit",
+                ),
+            ]
+            results = [
+                SearXNGResult(
+                    title="Existing motor video",
+                    url="https://video.example/existing",
+                    engine="unit",
+                    category="videos",
+                ),
+                SearXNGResult(
+                    title="Fresh motor video",
+                    url="https://video.example/fresh",
+                    engine="unit",
+                    category="videos",
+                ),
+            ]
+            acquire_values: list[bool | None] = []
+
+            def stage(*_args, acquire_video=None, **_kwargs):
+                acquire_values.append(acquire_video)
+                return existing if len(acquire_values) == 1 else fresh
+
+            with patch.dict(
+                os.environ,
+                {
+                    "SYNTHPOST_SEARXNG_URL": "http://127.0.0.1:8888",
+                    "SYNTHPOST_SEARXNG_VISUAL_MAX_QUERIES": "2",
+                    "SYNTHPOST_SEARXNG_IMAGE_RESULTS_PER_QUERY": "0",
+                    "SYNTHPOST_SEARXNG_VIDEO_RESULTS_PER_QUERY": "1",
+                    "SYNTHPOST_SEARXNG_VIDEO_DOWNLOAD_LIMIT": "1",
+                    "SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS": "1",
+                },
+            ), patch(
+                "pipeline.visuals.providers._visual_search_plan", return_value=plans
+            ), patch(
+                "pipeline.visuals.providers.searxng_search",
+                side_effect=[[results[0]], [results[1]]],
+            ), patch(
+                "pipeline.visuals.providers._result_matches_query", return_value=True
+            ), patch(
+                "pipeline.visuals.providers._stage_searxng_result", side_effect=stage
+            ):
+                search_searxng_visuals(repository, "story_video_budget")
+
+            self.assertEqual(acquire_values, [True, True])
+        finally:
+            temp.cleanup()
 
 
 if __name__ == "__main__":

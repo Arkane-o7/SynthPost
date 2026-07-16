@@ -38,6 +38,7 @@ flowchart LR
 | `pipeline/research/` | Related-source extraction, evidence, claims, research packs | `ResearchPack` |
 | `pipeline/llm/` | Structured Groq, Gemini, fallback, and deterministic mock providers | `LLMProvider`, `provider_availability()` |
 | `pipeline/scripts/` | Script generation, validation, approval, and deterministic text shaping | `ScriptDocument` |
+| `pipeline/narration/` | Local Kokoro synthesis, versioned canonical audio, sample-exact beat alignment | `NarrationArtifact` |
 | `pipeline/visuals/` | Local/SearXNG discovery, download, broadcast-fit and rights review | `VisualSource`, `VisualCandidate` |
 | `pipeline/timeline/` | Template registry, timeline planning, and validation | `TimelinePlan` |
 | `pipeline/manifest_builder.py` | Approved editor state to renderer manifest | `build_story_manifest()` |
@@ -54,8 +55,10 @@ flowchart LR
 flowchart TD
   D[Discovery] --> R[Research pack]
   R --> S[Script review]
+  S --> N[Kokoro narration and exact beat clock]
   S --> V[Visual discovery and rights review]
-  V --> T[Timeline planning and approval]
+  N --> T[Timeline planning and approval]
+  V --> T
   T --> M[Renderer manifest]
   M --> A[Avatar render]
   A --> C[Remotion composition]
@@ -69,7 +72,7 @@ Separate processes isolate renderer environment state and native subprocesses. R
 
 ## Domain and contract boundaries
 
-The Python source of truth is `pipeline/models.py`. It contains strict Pydantic models for projects, episodes, sources, story candidates, research packs, scripts, visual candidates, timeline plans, jobs, audits, and artifact records. `contracts/typescript/index.ts` mirrors contracts consumed by the Studio, and `contracts/schemas/synthpost.v2.schema.json` is the canonical cross-runtime JSON Schema checked by tests.
+The Python source of truth is `pipeline/models.py`. It contains strict Pydantic models for projects, episodes, sources, story candidates, research packs, scripts and stable beats, narration timing artifacts, visual candidates, timeline plans, jobs, audits, and artifact records. `contracts/typescript/index.ts` mirrors contracts consumed by the Studio, and `contracts/schemas/synthpost.v2.schema.json` is the canonical cross-runtime JSON Schema checked by tests.
 
 HTTP request contracts live in `pipeline/api/schemas.py`. Patch contracts deliberately exclude identity and timestamp fields. Persisted SQLite JSON is reconstructed through Pydantic in `Repository`, so invalid historical data fails at a named boundary rather than later in a renderer.
 
@@ -80,7 +83,7 @@ Renderer manifests carry `contract_version: synthpost.v2.renderer_manifest`. SQL
 - `.synthpost/synthpost.sqlite3`: authoritative local workflow state.
 - `.synthpost/jobs/<job_id>.log`: contextual worker logs; safe to delete when no longer debugging.
 - `projects/<project_id>/episodes/<episode_id>/media_inbox/`: editor-owned source media for one episode.
-- `episodes/<episode_id>/stories/<story_id>/`: reproducible JSON, selected visual files, avatar output, preview, and composited story.
+- `episodes/<episode_id>/stories/<story_id>/`: reproducible JSON, versioned narration WAV/alignment, selected visual files, avatar output, preview, and composited story.
 - `episodes/<episode_id>/final.mp4`: production deliverable.
 - `episodes/<episode_id>/final_TEST_MODE.mp4`: smoke/test deliverable; never production.
 - `web/dist/` and Remotion build folders: generated build output.

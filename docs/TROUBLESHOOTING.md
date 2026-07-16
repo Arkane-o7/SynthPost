@@ -59,7 +59,7 @@ The bundled settings must allow JSON. On Docker Desktop, try `DOCKER_CONTEXT=des
 - Web results are yellow until manually reviewed. Red assets cannot be approved.
 - A lead without `download_path` cannot render. Download/stage it, verify rights and attribution, then approve.
 - Inspect `approval_blockers`, cleanliness status, warnings, and local file existence.
-- Generated cards are the rights-safe fallback when real media is unavailable.
+- The presenter/anchor layout is the rights-safe fallback when real media is unavailable.
 
 ## Ollama/local LLM assumptions
 
@@ -68,7 +68,11 @@ The current code supports Groq, Gemini, explicit hosted fallback, and determinis
 ## Avatar or TTS failures
 
 - Run `make test-avatar` and read `avatar-engine/README.md` plus `AGENTS.md`.
-- Verify the engine path/interpreter, avatar metadata/assets, local TTS dependencies, and free disk space.
+- Run `.venv/bin/python -m tools.doctor --strict-features`; the `kokoro` check must report the Avatar Engine interpreter and installed version.
+- Verify the engine path/interpreter, avatar metadata/assets, local Kokoro dependencies, and free disk space.
+- If `narration_generate` fails, inspect its job log and retry from the Timeline workspace after the latest script is approved. Missing or stale narration intentionally blocks timeline generation.
+- The exact clock is stored beside the audio at `episodes/<episode>/stories/<story>/narration/script_vNNN/alignment.json`. Its final `end_sample` must equal the WAV frame count.
+- Test-mode narration is never accepted by a production timeline or manifest; regenerate without test mode instead of copying a test WAV.
 - The protected `avatar-engine/blender/avatar_template.blend` must never be overwritten.
 - Browser renderer timeouts may need `AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S`; do not mask a crashed browser with an unlimited timeout.
 - Placeholder anchors are allowed only in preview/TEST_MODE.

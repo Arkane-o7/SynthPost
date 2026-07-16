@@ -1,6 +1,6 @@
 # Pipeline guide
 
-The queue-backed production pipeline contains eight registered stages. `pipeline/stages.py` is the executable registry for lane, required identity, output keys, retry safety, and artifact ownership. Manifest construction is a synchronous approval boundary between timeline and rendering.
+The queue-backed production pipeline contains nine registered stages. `pipeline/stages.py` is the executable registry for lane, required identity, output keys, retry safety, and artifact ownership. Manifest construction is a synchronous approval boundary between timeline and rendering.
 
 ## Lifecycle
 
@@ -9,10 +9,11 @@ The queue-backed production pipeline contains eight registered stages. `pipeline
 | Discovery / `discovery` | editorial | enabled source definitions; optional episode/category | `candidate_count` | `story_candidates`, source check status |
 | Research / `research` | editorial | selected `story_id`, lead candidate, optional SearXNG | `research_pack_id` | source documents, evidence, claims, research pack |
 | Script / `script_generate` | editorial | research-ready story, provider, duration/mode | `script_id` | script revision, generation audit |
+| Narration / `narration_generate` | editorial | latest approved script, local Kokoro | `narration_path`, `alignment_path` | canonical WAV and sample-exact beat/section clock |
 | Visuals / `visual_search` | media | approved script, episode media inbox, optional SearXNG | `visual_count` | downloaded/staged media, thumbnails, visual records |
-| Timeline / `timeline_generate` | media | approved script and eligible visuals | `timeline_id` | timeline revision and validation messages |
+| Timeline / `timeline_generate` | media | approved script, current narration, eligible visuals | `timeline_id` | timeline revision and validation messages |
 | Avatar / `render_avatar` | render | approved timeline, renderer manifest, profile | `story_manifest`, `anchor_output_path` | avatar job, audio/lip-sync/render output |
-| Composition / `render_story` | render | renderer manifest, anchor, approved visual paths | `story_manifest` | `preview.png`, `composited*.mp4` |
+| Composition / `render_story` | render | renderer manifest, anchor, eligible local visual paths | `story_manifest` | `preview.png`, `composited*.mp4` |
 | Assembly / `assemble_episode` | render | episode story compositions and brand clips | `final_output_path` | final MP4, assembly work files, episode manifest |
 
 ## Approval boundary
@@ -31,19 +32,35 @@ The selected story remains the lead document. Related coverage is collected thro
 
 ### Script
 
-The configured structured LLM provider receives a versioned prompt and schema. Provider output is normalized and validated before a `ScriptDocument` revision is saved. Manual edits create a new revision. Approval is explicit and advances workflow state.
+Script generation is narrative-first. The configured structured LLM provider first produces a story-level brief that allocates evidence across one progressive arc, then writes the complete uninterrupted narration in a single response. A deterministic quality gate rejects repeated scene openings, near-duplicate beats, repeated phrases, and obvious sentence-start grammar failures; a failed draft receives one whole-narrative continuity repair and must pass the gate afterward.
+
+Only accepted narration is segmented. The segmentation response may reference stable narration beat IDs exactly once and in order, but cannot return or rewrite narration text. Each compact narration beat must link to at least one supported research claim. Section metadata, visual queries, template hints, lower thirds, and chyrons are derived after this boundary. The resulting sections are converted into the existing `ScriptDocument`, so visuals, timelines, manifests, and legacy stored scripts remain compatible. Every provider stage and normalization is recorded as a versioned generation audit.
+
+Generating or manually saving a new script revision returns the story to `script_review`, invalidating downstream workflow state without deleting its audit history. This also applies to rendered and completed productions: regeneration enters `script_generating` as soon as the job is queued, reopens the episode as `in_progress`, and keeps the Script workspace focused. The previous final video remains available as a historical output. After approving the new script, the editor proceeds through visuals, timeline, preview, render, and assembly again. Only the newest script and timeline revisions can cross production approval boundaries, so an older approved revision cannot be rendered after a newer draft is saved. Script edits and approval are blocked while generation is active to prevent competing revisions.
+
+### Narration
+
+Script approval queues both local Kokoro narration and visual discovery. Same-story jobs remain serialized for safe artifact writes, while work for other projects and episodes continues across the configured worker pool. The narration worker synthesizes each stable production beat with one loaded Kokoro pipeline, writes a continuous 24 kHz mono WAV, and records beat and section boundaries from the number of PCM samples actually written. It does not infer timing from word counts. The versioned artifacts live at `episodes/<episode_id>/stories/<story_id>/narration/script_vNNN/{narration.wav,alignment.json}` and are reused only when the script, voice, speed, language, beat text, and pause settings still match.
+
+Changing the script creates a new version and makes the previous narration ineligible. Changing voice or timing configuration also makes it stale. Timeline generation waits for current narration, and the Studio exposes an explicit regeneration action if the automatic job failed. Normal continuous-anchor production uses this WAV as the single audio source for timeline, lip sync, avatar, and render. The opt-in experimental source-audio feature retains its compatibility path when an unavailable source clip introduces fallback words that were not present in the canonical WAV.
+
+Deterministic unit tests can request a synthetic test WAV, but that mode is recorded in both the artifact and its cache hash. Production loaders reject test-mode narration, so a smoke/test artifact cannot cross into a production timeline or render.
 
 ### Visual discovery and review
 
-Sources run in registry order: the episode-isolated media inbox, then SearXNG if available. Downloaded media is probed for type, size, aspect, audio, and broadcast fit. Search results do not establish rights; yellow assets require manual approval and red assets cannot be approved. Rights-safe generated cards ensure each section has a fallback.
+Sources run in registry order: the episode-isolated media inbox, then SearXNG if available. Downloaded media is probed for actual type, size, aspect, audio, and broadcast fit. A repeated result can be associated with every relevant section, but it is stored and downloaded only once. Re-searching or rescanning preserves acquired media and editor decisions; replacing or reacquiring the bytes of a local file deliberately clears stale approval and returns that asset to review. Same-named uploads and inbox files receive collision-safe destinations instead of overwriting one another.
+
+Search results do not establish rights or content cleanliness. Newly acquired files remain `needs_review` until an editor approves them. A technically eligible local suggestion may be selected automatically, with a timeline warning, because visual approval is optional. Manual approval records the editorial rights and content-review decision and pins that choice above suggestions; the most recently approved candidate wins when an editor changes the pin. Yellow assets require manual approval to be pinned. An explicit manual override reclassifies a red candidate to yellow/manual-approved and remains visible in its metadata. Rejected or blocked assets never render.
+
+Non-downloadable results remain research leads until acquired. Image acquisition first tries the discovered media URL, then the source page's Open Graph image; if both have expired but a cached search preview exists, the editor can still acquire that preview with an explicit quality warning. Missing, rejected, incompatible, or deleted media falls back to the presenter. Fallback records are anchor-only signals; SynthPost does not generate duplicate headline cards as substitute imagery.
 
 ### Timeline
 
-The planner maps script sections, approved visuals, template capabilities, overlays, and audio policy into ordered `TimelineSegment` models. Validation checks timing, rights, file existence, template compatibility, and approval. Timeline approval is required before manifest construction.
+The planner maps script sections, Kokoro section windows, pinned or automatically selected eligible visuals, template capabilities, overlays, and audio policy into ordered `TimelineSegment` models. Headline cues carry their `beat_id` and exact sample-derived start/end times. Segment order and duration are locked to the approved narration; change the script and regenerate narration to alter the spoken clock. Validation checks clock integrity, timing, rights, file existence, template compatibility, automatic-selection warnings, and timeline approval. Timeline approval is required before manifest construction.
 
 ### Avatar
 
-The direction adapter writes an avatar job and invokes the configured Avatar Engine renderer. Fresh outputs may be reused unless forced. Browser/Three.js and legacy Blender modes remain compatibility paths owned by `avatar-engine/`.
+The direction adapter writes an avatar job and invokes the configured Avatar Engine renderer. It passes the canonical narration WAV to browser/Three.js directly and copies it into the legacy Blender job's expected local input, so neither renderer synthesizes a second production voice track. Lip-sync and gesture cues use the same audio and exact beat clock. Fresh outputs may be reused unless forced. Browser/Three.js and legacy Blender modes remain compatibility paths owned by `avatar-engine/`.
 
 ### Composition
 
@@ -51,11 +68,11 @@ Remotion consumes `story.json`. If the output is newer than the manifest, anchor
 
 ### Assembly
 
-FFmpeg normalizes story clips and joins them with brand intro/outro assets. Production and `TEST_MODE` outputs are distinct. Successful production assembly updates the episode and story completion states.
+FFmpeg normalizes story clips and joins them with brand intro/outro assets. Production and `TEST_MODE` outputs are distinct. Successful production assembly updates the episode and story completion states. If an editor starts a script revision while an older assembly is already in flight, that output is retained, but its completion cannot overwrite the reopened `in_progress` episode state.
 
 ## Cache, skip, retry, and failure semantics
 
-- Discovery/research/script/visual/timeline retries are controlled by `pipeline/jobs/policy.py`; transient network, timeout, rate-limit, and subprocess failures can be retried with bounded exponential backoff.
+- Discovery/research/script/narration/visual/timeline retries are controlled by `pipeline/jobs/policy.py`; transient network, timeout, rate-limit, and subprocess failures can be retried with bounded exponential backoff.
 - Render jobs have a lower attempt budget because they are expensive and not assumed idempotent at arbitrary interruption points.
 - Worker heartbeats prevent healthy long jobs from being reclaimed. Stale running jobs are released or failed after job-type-specific limits.
 - Each lane has a configurable supervised process pool. SQLite claims are atomic, so independent projects can occupy multiple slots without claiming the same job twice.

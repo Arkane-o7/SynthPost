@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pipeline.models import ReviewStatus, RightsTier, TimelinePlan, TimelineStatus
+from pipeline.models import (
+    ContentRole,
+    ReviewStatus,
+    RightsTier,
+    TimelinePlan,
+    TimelineStatus,
+)
 from pipeline.storage import resolve_project_path
 from pipeline.timeline.templates import (
     TEMPLATE_REGISTRY,
@@ -78,7 +84,15 @@ def validate_timeline(
                     f"{prefix}: explicitly approved yellow-tier asset requires manual approval"
                 )
             if visual.attribution_text in (None, ""):
-                warnings.append(f"{prefix}: approved visual has no attribution text")
+                warnings.append(f"{prefix}: selected visual has no attribution text")
+            if (
+                visual.content_role != ContentRole.fallback
+                and visual.content_cleanliness_status in {"not_scanned", "needs_review"}
+            ):
+                warnings.append(
+                    f"{prefix}: selected visual has not been editor-reviewed for "
+                    "publisher branding or overlays"
+                )
         if not template_compatible(
             segment.template.template_id,
             visual.media_type.value,

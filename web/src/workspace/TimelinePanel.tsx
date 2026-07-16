@@ -5,7 +5,9 @@ import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { formatDuration } from "../lib/formatters";
 import { TimelineTemplatePreview } from "./TimelineTemplatePreview";
+import { applyTimelineTemplate } from "./timelineVisualSelection";
 import type {
+  NarrationArtifact,
   TimelinePlan,
   TimelineSegment,
   VisualCandidate,
@@ -30,6 +32,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const studio = useStudio();
   const [timeline, setTimeline] = React.useState<TimelinePlan | null>(null);
   const [visuals, setVisuals] = React.useState<VisualCandidate[]>([]);
+  const [narration, setNarration] = React.useState<NarrationArtifact | null>(null);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -38,14 +41,17 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       Promise.all([
         api.readTimeline(storyId),
         api.listVisuals(storyId).catch(() => [] as VisualCandidate[]),
+        api.readNarration(storyId).catch(() => null),
       ])
-        .then(([nextTimeline, nextVisuals]) => {
+        .then(([nextTimeline, nextVisuals, nextNarration]) => {
           setTimeline(nextTimeline);
           setVisuals(nextVisuals);
+          setNarration(nextNarration);
         })
         .catch(() => {
           setTimeline(null);
           setVisuals([]);
+          setNarration(null);
         }),
     [storyId, studio.lastJobEventTimestamp],
   );
@@ -90,6 +96,44 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
     () => new Map(visuals.map((visual) => [visual.asset_id, visual])),
     [visuals],
   );
+  const narrationSectionStarts = React.useMemo(
+    () =>
+      new Map(
+        (narration?.sections ?? []).map((section) => [
+          section.section_id,
+          section.start_time,
+        ]),
+      ),
+    [narration],
+  );
+  const narrationJob = studio.jobs.find(
+    (job) =>
+      job.story_id === storyId &&
+      job.job_type === "narration_generate" &&
+      ["queued", "running"].includes(job.status),
+  );
+  const story = studio.candidates.find(
+    (candidate) => candidate.story_id === storyId,
+  );
+  const narrationEligible = Boolean(
+    story?.workflow_state &&
+      ![
+        "selected",
+        "researching",
+        "research_ready",
+        "script_generating",
+        "script_review",
+      ].includes(story.workflow_state),
+  );
+  const hasExactClock = Boolean(
+    narration &&
+      timeline?.segments
+        .filter((segment) => segment.audio.mode !== "source")
+        .every(
+          (segment) =>
+            segment.overlays.data?.timing_source === "kokoro_exact_samples",
+        ),
+  );
 
   if (!timeline) {
     return (
@@ -101,15 +145,36 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         >
           <button
             className="btn-primary btn-lg"
-            disabled={busy}
+            disabled={busy || Boolean(narrationJob) || !narration}
             onClick={() =>
               act(async () => {
                 setTimeline(await api.generateTimeline(storyId));
               })
             }
           >
-            {busy ? "Generating…" : "Generate Timeline"}
+            {narrationJob
+              ? "Generating Kokoro narration…"
+              : !narration
+                ? "Narration required"
+                : busy
+                  ? "Generating…"
+                  : "Generate Timeline"}
           </button>
+          {!narration && !narrationJob && (
+            <button
+              disabled={busy || !narrationEligible}
+              title={
+                narrationEligible
+                  ? "Generate canonical Kokoro narration"
+                  : "Approve the latest script first"
+              }
+              onClick={() => act(() => api.generateNarration(storyId))}
+            >
+              {narrationEligible
+                ? "Generate narration"
+                : "Approve the latest script first"}
+            </button>
+          )}
         </EmptyState>
       </div>
     );
@@ -134,10 +199,25 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             {formatDuration(totalDuration)} ({Math.round(totalDuration)}s)
           </span>
         </div>
+        {hasExactClock && narration && (
+          <div className="validation-msg validation-success" style={{ marginBottom: 12 }}>
+            ✓ Kokoro exact clock · {narration.beats.length} beats · {formatDuration(narration.duration_seconds)} · {narration.sample_rate.toLocaleString()} Hz
+          </div>
+        )}
+        {narration && !hasExactClock && (
+          <div className="validation-msg validation-warning" style={{ marginBottom: 12 }}>
+            ⚠ This is a legacy estimated timeline. Regenerate it to apply the current Kokoro exact clock.
+          </div>
+        )}
         <div className="row">
           <button
             className="btn-primary"
-            disabled={busy}
+            disabled={busy || !narration || Boolean(narrationJob)}
+            title={
+              narration
+                ? "Regenerate from the current exact narration"
+                : "Generate the current Kokoro narration first"
+            }
             onClick={() =>
               act(async () => {
                 setTimeline(await api.generateTimeline(storyId));
@@ -146,6 +226,18 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           >
             Regenerate
           </button>
+          {!narration && (
+            <button
+              disabled={busy || Boolean(narrationJob) || !narrationEligible}
+              onClick={() => act(() => api.generateNarration(storyId))}
+            >
+              {narrationJob
+                ? "Generating narration…"
+                : narrationEligible
+                  ? "Generate Kokoro narration"
+                  : "Approve the latest script first"}
+            </button>
+          )}
           <button
             disabled={busy || !timeline}
             onClick={() =>
@@ -174,7 +266,12 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           </button>
           <button
             className="btn-success"
-            disabled={busy}
+            disabled={busy || !hasExactClock}
+            title={
+              hasExactClock
+                ? "Approve this sample-timed timeline"
+                : "Regenerate the timeline with current Kokoro narration first"
+            }
             onClick={() =>
               act(async () => {
                 await api.approveTimeline(storyId);
@@ -202,11 +299,18 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           >
             <div
               className="drag-handle"
-              draggable
-              onDragStart={() => setDragIndex(idx)}
+              draggable={!hasExactClock}
+              title={
+                hasExactClock
+                  ? "Order is locked to the approved narration"
+                  : "Drag to reorder this legacy timeline"
+              }
+              onDragStart={() => {
+                if (!hasExactClock) setDragIndex(idx);
+              }}
               onDragEnd={() => setDragIndex(null)}
             >
-              ≡
+              {hasExactClock ? "🔒" : "≡"}
             </div>
             <div className="stack timeline-segment-main">
               <div className="segment-header">
@@ -226,13 +330,11 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                       updateSegments(
                         timeline.segments.map((s, i) =>
                           i === idx
-                            ? {
-                                ...s,
-                                template: {
-                                  ...s.template,
-                                  template_id: e.target.value,
-                                },
-                              }
+                            ? applyTimelineTemplate(
+                                s,
+                                e.target.value,
+                                visuals,
+                              )
                             : s,
                         ),
                       )
@@ -247,6 +349,12 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                   <input
                     type="number"
                     value={seg.duration}
+                    disabled={hasExactClock}
+                    title={
+                      hasExactClock
+                        ? "Duration comes from Kokoro's exact audio samples"
+                        : "Estimated legacy duration"
+                    }
                     onChange={(e) =>
                       updateSegments(
                         timeline.segments.map((s, i) =>
@@ -260,6 +368,32 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 </div>
               </div>
               <div className="segment-script">{seg.script_text}</div>
+              {hasExactClock && narration && seg.audio.mode !== "source" && (
+                <div className="timeline-beat-clock" aria-label="Exact spoken beat timing">
+                  <div className="timeline-beat-clock-title">
+                    Spoken beats · exact Kokoro clock
+                  </div>
+                  {narration.beats
+                    .filter((beat) => beat.section_id === seg.section_id)
+                    .map((beat) => (
+                      <div className="timeline-beat-clock-row" key={beat.beat_id}>
+                        <span>
+                          {(
+                            beat.start_time +
+                            seg.start_time -
+                            (narrationSectionStarts.get(seg.section_id) ?? 0)
+                          ).toFixed(2)}–
+                          {(
+                            beat.speech_end_time +
+                            seg.start_time -
+                            (narrationSectionStarts.get(seg.section_id) ?? 0)
+                          ).toFixed(2)}s
+                        </span>
+                        <p>{beat.text}</p>
+                      </div>
+                    ))}
+                </div>
+              )}
               <div className="segment-meta">
                 <span>
                   🎥 {seg.visual.content_role}{" "}

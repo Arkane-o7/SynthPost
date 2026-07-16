@@ -51,6 +51,12 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
     inserted as pauses in the anchor playback clock.
     """
 
+    narration = manifest.get("narration")
+    if (
+        isinstance(narration, dict)
+        and narration.get("timing_source") == "kokoro_exact_samples"
+    ):
+        return False
     timeline = _approved_timeline(manifest)
     if not timeline or str(timeline.get("status", "")).strip().lower() != "approved":
         return False

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -51,6 +52,45 @@ def _directory(name: str, path: Path, requirement: str) -> DiagnosticCheck:
         requirement,
         f"directory not found: {path}",
         "Run `make setup` or restore the repository directory.",
+    )
+
+
+def _kokoro(settings) -> DiagnosticCheck:
+    configured = settings.avatar.python_path
+    engine = resolve_project_path(settings.avatar.engine_path)
+    candidate = engine / ".venv" / "bin" / "python"
+    interpreter = Path(configured) if configured else candidate
+    if not interpreter.is_absolute():
+        interpreter = resolve_project_path(interpreter)
+    if not interpreter.exists():
+        return DiagnosticCheck(
+            "kokoro",
+            "missing",
+            "feature",
+            f"configured narration Python not found: {interpreter}",
+            "Install Avatar Engine dependencies or set SYNTHPOST_AVATAR_PYTHON.",
+        )
+    result = subprocess.run(
+        [str(interpreter), "-c", "import kokoro; print(kokoro.__version__)"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    if result.returncode != 0:
+        return DiagnosticCheck(
+            "kokoro",
+            "missing",
+            "feature",
+            f"Kokoro import failed in {interpreter}",
+            "Install Kokoro in the Avatar Engine environment.",
+        )
+    version = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "installed"
+    return DiagnosticCheck(
+        "kokoro",
+        "available",
+        "feature",
+        f"{version} via {interpreter}",
     )
 
 
@@ -172,6 +212,7 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
             ),
         ]
     )
+    checks.append(_kokoro(settings))
     rhubarb = PROJECT_ROOT / "Rhubarb-Lip-Sync-1.14.0-macOS" / "rhubarb"
     checks.append(
         DiagnosticCheck(

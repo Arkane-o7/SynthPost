@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,7 @@ from pipeline.discovery.assignment_desk import rebuild_assignment_desk
 from pipeline.discovery.seeds import seed_sources
 from pipeline.editorial.charter import load_editorial_charter
 from pipeline.manifest_builder import build_story_manifest
+from pipeline.narration.service import load_narration_artifact
 from pipeline.models import (
     ReviewStatus,
     ScriptDocument,
@@ -52,7 +54,12 @@ from pipeline.models import (
     TimelineStatus,
 )
 from pipeline.observability import LogContext, format_event
-from pipeline.scripts.generation import approve_script, save_manual_script
+from pipeline.scripts.generation import (
+    approve_script,
+    begin_script_generation,
+    reconcile_script_revision_workflows,
+    save_manual_script,
+)
 from pipeline.storage import (
     PROJECT_ROOT,
     episode_media_inbox_dir,
@@ -63,6 +70,7 @@ from pipeline.timeline.planner import approve_timeline, generate_timeline
 from pipeline.timeline.templates import template_registry_json
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
+    SUPPORTED_VISUAL_EXTENSIONS,
     analyze_visual,
     approve_visual,
     download_visual,
@@ -87,6 +95,38 @@ app.add_middleware(
 app.include_router(jobs_router)
 
 
+async def _write_streamed_upload(
+    request: Request,
+    destination: Path,
+    *,
+    max_bytes: int,
+) -> int:
+    """Write a request body atomically while enforcing the configured size cap."""
+
+    partial_path = destination.with_name(
+        f".{destination.name}.{uuid4().hex}.uploading"
+    )
+    bytes_written = 0
+    try:
+        with partial_path.open("wb") as handle:
+            async for chunk in request.stream():
+                if not chunk:
+                    continue
+                bytes_written += len(chunk)
+                if bytes_written > max_bytes:
+                    raise ValueError(
+                        "visual upload exceeds SYNTHPOST_VISUAL_DOWNLOAD_MAX_BYTES"
+                    )
+                handle.write(chunk)
+        if bytes_written == 0:
+            raise ValueError("empty upload body")
+        partial_path.replace(destination)
+        return bytes_written
+    except Exception:
+        partial_path.unlink(missing_ok=True)
+        raise
+
+
 def repo() -> Repository:
     return get_repository()
 
@@ -100,6 +140,17 @@ def startup() -> None:
         rescored = rescore_existing_candidates(repository)
         if rescored:
             rebuild_assignment_desk(repository, use_ai=False)
+        reconciled = reconcile_script_revision_workflows(repository)
+        if reconciled:
+            print(
+                format_event(
+                    "workflow_reconciled",
+                    f"Reopened {reconciled} stor{'y' if reconciled == 1 else 'ies'} "
+                    "with a newer unapproved script revision",
+                    context=LogContext(stage="startup"),
+                    fields={"story_count": reconciled},
+                )
+            )
     finally:
         repository.close()
 
@@ -434,18 +485,28 @@ def start_script_generation(
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        candidate = repository.candidate_for_story(story_id)
-        if candidate.workflow_state in {
-            StoryWorkflowState.research_ready,
-            StoryWorkflowState.script_review,
-        }:
-            repository.transition_story(story_id, StoryWorkflowState.script_generating)
-        job = repository.create_job(
-            "script_generate",
-            episode_id=episode.episode_id,
-            story_id=story_id,
-            payload=payload.model_dump(),
-        )
+        active_job = repository.active_job("script_generate", story_id=story_id)
+        if active_job:
+            return active_job.model_dump(mode="json")
+        if not repository.latest_research_pack(story_id):
+            raise ValueError(
+                "Research must be completed before generating a script revision"
+            )
+        restore_state = begin_script_generation(repository, story_id)
+        job_payload = payload.model_dump()
+        job_payload["_previous_workflow_state"] = restore_state.value
+        try:
+            job = repository.create_job(
+                "script_generate",
+                episode_id=episode.episode_id,
+                story_id=story_id,
+                payload=job_payload,
+            )
+        except Exception:
+            candidate = repository.candidate_for_story(story_id)
+            if candidate.workflow_state == StoryWorkflowState.script_generating:
+                repository.transition_story(story_id, restore_state)
+            raise
         return job.model_dump(mode="json")
     finally:
         repository.close()
@@ -477,6 +538,10 @@ def generation_audits(story_id: str, limit: int = 50) -> list[dict[str, Any]]:
 def save_script(story_id: str, payload: ManualScript) -> dict[str, Any]:
     repository = repo()
     try:
+        if repository.active_job("script_generate", story_id=story_id):
+            raise ValueError(
+                "Wait for the active script generation to finish before saving edits"
+            )
         return save_manual_script(
             repository,
             story_id,
@@ -492,27 +557,68 @@ def save_script(story_id: str, payload: ManualScript) -> dict[str, Any]:
 def api_approve_script(story_id: str) -> dict[str, Any]:
     repository = repo()
     try:
-        script = approve_script(repository, story_id)
-        # Auto-trigger visual search after script approval so the pipeline
-        # doesn't stall waiting for the user to manually click "Search".
-        try:
-            if not repository.active_job("visual_search", story_id=story_id):
-                episode = repository.episode_for_story(story_id)
-                repository.create_job(
-                    "visual_search",
-                    episode_id=episode.episode_id,
-                    story_id=story_id,
-                )
-        except Exception as exc:
-            print(
-                format_event(
-                    "visual_search_enqueue_failed",
-                    f"Failed to auto-queue visual search: {exc}",
-                    level="WARNING",
-                    context=LogContext(story_id=story_id, stage="script_approve"),
-                )
+        if repository.active_job("script_generate", story_id=story_id):
+            raise ValueError(
+                "Wait for the active script generation to finish before approving"
             )
+        script = approve_script(repository, story_id)
+        # Narration and visual discovery both become eligible after approval.
+        # The queue's same-story serialization still prevents overlapping writes.
+        episode = repository.episode_for_story(story_id)
+        for job_type in ("narration_generate", "visual_search"):
+            try:
+                if not repository.active_job(job_type, story_id=story_id):
+                    repository.create_job(
+                        job_type,
+                        episode_id=episode.episode_id,
+                        story_id=story_id,
+                    )
+            except Exception as exc:
+                print(
+                    format_event(
+                        "post_script_job_enqueue_failed",
+                        f"Failed to auto-queue {job_type}: {exc}",
+                        level="WARNING",
+                        context=LogContext(
+                            story_id=story_id, stage="script_approve"
+                        ),
+                    )
+                )
         return script.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.get("/api/stories/{story_id}/narration")
+def read_narration(story_id: str) -> dict[str, Any] | None:
+    repository = repo()
+    try:
+        artifact = load_narration_artifact(
+            repository, story_id, require_current=False
+        )
+        return artifact.model_dump(mode="json") if artifact else None
+    finally:
+        repository.close()
+
+
+@app.post("/api/stories/{story_id}/narration/generate")
+def queue_narration(story_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        script = repository.latest_script(story_id)
+        if not script or script.status != ScriptStatus.approved:
+            raise ValueError(
+                "Approve the latest script before generating Kokoro narration"
+            )
+        episode = repository.episode_for_story(story_id)
+        job = repository.active_job(
+            "narration_generate", story_id=story_id
+        ) or repository.create_job(
+            "narration_generate",
+            episode_id=episode.episode_id,
+            story_id=story_id,
+        )
+        return job.model_dump(mode="json")
     finally:
         repository.close()
 
@@ -582,9 +688,6 @@ def stage_visual(story_id: str, payload: VisualStageRequest) -> dict[str, Any]:
 async def upload_visual_bytes(
     story_id: str, request: Request, filename: str = "upload.bin"
 ) -> dict[str, Any]:
-    body = await request.body()
-    if not body:
-        raise ValueError("empty upload body")
     repository = repo()
     try:
         episode_id = repository.episode_for_story(story_id).episode_id
@@ -601,8 +704,15 @@ async def upload_visual_bytes(
             )
             or "upload.bin"
         )
-        path = upload_dir / safe
-        path.write_bytes(body)
+        if Path(safe).suffix.lower() not in SUPPORTED_VISUAL_EXTENSIONS:
+            supported = ", ".join(sorted(SUPPORTED_VISUAL_EXTENSIONS))
+            raise ValueError(f"unsupported visual file type; expected one of: {supported}")
+        safe_path = Path(safe)
+        path = upload_dir / (
+            f"{safe_path.stem}-{uuid4().hex[:10]}{safe_path.suffix.lower()}"
+        )
+        max_bytes = config.get_settings().visuals.download_max_bytes
+        await _write_streamed_upload(request, path, max_bytes=max_bytes)
         return stage_local_visual(
             repository,
             story_id,
@@ -682,7 +792,7 @@ def api_patch_visual(asset_id: str, patch: VisualPatch) -> dict[str, Any]:
     repository = repo()
     try:
         return update_visual(
-            repository, asset_id, patch.model_dump(exclude_none=True)
+            repository, asset_id, patch.model_dump(exclude_unset=True)
         ).model_dump(mode="json")
     finally:
         repository.close()

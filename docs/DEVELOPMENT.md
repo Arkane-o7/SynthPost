@@ -6,7 +6,7 @@
 pipeline/                       Python domain, services, providers, API, queue
   api/                          HTTP schemas, feature routers, app wiring
   db/                           SQLite connection/migrations/repository
-  discovery/ research/ scripts/ visuals/ timeline/
+  discovery/ research/ scripts/ narration/ visuals/ timeline/
   jobs/                         worker, retry policy, queue execution
 web/                            React/Vite Studio
 contracts/                      cross-runtime JSON Schema and TypeScript types

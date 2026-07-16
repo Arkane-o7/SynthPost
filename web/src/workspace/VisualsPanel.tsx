@@ -11,6 +11,9 @@ const sectionLabel = (value: string) =>
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
+const isHttpUrl = (value?: string | null): value is string =>
+  Boolean(value && /^https?:\/\//i.test(value));
+
 type VisualFilter =
   | "local"
   | "review"
@@ -30,7 +33,9 @@ const isLocalMedia = (visual: VisualCandidate) =>
 const isReadyToApprove = (visual: VisualCandidate) =>
   Boolean(visual.download_path) &&
   visual.content_role !== "fallback" &&
-  !["approved", "manual_approved"].includes(visual.review_status);
+  !["approved", "manual_approved", "rejected", "blocked"].includes(
+    visual.review_status,
+  );
 
 const isLeadOnly = (visual: VisualCandidate) =>
   !visual.download_path && !visual.quarantine_path && isEditorialVisual(visual);
@@ -40,6 +45,21 @@ const isApproved = (visual: VisualCandidate) =>
 
 const isRejected = (visual: VisualCandidate) =>
   ["rejected", "blocked"].includes(visual.review_status);
+
+const reviewStatusLabel = (visual: VisualCandidate) => {
+  if (visual.review_status === "manual_approved") return "approved";
+  return visual.review_status.split("_").join(" ");
+};
+
+const warningLabel = (visual: VisualCandidate, warning: string) => {
+  if (
+    isApproved(visual) &&
+    warning.startsWith("SearXNG is a discovery source, not a license grant")
+  ) {
+    return "Editor approved this SearXNG-discovered asset; approval records an editorial decision, not a third-party license grant.";
+  }
+  return warning;
+};
 
 const matchesFilter = (visual: VisualCandidate, filter: VisualFilter) => {
   if (!isEditorialVisual(visual)) return false;
@@ -58,7 +78,7 @@ const VisualCandidateCard: React.FC<{
   busy: boolean;
   attribution: string;
   onAttributionChange: (value: string) => void;
-  onAttributionSave: (value: string) => void;
+  onAttributionSave: () => void;
   onDownload: () => void;
   onAnalyze: () => void;
   onApprove: () => void;
@@ -82,7 +102,7 @@ const VisualCandidateCard: React.FC<{
           <span>Presenter-only fallback</span>
         </div>
       ) : v.thumbnail_path ? (
-        <img src={artifactUrl(v.thumbnail_path)} alt={v.title} />
+        <img src={artifactUrl(v.thumbnail_path)} alt={v.title || "Visual preview"} />
       ) : (
         <span className="visual-media-placeholder" aria-hidden="true">
           {v.media_type === "image" ? "🖼" : v.media_type === "video" ? "🎬" : "📄"}
@@ -110,7 +130,7 @@ const VisualCandidateCard: React.FC<{
         >
           {v.rights_tier}
         </StatusBadge>
-        <StatusBadge status={v.review_status}>{v.review_status}</StatusBadge>
+        <StatusBadge status={v.review_status}>{reviewStatusLabel(v)}</StatusBadge>
       </div>
       <div className="visual-card-meta">
         <span>{v.provider}</span>
@@ -121,7 +141,7 @@ const VisualCandidateCard: React.FC<{
         Source: {v.source_identity || v.source_domain || "unknown"}
         {v.source_verified ? " · verified" : ""}
       </div>
-      {v.source_url && (
+      {isHttpUrl(v.source_url) && (
         <a href={v.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
           Open source page ↗
         </a>
@@ -154,33 +174,46 @@ const VisualCandidateCard: React.FC<{
         </details>
       )}
 
-      {v.rights_tier === "yellow" && <div className="rights-warning warn-amber">⚠ Manual review recommended</div>}
+      {v.rights_tier === "yellow" && !isApproved(v) && !isRejected(v) && (
+        <div className="rights-warning warn-amber">
+          ⚠ Manual review required before pinning
+        </div>
+      )}
       {v.rights_tier === "red" && <div className="rights-warning warn-red">⛔ Rights concern — review before use</div>}
       {v.warnings.filter((warning) => !/cleanliness|publisher branding|lower-third|ticker|presenter package|source metadata preflight|competing publisher/i.test(warning) && !(v.download_path && /video download failed|research lead only|requested format is not available|yt-dlp completed without/i.test(warning))).map((warning) => (
-        <div key={warning} className="text-muted visual-warning">{warning}</div>
+        <div key={warning} className="text-muted visual-warning">{warningLabel(v, warning)}</div>
       ))}
 
       {v.content_role !== "fallback" && (
-        <input
-          value={attribution}
-          placeholder="Attribution text…"
-          className="visual-attribution"
-          onChange={(event) => onAttributionChange(event.target.value)}
-          onBlur={(event) => onAttributionSave(event.target.value)}
-        />
+        <div className="visual-attribution-row">
+          <input
+            value={attribution}
+            aria-label={`Attribution for ${v.title || "visual"}`}
+            placeholder="Attribution text…"
+            className="visual-attribution"
+            onChange={(event) => onAttributionChange(event.target.value)}
+          />
+          <button
+            type="button"
+            disabled={busy || attribution === (v.attribution_text ?? "")}
+            onClick={onAttributionSave}
+          >
+            Save
+          </button>
+        </div>
       )}
 
       <div className="row-tight visual-card-actions">
         {isLeadOnly(v) ? (
-          v.media_type === "video" ? (
+          ["image", "video"].includes(v.media_type) ? (
             <button
               type="button"
               className="btn-download"
               disabled={busy}
-              title="Download a local, renderable copy of this video, then review and approve it."
+              title={`Download a local, renderable copy of this ${v.media_type}, then review and approve it.`}
               onClick={onDownload}
             >
-              {busy ? "Downloading…" : "↓ Download video"}
+              {busy ? "Downloading…" : `↓ Download ${v.media_type}`}
             </button>
           ) : (
             <button type="button" disabled title="This search result has no downloaded local media file.">
@@ -200,23 +233,34 @@ const VisualCandidateCard: React.FC<{
         <button
           type="button"
           className="btn-success"
-          disabled={busy || !isReadyToApprove(v)}
+          disabled={busy || !v.download_path || v.content_role === "fallback"}
           title={
-            ["approved", "manual_approved"].includes(v.review_status)
-              ? "This visual is already approved."
+            isApproved(v)
+              ? "Make this the latest approved choice for its linked section."
               : !v.download_path
                 ? "Approval requires a downloaded local file."
+                : isRejected(v)
+                  ? "Approve this visual again and make it the linked section's pinned choice."
                 : undefined
           }
           onClick={onApprove}
         >
-          {["approved", "manual_approved"].includes(v.review_status)
-            ? "✓ Approved"
+          {isApproved(v)
+            ? "↥ Pin again"
+            : isRejected(v)
+              ? "↥ Re-approve"
             : v.content_role === "fallback"
               ? "Automatic"
               : "✓ Approve"}
         </button>
-        <button type="button" className="btn-danger" disabled={busy} onClick={onReject}>Reject</button>
+        <button
+          type="button"
+          className="btn-danger"
+          disabled={busy || isRejected(v)}
+          onClick={onReject}
+        >
+          {isRejected(v) ? "Rejected" : "Reject"}
+        </button>
       </div>
     </div>
   </article>
@@ -228,11 +272,16 @@ const SectionVisualRow: React.FC<{
   lowerThird: string;
   visuals: VisualCandidate[];
   renderVisual: (visual: VisualCandidate) => React.ReactNode;
-  onApproveAll: (visuals: VisualCandidate[]) => void;
+  onApproveBest: (visual: VisualCandidate) => void;
   busy: boolean;
-}> = ({ section, index, lowerThird, visuals, renderVisual, onApproveAll, busy }) => {
+}> = ({ section, index, lowerThird, visuals, renderVisual, onApproveBest, busy }) => {
   const trackRef = React.useRef<HTMLDivElement>(null);
   const approvable = visuals.filter(isReadyToApprove);
+  const bestApprovable = [...approvable].sort(
+    (left, right) =>
+      right.relevance_score + right.visual_quality_score -
+      (left.relevance_score + left.visual_quality_score),
+  )[0];
   // Older saved scripts and a backend that was already running before timed
   // headlines were introduced do not include `headline_cues`. Keep the
   // Visuals workspace usable while those scripts are regenerated or migrated.
@@ -300,14 +349,14 @@ const SectionVisualRow: React.FC<{
           </div>
           {visuals.length > 1 && (
             <div className="visual-carousel-controls" aria-label="Section visual actions">
-              {approvable.length > 0 && (
+              {bestApprovable && (
                 <button
                   type="button"
                   className="visual-batch-button visual-batch-approve"
                   disabled={busy}
-                  onClick={() => onApproveAll(approvable)}
+                  onClick={() => onApproveBest(bestApprovable)}
                 >
-                  Approve ready ({approvable.length})
+                  Approve best
                 </button>
               )}
               <button type="button" className="visual-arrow-button" aria-label={`Previous visuals for section ${index + 1}`} onClick={() => scroll(-1)}>←</button>
@@ -348,12 +397,26 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
     sectionViewportTop?: number;
     carousels: Record<string, number>;
   } | null>(null);
+  const activeStoryIdRef = React.useRef(storyId);
+  activeStoryIdRef.current = storyId;
+
+  React.useEffect(() => {
+    setVisuals([]);
+    setScript(null);
+    setPath("");
+    setFile(null);
+    setBusy(false);
+    setLocalFolder("");
+    setAttributions({});
+    reviewPositionRef.current = null;
+  }, [storyId]);
 
   const load = React.useCallback(
     () =>
       api
         .listVisuals(storyId)
         .then((items) => {
+          if (activeStoryIdRef.current !== storyId) return;
           setVisuals(items);
           setAttributions((current) => {
             const next = { ...current };
@@ -365,20 +428,42 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             return next;
           });
         })
-        .catch(() => setVisuals([])),
+        .catch((error) => {
+          if (activeStoryIdRef.current !== storyId) return;
+          studio.setError(
+            `Could not load visuals: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }),
     [storyId, studio.lastJobEventTimestamp],
   );
   React.useEffect(() => {
     void load();
   }, [load]);
   React.useEffect(() => {
-    void api.readScript(storyId).then(setScript).catch(() => setScript(null));
+    void api
+      .readScript(storyId)
+      .then((value) => {
+        if (activeStoryIdRef.current === storyId) setScript(value);
+      })
+      .catch((error) => {
+        if (activeStoryIdRef.current !== storyId) return;
+        studio.setError(
+          `Could not load the script for visual review: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
   }, [storyId, studio.lastJobEventTimestamp]);
   React.useEffect(() => {
     void api
       .localVisualFolder(storyId)
-      .then((value) => setLocalFolder(value.path))
-      .catch(() => setLocalFolder(""));
+      .then((value) => {
+        if (activeStoryIdRef.current === storyId) setLocalFolder(value.path);
+      })
+      .catch((error) => {
+        if (activeStoryIdRef.current !== storyId) return;
+        studio.setError(
+          `Could not locate the episode media inbox: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
   }, [storyId]);
 
   const captureReviewPosition = () => {
@@ -432,11 +517,13 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   };
 
   const act = async (fn: () => Promise<unknown>) => {
+    const actionStoryId = storyId;
     try {
       captureReviewPosition();
       studio.setError("");
       setBusy(true);
       await fn();
+      if (activeStoryIdRef.current !== actionStoryId) return;
       await load();
       // Do not call refreshAll() here. It sets the entire Studio to its loading
       // state, unmounting this panel and resetting the page/carousel scroll
@@ -447,10 +534,13 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         studio.refreshJobs(),
       ]);
     } catch (err) {
+      if (activeStoryIdRef.current !== actionStoryId) return;
       studio.setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
-      restoreReviewPosition();
+      if (activeStoryIdRef.current === actionStoryId) {
+        setBusy(false);
+        restoreReviewPosition();
+      }
     }
   };
 
@@ -463,7 +553,11 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       onAttributionChange={(value) =>
         setAttributions((current) => ({ ...current, [v.asset_id]: value }))
       }
-      onAttributionSave={(value) => void api.updateVisual(v.asset_id, { attribution_text: value }).then(load)}
+      onAttributionSave={() => {
+        const value = attributions[v.asset_id] ?? v.attribution_text ?? "";
+        if (value === (v.attribution_text ?? "")) return;
+        void act(() => api.updateVisual(v.asset_id, { attribution_text: value }));
+      }}
       onDownload={() => void act(() => api.downloadVisual(v.asset_id))}
       onAnalyze={() => void act(() => api.analyzeVisual(v.asset_id))}
       onApprove={() => void act(() => api.manualApproveVisual(v.asset_id, attributions[v.asset_id] ?? v.attribution_text ?? undefined))}
@@ -487,15 +581,13 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
     all: visuals.filter(isEditorialVisual).length,
   };
 
-  const approveAll = (items: VisualCandidate[]) =>
-    void act(async () => {
-      for (const visual of items) {
-        await api.manualApproveVisual(
-          visual.asset_id,
-          attributions[visual.asset_id] ?? visual.attribution_text ?? undefined,
-        );
-      }
-    });
+  const approveBest = (visual: VisualCandidate) =>
+    void act(() =>
+      api.manualApproveVisual(
+        visual.asset_id,
+        attributions[visual.asset_id] ?? visual.attribution_text ?? undefined,
+      ),
+    );
 
   return (
     <div className="stack-lg animate-fade-in">
@@ -525,6 +617,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         <div className="row">
           <input
             value={path}
+            aria-label="Local visual path"
             onChange={(e) => setPath(e.target.value)}
             placeholder="Stage a file into this episode…"
             style={{ maxWidth: 320 }}
@@ -546,6 +639,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           </button>
           <input
             type="file"
+            aria-label="Upload visual file"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             style={{ maxWidth: 220 }}
           />
@@ -584,6 +678,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                 type="button"
                 key={value}
                 data-filter={value}
+                aria-pressed={filter === value}
                 className={filter === value ? "active" : ""}
                 onClick={() => setFilter(value)}
               >
@@ -611,7 +706,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               }
               visuals={filteredVisuals.filter((visual) => visual.section_ids.includes(section.section_id))}
               renderVisual={renderVisual}
-              onApproveAll={approveAll}
+              onApproveBest={approveBest}
               busy={busy}
             />
           ))}

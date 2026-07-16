@@ -586,6 +586,10 @@ class Repository:
         data["status"] = str(
             status.value if isinstance(status, ScriptStatus) else status
         )
+        if data["status"] == ScriptStatus.approved.value:
+            for section in data.get("sections", []):
+                if section.get("approval_status") != "locked":
+                    section["approval_status"] = "approved"
         data["updated_at"] = now_iso()
         script = ScriptDocument.model_validate(data)
         with self.connection:

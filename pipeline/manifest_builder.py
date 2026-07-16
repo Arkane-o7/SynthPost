@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pipeline import config
@@ -14,9 +15,11 @@ from pipeline.models import (
     ContentRole,
     MediaType,
     ReviewStatus,
+    ScriptStatus,
     TimelinePlan,
     TimelineStatus,
 )
+from pipeline.narration.service import load_narration_artifact
 from pipeline.provenance import file_sha256, now_iso
 from pipeline.storage import project_relative, resolve_project_path
 from pipeline.timeline.validation import assert_timeline_valid
@@ -239,22 +242,55 @@ def build_story_manifest(
 ) -> dict[str, Any]:
     episode = repository.episode_for_story(story_id)
     candidate = repository.candidate_for_story(story_id)
-    script = repository.latest_script(story_id, approved=True)
-    if not script:
+    script = repository.latest_script(story_id)
+    if not script or script.status != ScriptStatus.approved:
         raise ValueError(
-            "An approved script is required before building the renderer manifest"
+            "The latest script revision must be approved before building the "
+            "renderer manifest"
         )
-    timeline = repository.latest_timeline(story_id, approved=True)
-    if not timeline:
+    timeline = repository.latest_timeline(story_id)
+    if not timeline or timeline.status != TimelineStatus.approved:
         raise ValueError(
-            "An approved timeline is required before building the renderer manifest"
+            "The latest timeline revision must be approved before building the "
+            "renderer manifest"
+        )
+    try:
+        script_created_at = datetime.fromisoformat(
+            script.created_at.replace("Z", "+00:00")
+        )
+        timeline_created_at = datetime.fromisoformat(
+            timeline.created_at.replace("Z", "+00:00")
+        )
+    except ValueError:
+        # Retain compatibility with legacy records whose timestamps were not
+        # normalized. Current records always use ISO-8601 UTC timestamps.
+        script_created_at = timeline_created_at = None
+    if (
+        script_created_at is not None
+        and timeline_created_at is not None
+        and timeline_created_at < script_created_at
+    ):
+        raise ValueError(
+            "The approved timeline was invalidated by a newer production revision; "
+            "generate and approve the current timeline before rendering"
         )
     visuals = repository.list_visuals(story_id)
+    narration = load_narration_artifact(repository, story_id, require_current=True)
+    assert narration is not None
     timeline = hydrate_timeline_visuals(timeline, visuals)
     assert_timeline_valid(timeline, require_approved=True, check_media_exists=True)
     narration_text = timeline_narration_text(timeline)
     if not narration_text:
         raise ValueError("Approved timeline contains no anchor narration")
+    canonical_text = " ".join(beat.text.strip() for beat in narration.beats)
+    narration_matches = " ".join(narration_text.split()) == " ".join(
+        canonical_text.split()
+    )
+    if not narration_matches and not config.source_audio_inserts_enabled():
+        raise ValueError(
+            "The approved timeline narration does not match the canonical Kokoro "
+            "audio. Regenerate and approve the timeline before rendering."
+        )
     artifacts = materialize_story_artifacts(repository, story_id)
     story_path = story_manifest_path(episode.episode_id, story_id)
     output_path = story_path.with_name(
@@ -331,6 +367,8 @@ def build_story_manifest(
             "source_artifacts": artifacts,
         },
     }
+    if narration_matches:
+        manifest["narration"] = narration.model_dump(mode="json")
     write_json(story_path, manifest)
     repository.record_artifact(
         ArtifactRecord(

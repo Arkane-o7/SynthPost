@@ -2,6 +2,7 @@ import type {
   Episode,
   GenerationAudit,
   NarrationMode,
+  NarrationArtifact,
   Project,
   RenderJob,
   ResearchPack,
@@ -215,6 +216,12 @@ export const api = {
     request<ScriptDocument>(`/api/stories/${storyId}/script/approve`, {
       method: "POST",
     }),
+  readNarration: (storyId: string) =>
+    request<NarrationArtifact | null>(`/api/stories/${storyId}/narration`),
+  generateNarration: (storyId: string) =>
+    request<RenderJob>(`/api/stories/${storyId}/narration/generate`, {
+      method: "POST",
+    }),
 
   searchVisuals: (storyId: string) =>
     request<RenderJob>(`/api/stories/${storyId}/visuals/search`, {
@@ -241,12 +248,11 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   uploadVisual: async (storyId: string, file: File) => {
-    const bytes = new Uint8Array(await file.arrayBuffer());
     return request<VisualCandidate>(
       `/api/stories/${storyId}/visuals/upload-bytes?filename=${encodeURIComponent(file.name)}`,
       {
         method: "POST",
-        body: bytes,
+        body: file,
         headers: { "Content-Type": file.type || "application/octet-stream" },
       },
     );

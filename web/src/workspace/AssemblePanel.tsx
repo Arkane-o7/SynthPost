@@ -122,8 +122,16 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           <div className="assembly-output">
             <div className="assembly-output-heading">
               <div>
-                <div className="assembly-output-kicker">Assembly complete</div>
-                <h3>Production Output</h3>
+                <div className="assembly-output-kicker">
+                  {episode.status === "completed"
+                    ? "Assembly complete"
+                    : "Previous production retained"}
+                </div>
+                <h3>
+                  {episode.status === "completed"
+                    ? "Production Output"
+                    : "Previous Production Output"}
+                </h3>
               </div>
               <button
                 type="button"

@@ -84,12 +84,17 @@ class VisualSettings(SettingsModel):
     ai_query_planning: bool = True
     ai_cleanliness: bool = True
     include_leads: bool = True
+    disable_web_visuals: bool = False
+    generate_fallback_visuals: bool = True
     download_videos: bool = True
     visual_max_queries: int = Field(default=12, ge=1)
-    image_results_per_query: int = Field(default=3, ge=1)
-    video_results_per_query: int = Field(default=2, ge=1)
+    image_results_per_query: int = Field(default=3, ge=0)
+    video_results_per_query: int = Field(default=2, ge=0)
     video_download_limit: int = Field(default=6, ge=0)
     video_clip_seconds: int = Field(default=45, ge=1)
+    video_max_duration_seconds: int = Field(default=900, ge=1)
+    video_timeout_seconds: float = Field(default=300.0, gt=0)
+    searxng_socket_timeout_seconds: float = Field(default=15.0, gt=0)
     enforce_broadcast_fit: bool = True
     min_width: int = Field(default=1280, ge=1)
     min_height: int = Field(default=720, ge=1)
@@ -99,6 +104,9 @@ class VisualSettings(SettingsModel):
     download_max_bytes: int = Field(default=104_857_600, ge=1)
     yt_dlp_binary: str = "yt-dlp"
     tesseract_binary: str = "tesseract"
+    approved_video_channel_ids: tuple[str, ...] = ()
+    approved_video_source_names: tuple[str, ...] = ()
+    blocked_video_source_names: tuple[str, ...] = ()
 
 
 class AvatarSettings(SettingsModel):
@@ -111,6 +119,8 @@ class AvatarSettings(SettingsModel):
     voice_speed: float = Field(default=1.10, gt=0)
     language_code: str = "a"
     words_per_minute: float = Field(default=145.0, gt=0)
+    narration_beat_pause_ms: int = Field(default=80, ge=0, le=2000)
+    narration_section_pause_ms: int = Field(default=220, ge=0, le=5000)
     browser_timeout_padding_seconds: float = Field(default=900.0, ge=0)
 
 
@@ -210,6 +220,18 @@ class _Reader:
                 f"Environment variable {name} must be a number."
             ) from exc
 
+    def csv(self, name: str, *, lowercase: bool = True) -> tuple[str, ...]:
+        value = self.text(name, "") or ""
+        return tuple(
+            dict.fromkeys(
+                (
+                    item.strip().lower() if lowercase else item.strip()
+                    for item in value.split(",")
+                    if item.strip()
+                )
+            )
+        )
+
 
 def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
     """Parse a complete immutable settings snapshot from environment values."""
@@ -268,6 +290,12 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ai_query_planning=r.boolean("SYNTHPOST_AI_VISUAL_QUERY_PLANNING", True),
                 ai_cleanliness=r.boolean("SYNTHPOST_AI_VISUAL_CLEANLINESS", True),
                 include_leads=r.boolean("SYNTHPOST_INCLUDE_VISUAL_LEADS", True),
+                disable_web_visuals=r.boolean(
+                    "SYNTHPOST_DISABLE_WEB_VISUALS", False
+                ),
+                generate_fallback_visuals=r.boolean(
+                    "SYNTHPOST_GENERATE_FALLBACK_VISUALS", True
+                ),
                 download_videos=r.boolean("SYNTHPOST_SEARXNG_DOWNLOAD_VIDEOS", True),
                 visual_max_queries=r.integer(
                     "SYNTHPOST_SEARXNG_VISUAL_MAX_QUERIES", 12
@@ -283,6 +311,15 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
                 video_clip_seconds=r.integer(
                     "SYNTHPOST_SEARXNG_VIDEO_CLIP_SECONDS", 45
+                ),
+                video_max_duration_seconds=r.integer(
+                    "SYNTHPOST_SEARXNG_VIDEO_MAX_DURATION", 900
+                ),
+                video_timeout_seconds=r.number(
+                    "SYNTHPOST_SEARXNG_VIDEO_TIMEOUT", 300.0
+                ),
+                searxng_socket_timeout_seconds=r.number(
+                    "SYNTHPOST_SEARXNG_SOCKET_TIMEOUT", 15.0
                 ),
                 enforce_broadcast_fit=r.boolean(
                     "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
@@ -301,6 +338,15 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
                 yt_dlp_binary=r.text("SYNTHPOST_YT_DLP", "yt-dlp"),
                 tesseract_binary=r.text("SYNTHPOST_TESSERACT", "tesseract"),
+                approved_video_channel_ids=r.csv(
+                    "SYNTHPOST_VIDEO_APPROVED_CHANNEL_IDS", lowercase=False
+                ),
+                approved_video_source_names=r.csv(
+                    "SYNTHPOST_VIDEO_APPROVED_SOURCE_NAMES"
+                ),
+                blocked_video_source_names=r.csv(
+                    "SYNTHPOST_VIDEO_BLOCKED_SOURCE_NAMES"
+                ),
             ),
             avatar=AvatarSettings(
                 engine_path=Path(
@@ -327,6 +373,12 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 voice_speed=r.number("SYNTHPOST_AVATAR_VOICE_SPEED", 1.10),
                 language_code=r.text("SYNTHPOST_AVATAR_LANG_CODE", "a"),
                 words_per_minute=r.number("SYNTHPOST_WORDS_PER_MINUTE", 145.0),
+                narration_beat_pause_ms=r.integer(
+                    "SYNTHPOST_NARRATION_BEAT_PAUSE_MS", 80
+                ),
+                narration_section_pause_ms=r.integer(
+                    "SYNTHPOST_NARRATION_SECTION_PAUSE_MS", 220
+                ),
                 browser_timeout_padding_seconds=r.number(
                     "AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S", 900.0
                 ),

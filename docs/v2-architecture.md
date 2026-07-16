@@ -8,7 +8,7 @@ SynthPost Studio is a local-first newsroom production editor built around the re
 - Rebuild the newsroom pipeline using explicit V2 contracts.
 - Store workflow state in SQLite and reproducible artifacts on disk.
 - Treat AI output as suggestions, never approvals.
-- Render only from approved scripts, approved visuals, and approved timelines.
+- Render only from approved scripts and timelines; visuals must be eligible local media, with optional approval used to pin an editorial choice.
 - Keep the newsroom application local on macOS while using explicitly configured hosted AI providers for production generation.
 
 ## Major directories
@@ -114,6 +114,27 @@ queued → running → completed | failed | cancelled
 Each job stores progress, stage, structured output paths, error, traceback, and a log file under `.synthpost/jobs/`.
 
 No Redis, Celery, or cloud queue is used.
+
+## Narrative-first script architecture
+
+Production narration is authored before presentation sections exist:
+
+```text
+research pack
+  → narrative brief and claim allocation
+  → uninterrupted beat-based narration
+  → deterministic continuity/duplication gate and targeted repair
+  → non-rewriting beat segmentation
+  → section headlines and visual metadata
+  → existing ScriptDocument contract
+```
+
+`NarrativeDraft` is an internal generation contract. Each beat is a stable
+sentence or major clause with linked claim IDs. The segmenter must consume every
+beat exactly once, preserve order, and cannot supply prose. This keeps the final
+spoken narrative coherent while retaining the section-based visual, timeline,
+avatar, and rendering contracts. Existing persisted `ScriptDocument` revisions
+remain readable without migration.
 
 ## Workflow state machine
 

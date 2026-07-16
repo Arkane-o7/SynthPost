@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from pipeline import config
 from pipeline.models import (
@@ -10,8 +11,10 @@ from pipeline.models import (
     AudioRegion,
     ContentRole,
     MediaType,
+    NarrationArtifact,
     ReviewStatus,
     RightsTier,
+    ScriptStatus,
     SegmentAnchor,
     SegmentAudio,
     SegmentOverlays,
@@ -24,6 +27,7 @@ from pipeline.models import (
     VisualCandidate,
     timed_section_headline_cues,
 )
+from pipeline.narration.service import load_narration_artifact
 from pipeline.provenance import ffprobe_summary
 from pipeline.storage import resolve_project_path
 from pipeline.timeline.validation import validate_timeline
@@ -247,15 +251,45 @@ def _is_renderable_visual(visual: VisualCandidate) -> bool:
         return False
     if not resolve_project_path(visual.download_path).is_file():
         return False
-    if visual.media_type in {MediaType.image, MediaType.video} and config.env_bool(
-        "SYNTHPOST_VISUAL_ENFORCE_BROADCAST_FIT", True
+    if (
+        visual.media_type in {MediaType.image, MediaType.video}
+        and config.get_settings().visuals.enforce_broadcast_fit
     ):
         eligible, _reason, _score = broadcast_media_fit(
             visual.width, visual.height, visual.media_type
         )
-        if not eligible:
+        if not eligible and not visual.broadcast_fit_override:
             return False
     return True
+
+
+def _review_recency(visual: VisualCandidate) -> float:
+    if not visual.reviewed_at:
+        return 0.0
+    try:
+        reviewed = datetime.fromisoformat(
+            visual.reviewed_at.replace("Z", "+00:00")
+        )
+        if reviewed.tzinfo is None:
+            reviewed = reviewed.replace(tzinfo=timezone.utc)
+        return reviewed.timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _visual_selection_key(visual: VisualCandidate) -> tuple:
+    explicitly_approved = visual.review_status in {
+        ReviewStatus.approved,
+        ReviewStatus.manual_approved,
+    }
+    return (
+        _is_fallback_visual(visual),
+        0 if explicitly_approved else 1,
+        -_review_recency(visual) if explicitly_approved else 0.0,
+        -visual.relevance_score,
+        -visual.visual_quality_score,
+        -visual.source_authority,
+    )
 
 
 def approved_visuals_by_section(
@@ -269,20 +303,7 @@ def approved_visuals_by_section(
     """
 
     result: dict[str, VisualCandidate] = {}
-    ranked = sorted(
-        visuals,
-        key=lambda visual: (
-            _is_fallback_visual(visual),
-            0
-            if visual.review_status == ReviewStatus.manual_approved
-            else 1
-            if visual.review_status == ReviewStatus.approved
-            else 2,
-            -visual.relevance_score,
-            -visual.visual_quality_score,
-            -visual.source_authority,
-        ),
-    )
+    ranked = sorted(visuals, key=_visual_selection_key)
     for visual in ranked:
         if not _is_renderable_visual(visual):
             continue
@@ -297,19 +318,7 @@ def source_audio_visuals_by_section(
     """Choose an audible local video for each authored source-clip cue."""
 
     result: dict[str, VisualCandidate] = {}
-    ranked = sorted(
-        visuals,
-        key=lambda visual: (
-            0
-            if visual.review_status == ReviewStatus.manual_approved
-            else 1
-            if visual.review_status == ReviewStatus.approved
-            else 2,
-            -visual.relevance_score,
-            -visual.visual_quality_score,
-            -visual.source_authority,
-        ),
-    )
+    ranked = sorted(visuals, key=_visual_selection_key)
     for visual in ranked:
         if (
             visual.media_type != MediaType.video
@@ -420,7 +429,11 @@ def segment_visual_from_candidate(visual: VisualCandidate | None) -> SegmentVisu
     )
 
 
-def build_audio_plan(story_id: str, segments: list[TimelineSegment]) -> AudioPlan:
+def build_audio_plan(
+    story_id: str,
+    segments: list[TimelineSegment],
+    narration: NarrationArtifact | None = None,
+) -> AudioPlan:
     regions: list[AudioRegion] = []
     for segment in segments:
         source_path = (
@@ -434,7 +447,11 @@ def build_audio_plan(story_id: str, segments: list[TimelineSegment]) -> AudioPla
                 start_time=segment.start_time,
                 end_time=segment.end_time,
                 mode=segment.audio.mode,
-                narration_path=None,
+                narration_path=(
+                    narration.audio_path
+                    if narration and segment.audio.mode != AudioMode.source
+                    else None
+                ),
                 source_path=source_path,
                 narration_volume=segment.audio.narration_volume,
                 source_volume=segment.audio.source_volume,
@@ -479,12 +496,99 @@ def _estimated_narration_duration(text: str) -> float:
     return round(max(3.0, words / config.words_per_minute() * 60.0), 2)
 
 
+def _exact_headline_cues(
+    narration: NarrationArtifact,
+    section_id: str,
+    headline_cues: list[str],
+) -> list[dict[str, object]]:
+    section_timing = next(
+        item for item in narration.sections if item.section_id == section_id
+    )
+    beats = [
+        beat for beat in narration.beats if beat.section_id == section_id
+    ]
+    result: list[dict[str, object]] = []
+    for index, beat in enumerate(beats):
+        text = (
+            headline_cues[index]
+            if index < len(headline_cues)
+            else beat.text
+        )
+        result.append(
+            {
+                "text": text,
+                "start": round(beat.start_time - section_timing.start_time, 3),
+                "end": round(beat.end_time - section_timing.start_time, 3),
+                "beat_id": beat.beat_id,
+                "timing_source": "kokoro_exact_samples",
+            }
+        )
+    return result
+
+
+def _narration_clock_errors(
+    plan: TimelinePlan, narration: NarrationArtifact
+) -> list[str]:
+    """Reject timeline edits that would desynchronize canonical audio."""
+
+    expected_by_section = {
+        item.section_id: item for item in narration.sections
+    }
+    expected_order = [item.section_id for item in narration.sections]
+    actual_order: list[str] = []
+    errors: list[str] = []
+    cursor = 0.0
+    for segment in plan.segments:
+        if segment.audio.mode == AudioMode.source:
+            cursor += segment.duration
+            continue
+        expected = expected_by_section.get(segment.section_id)
+        if expected is None:
+            errors.append(
+                f"Segment {segment.segment_id} has no Kokoro section timing"
+            )
+            continue
+        actual_order.append(segment.section_id)
+        if abs(segment.start_time - cursor) > 0.02:
+            errors.append(
+                f"Segment {segment.segment_id} start was edited away from the narration clock"
+            )
+        if abs(segment.duration - expected.duration_seconds) > 0.02:
+            errors.append(
+                f"Segment {segment.segment_id} duration must remain "
+                f"{expected.duration_seconds:.3f}s to match Kokoro audio"
+            )
+        expected_text = " ".join(
+            beat.text
+            for beat in narration.beats
+            if beat.section_id == segment.section_id
+        )
+        if " ".join(segment.script_text.split()) != " ".join(expected_text.split()):
+            errors.append(
+                f"Segment {segment.segment_id} text differs from the narrated beat text"
+            )
+        cursor += segment.duration
+    if actual_order != expected_order:
+        errors.append(
+            "Narrated segment order must match the approved script; edit the script "
+            "and regenerate narration to change it"
+        )
+    return errors
+
+
 def generate_timeline(repository, story_id: str) -> TimelinePlan:
-    script = repository.latest_script(
-        story_id, approved=True
-    ) or repository.latest_script(story_id)
+    script = repository.latest_script(story_id)
     if not script:
         raise ValueError(f"No script exists for story: {story_id}")
+    if script.status != ScriptStatus.approved:
+        raise ValueError(
+            "The latest script revision must be approved before generating a timeline"
+        )
+    narration = load_narration_artifact(repository, story_id, require_current=True)
+    assert narration is not None
+    section_timings = {
+        timing.section_id: timing for timing in narration.sections
+    }
     visuals = repository.list_visuals(story_id)
     by_section = approved_visuals_by_section(visuals)
     source_audio_by_section = source_audio_visuals_by_section(visuals)
@@ -511,15 +615,12 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         source_visual = (
             source_audio_by_section.get(section.section_id) if source_clip else None
         )
-        duration = (
-            _estimated_narration_duration(narration_text)
-            if authored_source_clip is not None and not source_audio_enabled
-            else max(
-                4.0,
-                (section.estimated_duration_seconds or 5.0)
-                - (source_clip.duration_seconds if source_clip else 0.0),
-            )
-        )
+        try:
+            duration = section_timings[section.section_id].duration_seconds
+        except KeyError as exc:
+            raise ValueError(
+                f"Kokoro alignment is missing section {section.section_id}"
+            ) from exc
         visual = by_section.get(section.section_id)
         if (
             source_visual is not None
@@ -588,12 +689,20 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 data={
                     "playback_mode": "narration",
                     "title": section.section_type.replace("_", " ").title(),
-                    "headline_cues": timed_section_headline_cues(
-                        narration_text,
-                        section.section_type,
-                        section.headline_cues,
-                        duration,
+                    # Anchor-only layouts intentionally omit media from the
+                    # render contract, but the editor still needs to know
+                    # which candidate to restore when the template is changed
+                    # to a visual-capable layout.
+                    "preferred_visual_asset_id": (
+                        visual.asset_id if visual is not None else None
                     ),
+                    "headline_cues": _exact_headline_cues(
+                        narration,
+                        section.section_id,
+                        section.headline_cues,
+                    ),
+                    "timing_source": "kokoro_exact_samples",
+                    "narration_audio_path": narration.audio_path,
                     "bullets": [narration_text[:120]],
                     "values": [],
                     "locations": [],
@@ -728,26 +837,26 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
     plan = TimelinePlan(
         story_id=story_id, status=TimelineStatus.review, segments=segments
     )
-    plan.audio_plan = build_audio_plan(story_id, segments)
+    plan.audio_plan = build_audio_plan(story_id, segments, narration)
     errors, warnings = validate_timeline(plan, check_media_exists=True)
     plan.validation_errors = errors
     plan.validation_warnings = warnings
+    plan.validation_warnings.append(
+        "Timeline timing is derived from Kokoro narration sample offsets."
+    )
     saved = repository.save_timeline(plan)
     candidate = repository.candidate_for_story(story_id)
     if candidate.workflow_state in {
         StoryWorkflowState.visuals_review,
         StoryWorkflowState.script_approved,
     }:
-        try:
-            if candidate.workflow_state == StoryWorkflowState.script_approved:
-                repository.transition_story(
-                    story_id, StoryWorkflowState.visuals_searching
-                )
-                repository.transition_story(story_id, StoryWorkflowState.visuals_review)
-            repository.transition_story(story_id, StoryWorkflowState.timeline_draft)
-            repository.transition_story(story_id, StoryWorkflowState.timeline_review)
-        except Exception:
-            pass
+        if candidate.workflow_state == StoryWorkflowState.script_approved:
+            repository.transition_story(
+                story_id, StoryWorkflowState.visuals_searching
+            )
+            repository.transition_story(story_id, StoryWorkflowState.visuals_review)
+        repository.transition_story(story_id, StoryWorkflowState.timeline_draft)
+        repository.transition_story(story_id, StoryWorkflowState.timeline_review)
     return saved
 
 
@@ -756,6 +865,14 @@ def approve_timeline(repository, story_id: str) -> TimelinePlan:
     if not plan:
         raise ValueError(f"No timeline exists for story: {story_id}")
     errors, warnings = validate_timeline(plan, check_media_exists=True)
+    narration = load_narration_artifact(repository, story_id, require_current=True)
+    assert narration is not None
+    if not config.source_audio_inserts_enabled():
+        errors.extend(_narration_clock_errors(plan, narration))
+    else:
+        warnings.append(
+            "Experimental source-audio inserts use the compatibility timing path."
+        )
     plan.validation_errors = errors
     plan.validation_warnings = warnings
     if errors:
@@ -764,15 +881,12 @@ def approve_timeline(repository, story_id: str) -> TimelinePlan:
     for segment in plan.segments:
         segment.status = ApprovalStatus.approved
     plan.status = TimelineStatus.approved
-    plan.audio_plan = build_audio_plan(story_id, plan.segments)
+    plan.audio_plan = build_audio_plan(story_id, plan.segments, narration)
     saved = repository.save_timeline(plan)
-    try:
-        current = repository.candidate_for_story(story_id).workflow_state
-        if current == StoryWorkflowState.timeline_review:
-            repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
-        elif current == StoryWorkflowState.timeline_draft:
-            repository.transition_story(story_id, StoryWorkflowState.timeline_review)
-            repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
-    except Exception:
-        pass
+    current = repository.candidate_for_story(story_id).workflow_state
+    if current == StoryWorkflowState.timeline_review:
+        repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
+    elif current == StoryWorkflowState.timeline_draft:
+        repository.transition_story(story_id, StoryWorkflowState.timeline_review)
+        repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
     return saved

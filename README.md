@@ -6,7 +6,8 @@ SynthPost is a local-first, AI-assisted newsroom and video-production system for
 
 - Projects, episodes, RSS/Atom sources, discovery, ranking, and assignment desk
 - Multi-source research packs with evidence and claims
-- Structured Groq/Gemini script generation plus manual revisions and approvals
+- Narrative-first Groq/Gemini script generation with continuity validation, non-rewriting segmentation, manual revisions, and approvals
+- Local Kokoro narration with sample-exact beat/section timing shared by timeline, lip sync, and rendering
 - Episode-isolated media inbox, SearXNG image/video discovery, rights review, and safe fallbacks
 - Editable, validated multi-template timelines
 - Local avatar/TTS/lip-sync rendering through the retained Avatar Engine
@@ -48,8 +49,8 @@ Run components separately with `make backend`, `make workers`, `make worker LANE
 2. Configure sources and discover or add a story.
 3. Select the story and create its research pack.
 4. Generate/edit/approve the script.
-5. discover, download/upload, review, and approve visual media.
-6. Generate/edit/validate/approve the timeline.
+5. Let script approval queue Kokoro narration and visual discovery; other projects continue in parallel.
+6. Review visual media, then generate/edit/validate/approve the sample-timed timeline.
 7. Build the renderer manifest and render the avatar/composition.
 8. Assemble and review the finished episode.
 

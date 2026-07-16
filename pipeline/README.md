@@ -6,7 +6,7 @@ The Python package owns domain contracts, editorial use cases, providers, persis
 API / CLI / supervised worker pool -> feature service -> domain model + provider/repository
 ```
 
-Start at `stages.py` for the production lifecycle, `models.py` for data contracts, `config.py` for settings, `db/repository.py` for persistence, and `api/main.py` for app wiring. Feature packages own their logic. Render boundaries consume approved state; they do not perform upstream editorial work.
+Start at `stages.py` for the production lifecycle, `models.py` for data contracts, `config.py` for settings, `db/repository.py` for persistence, and `api/main.py` for app wiring. Feature packages own their logic. `narration/` owns Kokoro synthesis and sample-exact beat alignment; timeline and avatar stages consume its versioned canonical artifacts. Render boundaries consume approved state; they do not perform upstream editorial work.
 
 `jobs/supervisor.py` expands typed per-lane capacity into isolated OS processes. `jobs/worker.py` leases numbered slots; `Repository.claim_next_job()` atomically permits independent project work while serializing same-story mutations and episode assembly.
 

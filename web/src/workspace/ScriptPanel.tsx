@@ -110,6 +110,9 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const story = studio.candidates.find(
     (candidate) => candidate.story_id === storyId,
   );
+  const episode = studio.episodes.find(
+    (candidate) => candidate.episode_id === story?.episode_id,
+  );
   const scriptJobs = studio.jobs.filter(
     (job) => job.story_id === storyId && job.job_type === "script_generate",
   );
@@ -122,6 +125,20 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   );
   const latestRequestedMode = latestScriptJob?.payload?.narration_mode;
   const isGenerating = busy || Boolean(activeScriptJob);
+  const revisingDownstreamProduction = Boolean(
+    story?.workflow_state &&
+      ![
+        "selected",
+        "researching",
+        "research_ready",
+        "script_generating",
+        "script_review",
+        "script_approved",
+      ].includes(story.workflow_state),
+  );
+  const hasPreviousProductionOutput = Boolean(
+    episode?.final_output_path && episode.status !== "completed",
+  );
   const providerWarning = script?.warnings?.find((warning) =>
     warning.startsWith("llm_provider="),
   );
@@ -315,6 +332,16 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
 
   return (
     <div className="section-editor animate-fade-in">
+      {(revisingDownstreamProduction || hasPreviousProductionOutput) && (
+        <div className="validation-msg validation-warning">
+          Revising this script creates a new production revision.
+          {hasPreviousProductionOutput
+            ? " The previous final video is retained for reference."
+            : " Existing downstream work becomes stale."}{" "}
+          Timeline, Render, and Assembly must be completed again from the approved
+          revision.
+        </div>
+      )}
       {/* Section nav */}
       <div className="card stack">
         <h2>Sections</h2>
@@ -411,7 +438,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         />
         <div className="row">
           <button
-            disabled={busy}
+            disabled={isGenerating}
             onClick={() =>
               act(async () => {
                 await api.saveManualScript(storyId, headline, text);
@@ -438,14 +465,16 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           </button>
           <button
             className="btn-success"
-            disabled={busy}
+            disabled={isGenerating || script.status === "approved"}
             onClick={() =>
               act(async () => {
                 await api.approveScript(storyId);
               })
             }
           >
-            ✓ Approve Script
+            {script.status === "approved"
+              ? "✓ Script Approved"
+              : "✓ Approve Script"}
           </button>
         </div>
       </div>
