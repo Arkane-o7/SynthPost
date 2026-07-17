@@ -1,8 +1,9 @@
 import React from "react";
 import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { brand, layout, typography } from "../styles/brand";
+import { brand, genreTheme, layout, typography } from "../styles/brand";
 import type { HeadlineItem, PublicMedia } from "../types";
 import { LogoBug } from "./LogoBug";
+import { BrandRibbon } from "./BrandRibbon";
 
 export const LowerThird: React.FC<{
   headline: string;
@@ -10,10 +11,12 @@ export const LowerThird: React.FC<{
   sourceLabel: string;
   sourceDate: string;
   logo?: PublicMedia;
-}> = ({ headline, headlineItems }) => {
+  category?: string;
+}> = ({ headline, headlineItems, category }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const second = frame / fps;
+  const theme = genreTheme(category);
   const sourceItems: HeadlineItem[] =
     headlineItems && headlineItems.length
       ? headlineItems
@@ -217,13 +220,13 @@ export const LowerThird: React.FC<{
         width: layout.lower.width,
         height: layout.lower.height,
         display: "flex",
-        background:
-          "linear-gradient(90deg, rgba(2,8,16,0.99) 0%, rgba(5,17,32,0.97) 44%, rgba(4,13,25,0.94) 100%)",
+        background: "linear-gradient(90deg, rgba(5,5,6,.995), rgba(17,17,19,.98) 56%, rgba(7,7,8,.97))",
         borderTop: "1px solid rgba(245,247,250,0.32)",
         boxShadow: "0 -18px 58px rgba(0,0,0,0.34)",
       }}
     >
-      <LogoBug />
+      <BrandRibbon category={category} compact />
+      <LogoBug category={category} />
       <div
         style={{
           flex: 1,
@@ -273,7 +276,7 @@ export const LowerThird: React.FC<{
           <div
             style={{
               height: 2,
-              background: `linear-gradient(90deg, ${brand.signalBlue}, rgba(31,123,255,0.22), rgba(245,247,250,0.12))`,
+              background: `linear-gradient(90deg, ${theme.accent}, ${theme.accentEnd}, rgba(245,247,250,0.12))`,
             }}
           />
           <div
@@ -287,7 +290,7 @@ export const LowerThird: React.FC<{
               textAlign: "right",
             }}
           >
-            SYNTHPOST
+            {theme.label} · SYNTHPOST
           </div>
         </div>
       </div>

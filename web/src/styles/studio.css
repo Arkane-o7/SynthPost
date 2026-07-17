@@ -10,6 +10,9 @@
     font-weight: 700;
 }
 
+/* The wordmark intentionally uses a system editorial serif so the Studio and
+   rendered video stay visually consistent without a network font dependency. */
+
 /* ── 2. Design tokens ────────────────────────────────────────── */
 :root {
     /* Surfaces */
@@ -36,6 +39,11 @@
     --accent-red-soft: rgba(228, 28, 35, 0.14);
     --accent-blue: #5b9cff;
     --accent-blue-soft: rgba(91, 156, 255, 0.12);
+    --paper: #f3efe7;
+    --paper-muted: #d9d2c7;
+    --genre-accent: #ff3138;
+    --genre-accent-end: #c90f28;
+    --genre-soft: rgba(255, 49, 56, 0.16);
 
     /* Status */
     --status-green: #4ec97a;
@@ -119,6 +127,19 @@ body {
     background-attachment: fixed;
 }
 
+body::before {
+    position: fixed;
+    z-index: -1;
+    inset: 0;
+    content: "";
+    opacity: .18;
+    background-image:
+        radial-gradient(circle at 18% 28%, rgba(243,239,231,.16) 0 0.6px, transparent .8px),
+        radial-gradient(circle at 72% 64%, rgba(243,239,231,.1) 0 0.5px, transparent .8px);
+    background-size: 5px 5px, 7px 7px;
+    pointer-events: none;
+}
+
 img,
 video {
     max-width: 100%;
@@ -154,7 +175,9 @@ h1 {
 h2 {
     margin: 0;
     font-size: 20px;
+    font-family: Georgia, "Times New Roman", serif;
     font-weight: 700;
+    letter-spacing: -.025em;
 }
 h3 {
     margin: 0;
@@ -233,6 +256,67 @@ p {
     min-height: 100vh;
 }
 
+.brand-ribbon {
+    --ribbon-color: linear-gradient(90deg, var(--genre-accent), var(--genre-accent-end));
+    position: relative;
+    overflow: hidden;
+    color: var(--paper);
+    background: var(--ribbon-color);
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.brand-ribbon::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+    background: linear-gradient(180deg, rgba(255,255,255,.16), transparent 42%, rgba(0,0,0,.15));
+    pointer-events: none;
+}
+
+.brand-ribbon-track {
+    display: flex;
+    width: max-content;
+    min-width: 200%;
+    animation: brand-ribbon-crawl 28s linear infinite;
+}
+
+.brand-ribbon-track span {
+    padding-right: 24px;
+}
+
+.brand-ribbon-shell {
+    position: fixed;
+    z-index: 35;
+    top: 0;
+    right: 0;
+    left: var(--rail-width);
+    height: 19px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255,255,255,.1);
+    background: linear-gradient(
+        90deg,
+        #111113 0 18%,
+        var(--genre-accent) 42%,
+        var(--genre-accent-end) 78%,
+        #09090a 100%
+    );
+    pointer-events: none;
+}
+
+@keyframes brand-ribbon-crawl {
+    to { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .brand-ribbon-track { animation: none; }
+}
+
 .app-shell.has-right-rail {
     grid-template-columns:
         var(--rail-width)
@@ -252,6 +336,62 @@ p {
     padding: var(--sp-6) var(--sp-4);
     overflow-y: auto;
 }
+
+.brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+}
+
+.brand-seal {
+    display: grid;
+    width: 46px;
+    height: 46px;
+    flex: 0 0 46px;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 50%;
+    color: var(--paper);
+    background: #070708;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 39px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.1em;
+    text-indent: -0.05em;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.13), 0 8px 24px rgba(0,0,0,.28);
+}
+
+.brand-seal-compact {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    font-size: 28px;
+}
+
+.brand-wordmark {
+    color: var(--paper);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 25px;
+    font-weight: 700;
+    line-height: .9;
+    letter-spacing: -.055em;
+    white-space: nowrap;
+}
+
+.brand-wordmark small {
+    display: block;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+}
+
+.brand-period { color: var(--accent-red); }
 
 .logo-mark {
     font-family: "AntonLocal", Impact, sans-serif;
@@ -300,7 +440,7 @@ p {
     color: var(--text);
     background: rgba(240, 244, 250, 0.08);
     border-color: var(--border);
-    box-shadow: inset 3px 0 0 var(--accent-red);
+    box-shadow: inset 3px 0 0 var(--genre-accent);
 }
 .nav-btn .nav-icon {
     width: 18px;
@@ -339,7 +479,7 @@ p {
 /* Main content area */
 .main-content {
     min-width: 0;
-    padding: var(--sp-8);
+    padding: calc(var(--sp-8) + 10px) var(--sp-8) var(--sp-8);
     min-height: 100vh;
 }
 
@@ -364,7 +504,7 @@ p {
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     padding: var(--sp-5);
     box-shadow: var(--shadow-card);
 }
@@ -683,7 +823,9 @@ label {
 }
 .next-action-title {
     font-size: 20px;
+    font-family: Georgia, "Times New Roman", serif;
     font-weight: 700;
+    letter-spacing: -.025em;
     color: var(--text);
     margin-bottom: var(--sp-2);
 }
@@ -696,11 +838,54 @@ label {
 
 /* ── 13. Episode header ──────────────────────────────────────── */
 .episode-header {
+    position: relative;
+    overflow: hidden;
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: var(--sp-5) var(--sp-6);
     box-shadow: var(--shadow-card);
+}
+
+.episode-header::after {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 5px;
+    content: "";
+    background: linear-gradient(180deg, var(--genre-accent), var(--genre-accent-end));
+}
+
+.episode-genre-ribbon {
+    position: absolute;
+    top: 15px;
+    right: -42px;
+    display: flex;
+    width: 360px;
+    height: 24px;
+    align-items: center;
+    justify-content: center;
+    gap: 13px;
+    transform: rotate(4deg);
+    color: white;
+    background: linear-gradient(90deg, var(--genre-accent), var(--genre-accent-end));
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 8px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    box-shadow: 0 10px 26px rgba(0,0,0,.25);
+    pointer-events: none;
+}
+
+.episode-genre-ribbon b { font-weight: 500; opacity: .74; }
+
+.episode-header .episode-breadcrumb,
+.episode-header .episode-story-title,
+.episode-header .episode-meta {
+    position: relative;
+    z-index: 1;
+    max-width: calc(100% - 260px);
 }
 .episode-breadcrumb {
     display: flex;
@@ -714,7 +899,9 @@ label {
 }
 .episode-story-title {
     font-size: 22px;
+    font-family: Georgia, "Times New Roman", serif;
     font-weight: 700;
+    letter-spacing: -.025em;
     margin-top: var(--sp-2);
 }
 .episode-meta {
@@ -2776,6 +2963,8 @@ label {
         min-height: 100dvh;
     }
 
+    .brand-ribbon-shell { display: none; }
+
     .left-rail {
         display: none;
     }
@@ -2821,16 +3010,17 @@ label {
         place-items: center;
         border: 1px solid rgba(255, 255, 255, 0.14);
         border-radius: 13px;
-        color: white;
-        background: linear-gradient(145deg, #172131, #080c12);
-        font-family: "AntonLocal", Impact, sans-serif;
-        font-size: 18px;
+        color: var(--paper);
+        background: transparent;
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
 
     .mobile-logo span {
-        color: var(--accent-red);
+        color: var(--paper);
     }
+
+    .mobile-logo .brand-mark { width: 100%; justify-content: center; }
+    .mobile-logo .brand-seal { box-shadow: none; }
 
     .mobile-machine-state {
         display: grid;
@@ -3149,6 +3339,22 @@ label {
     .episode-header {
         padding: 15px;
         overflow: hidden;
+    }
+
+    .episode-header .episode-breadcrumb,
+    .episode-header .episode-story-title,
+    .episode-header .episode-meta { max-width: 100%; }
+
+    .episode-genre-ribbon {
+        position: relative;
+        top: auto;
+        right: auto;
+        width: calc(100% + 30px);
+        height: 22px;
+        margin: -15px -15px 13px;
+        transform: none;
+        justify-content: flex-start;
+        padding-left: 15px;
     }
 
     .episode-breadcrumb {

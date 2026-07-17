@@ -2,6 +2,9 @@ import React from 'react';
 import { LeftRail, type Page } from './LeftRail';
 import { RightRail } from './RightRail';
 import { MobileChrome } from './MobileChrome';
+import { BrandRibbon } from './BrandRibbon';
+import { useStudio } from '../state/useStudio';
+import { genreStyle } from '../brand/identity';
 
 /** Pages that show the right rail. */
 const RIGHT_RAIL_PAGES = new Set<Page>(['command', 'inbox', 'jobs']);
@@ -13,11 +16,19 @@ export const AppShell: React.FC<{
 }> = ({ page, setPage, children }) => {
   const showRightRail = RIGHT_RAIL_PAGES.has(page);
   const [mobileRailOpen, setMobileRailOpen] = React.useState(false);
+  const studio = useStudio();
+  const activeStory = studio.candidates.find(
+    (candidate) => candidate.story_id === studio.selectedStoryId,
+  );
 
   React.useEffect(() => setMobileRailOpen(false), [page]);
 
   return (
-    <div className={`app-shell ${showRightRail ? 'has-right-rail' : ''}`}>
+    <div
+      className={`app-shell ${showRightRail ? 'has-right-rail' : ''}`}
+      style={genreStyle(activeStory?.category)}
+    >
+      <BrandRibbon className="brand-ribbon-shell" />
       <MobileChrome
         page={page}
         setPage={setPage}

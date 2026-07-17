@@ -1,13 +1,63 @@
 export const brand = {
-  navy: "#050A14",
-  deepBlue: "#071B33",
-  signalBlue: "#1F7BFF",
+  navy: "#09090A",
+  deepBlue: "#141416",
+  signalBlue: "#315CFF",
   steelBlue: "#5C7FA6",
   yellow: "#FFD84A",
-  red: "#E13B33",
-  white: "#F5F7FA",
-  muted: "#AAB4C2",
-  ink: "#020610",
+  red: "#FF3138",
+  white: "#F3EFE7",
+  paper: "#F3EFE7",
+  muted: "#B8B1A7",
+  ink: "#050506",
+};
+
+export type GenreTheme = {
+  key: string;
+  label: string;
+  accent: string;
+  accentEnd: string;
+};
+
+const genreThemes: Record<string, GenreTheme> = {
+  world: {
+    key: "world", label: "WORLD", accent: "#FF3138", accentEnd: "#C90F28",
+  },
+  technology: {
+    key: "technology", label: "TECHNOLOGY", accent: "#315CFF", accentEnd: "#7B35E8",
+  },
+  finance: {
+    key: "finance", label: "FINANCE", accent: "#00BFA6", accentEnd: "#087A65",
+  },
+  culture: {
+    key: "culture", label: "CULTURE", accent: "#FF4F91", accentEnd: "#D33867",
+  },
+  climate: {
+    key: "climate", label: "CLIMATE", accent: "#30C77B", accentEnd: "#0D8D87",
+  },
+  general: {
+    key: "general", label: "NEWS", accent: "#FF3138", accentEnd: "#D8192D",
+  },
+};
+
+const genreAliases: Record<string, string> = {
+  tech: "technology", ai: "technology", science: "technology",
+  business: "finance", markets: "finance", economy: "finance",
+  economics: "finance",
+  politics: "world", geopolitics: "world", global: "world", international: "world",
+  entertainment: "culture", internet_culture: "culture", media: "culture",
+  environment: "climate", energy: "climate",
+};
+
+export const genreTheme = (category?: string): GenreTheme => {
+  const normalized = String(category ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z]+/g, "_");
+  return (
+    genreThemes[normalized] ??
+    genreThemes[genreAliases[normalized]] ??
+    genreThemes.general
+  );
 };
 
 export const layout = {
@@ -35,4 +85,5 @@ export const fullAnchorCrop = {
 export const typography = {
   serif: 'Georgia, "Times New Roman", serif',
   sans: '"Avenir Next", "Helvetica Neue", Helvetica, sans-serif',
+  mono: '"SF Mono", "JetBrains Mono", Menlo, monospace',
 };

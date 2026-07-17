@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStudio } from '../state/useStudio';
+import { BrandMark } from './BrandMark';
 
 export type Page = 'command' | 'episodes' | 'sources' | 'inbox' | 'jobs' | 'settings';
 
@@ -28,13 +29,8 @@ export const LeftRail: React.FC<{
 
   return (
     <aside className="left-rail">
-      {/* Logo */}
-      <div className="logo-mark">
-        Synth<span>Post</span>
-        <br />
-        Studio
-      </div>
-      <div className="logo-sub">local newsroom editor</div>
+      <BrandMark studio />
+      <div className="logo-sub">The signal. The story.</div>
 
       {/* Navigation */}
       <nav className="nav">

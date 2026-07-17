@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="118" fill="#050a11"/>
-  <path d="M72 116h220v76H150v50h122c90 0 152 52 152 134 0 25-5 47-15 68h-92c16-18 24-39 24-63 0-40-27-63-75-63H72V116Z" fill="#f3f6fa"/>
-  <path d="M292 116h148v76H292z" fill="#e41c23"/>
-  <circle cx="379" cy="271" r="43" fill="#4ec97a"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="SynthPost">
+  <rect width="512" height="512" rx="112" fill="#F3EFE7"/>
+  <circle cx="256" cy="256" r="194" fill="#070708"/>
+  <text x="246" y="357" fill="#F3EFE7" font-family="Georgia, 'Times New Roman', serif" font-size="306" font-weight="700" text-anchor="middle">S</text>
+  <circle cx="432" cy="428" r="19" fill="#FF3138"/>
 </svg>

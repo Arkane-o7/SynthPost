@@ -1,6 +1,7 @@
 import React from "react";
 import { useStudio } from "../state/useStudio";
 import type { Page } from "./LeftRail";
+import { BrandMark } from './BrandMark';
 
 const MOBILE_NAV: { key: Page; label: string; icon: string }[] = [
   { key: "command", label: "Studio", icon: "◉" },
@@ -32,9 +33,7 @@ export const MobileChrome: React.FC<{
     <>
       <header className="mobile-command-header">
         <div className="mobile-command-brand">
-          <div className="mobile-logo" aria-label="SynthPost Studio">
-            S<span>P</span>
-          </div>
+          <div className="mobile-logo"><BrandMark compact /></div>
           <div className="mobile-machine-state">
             <span className="machine-live-dot" aria-hidden="true" />
             <div>

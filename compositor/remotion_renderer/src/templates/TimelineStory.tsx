@@ -927,6 +927,7 @@ export const TimelineStory: React.FC<StoryProps> = (props) => {
             sourceLabel={props.sourceLabel}
             sourceDate={props.sourceDate}
             logo={props.logo}
+            category={props.category}
           />
         </DesignCanvas>
       </div>

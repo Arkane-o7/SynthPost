@@ -2,6 +2,7 @@ import React from 'react';
 import type { StoryCandidate } from '../contracts';
 import { useStudio } from '../state/useStudio';
 import { StatusBadge } from './StatusBadge';
+import { genreStyle, genreTheme } from '../brand/identity';
 
 export const EpisodeHeader: React.FC<{
   story?: StoryCandidate | null;
@@ -15,7 +16,11 @@ export const EpisodeHeader: React.FC<{
   );
 
   return (
-    <div className="episode-header">
+    <div className="episode-header" style={genreStyle(story?.category)}>
+      <div className="episode-genre-ribbon" aria-hidden="true">
+        <span>{genreTheme(story?.category).label}</span>
+        <b>The signal. The story.</b>
+      </div>
       <div className="episode-breadcrumb">
         <span>{project?.title ?? 'No project'}</span>
         <span className="sep">›</span>

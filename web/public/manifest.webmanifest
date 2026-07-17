@@ -4,8 +4,8 @@
   "description": "Remote command, review, and render control for the SynthPost production laptop.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#03070b",
-  "theme_color": "#050a11",
+  "background_color": "#050506",
+  "theme_color": "#050506",
   "icons": [
     {
       "src": "/synthpost-icon.svg",

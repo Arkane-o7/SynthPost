@@ -124,6 +124,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 - [Configuration](docs/CONFIGURATION.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Brand system](docs/BRAND_SYSTEM.md)
 - [Contributing](CONTRIBUTING.md)
 - [Avatar Engine](avatar-engine/README.md)
 
