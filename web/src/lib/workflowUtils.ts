@@ -150,7 +150,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Generate or write a script",
         description:
-          "Use the configured hosted AI provider to generate a broadcast script, or write one manually from the research pack.",
+          "Use the configured structured AI provider to generate a broadcast script, or write one manually from the research pack.",
         ctaLabel: "Generate Script",
         ctaType: "api",
         stageKey: "script",
@@ -160,7 +160,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Script generation is running",
         description:
-          "SynthPost is waiting for the hosted structured script generator. Provider failures are reported directly and never fall back to a local model.",
+          "SynthPost is waiting for the configured structured script generator. Provider failures are reported directly and never switch providers implicitly.",
         ctaLabel: "Open Script",
         ctaType: "navigate",
         stageKey: "script",

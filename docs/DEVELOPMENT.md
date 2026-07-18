@@ -90,6 +90,14 @@ Place domain/persistence contracts in `models.py`, use-case behavior in its feat
 
 For structured LLMs, implement `LLMProvider.generate_json()`, isolate credentials/timeouts/errors in the adapter, add a no-network availability check, and register it in `configured_provider()`. For visual discovery, implement `VisualSource.available()`/`search()` and register it in `configured_visual_sources()`. Normalize provider payloads before they reach domain services and provide an offline test double.
 
+The Codex provider is the reference for a subprocess-backed adapter. Keep its
+working directory empty, child environment credential-free, output
+schema-constrained, timeout bounded, tool features disabled, and outer macOS
+process sandbox fail-closed. Any exceptional exit must terminate and drain its
+entire process group. Keep tests fully mocked. Do not add a live Codex run to
+`make test`; use an explicit manual smoke invocation when checking account
+authentication or model availability.
+
 ## Adding a template
 
 Add the Remotion component and registry entry under `compositor/remotion_renderer/src/`, then add the matching Python template capability/validation under `pipeline/timeline/`. Update the renderer TypeScript types only if the contract changes. Add a focused render/type test and verify preview plus production dimensions.

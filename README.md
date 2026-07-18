@@ -6,7 +6,7 @@ SynthPost is a local-first, AI-assisted newsroom and video-production system for
 
 - Projects, episodes, RSS/Atom sources, discovery, ranking, and assignment desk
 - Multi-source research packs with evidence and claims
-- Narrative-first Groq/Gemini script generation with continuity validation, non-rewriting segmentation, manual revisions, and approvals
+- Narrative-first structured generation through local Codex/ChatGPT auth or direct Groq/Gemini APIs, with continuity validation, non-rewriting segmentation, manual revisions, and approvals
 - Local Kokoro narration with sample-exact beat/section timing shared by timeline, lip sync, and rendering
 - Episode-isolated media inbox, SearXNG image/video discovery, rights review, and safe fallbacks
 - Editable, validated multi-template timelines
@@ -37,7 +37,10 @@ make doctor
 make dev
 ```
 
-Open `http://127.0.0.1:5173`. Add the API key for the selected LLM provider in `.env`; use `SYNTHPOST_LLM_PROVIDER=mock` only for tests and smoke/demo runs.
+Open `http://127.0.0.1:5173`. For the local ChatGPT-backed path, run
+`codex login` and set `SYNTHPOST_LLM_PROVIDER=codex`; no model API key is
+needed. Groq and Gemini still use their provider keys. Use
+`SYNTHPOST_LLM_PROVIDER=mock` only for tests and smoke/demo runs.
 
 `make dev` starts FastAPI on port 8765, the configured editorial/media/render process pools, and Vite on port 5173. The default capacity is three workers per lane, so independent projects can research, acquire media, render, and assemble concurrently. Tune `SYNTHPOST_EDITORIAL_WORKERS`, `SYNTHPOST_MEDIA_WORKERS`, and `SYNTHPOST_RENDER_WORKERS` in `.env`, then confirm the effective capacity with `make doctor`.
 

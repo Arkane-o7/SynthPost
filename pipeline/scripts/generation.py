@@ -140,13 +140,14 @@ def reconcile_script_revision_workflows(repository) -> int:
     return repaired
 
 
-SCRIPT_PROMPT_VERSION = "synthpost.script.v5"
-LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v4"
+SCRIPT_PROMPT_VERSION = "synthpost.script.v6"
+LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v5"
 HEADLINE_PROMPT_VERSION = "synthpost.headline-editor.v2"
-NARRATIVE_BRIEF_PROMPT_VERSION = "synthpost.narrative-brief.v3"
-NARRATIVE_DRAFT_PROMPT_VERSION = "synthpost.narrative-draft.v3"
-NARRATIVE_REPAIR_PROMPT_VERSION = "synthpost.narrative-repair.v3"
+NARRATIVE_BRIEF_PROMPT_VERSION = "synthpost.narrative-brief.v4"
+NARRATIVE_DRAFT_PROMPT_VERSION = "synthpost.narrative-draft.v4"
+NARRATIVE_REPAIR_PROMPT_VERSION = "synthpost.narrative-repair.v4"
 NARRATIVE_SEGMENT_PROMPT_VERSION = "synthpost.narrative-segmentation.v1"
+FULL_ARTICLE_DOCUMENT_LIMIT = 2
 
 
 def target_word_count(duration_seconds: int) -> int:
@@ -198,7 +199,14 @@ def section_word_targets(duration_seconds: int) -> dict[str, int]:
 
 
 def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
-    """Keep grounded evidence while excluding bulky scraped page boilerplate."""
+    """Keep full top-ranked articles plus compact grounding for other sources.
+
+    Research documents are stored in editorial rank order: the selected lead
+    first, followed by diversified related coverage ordered by relevance. The
+    writer gets the complete extracted text for the first two documents so it
+    can follow each article's structure and context. Lower-ranked documents stay
+    metadata-only to avoid multiplying prompt size without losing provenance.
+    """
 
     return {
         "story_id": pack.get("story_id"),
@@ -206,18 +214,25 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
         "research_queries": pack.get("research_queries", []),
         "documents": [
             {
-                key: document.get(key)
-                for key in (
-                    "document_id",
-                    "title",
-                    "publisher",
-                    "published_at",
-                    "discovery_method",
-                    "relevance_score",
-                    "extraction_status",
-                )
+                **{
+                    key: document.get(key)
+                    for key in (
+                        "document_id",
+                        "title",
+                        "publisher",
+                        "published_at",
+                        "discovery_method",
+                        "relevance_score",
+                        "extraction_status",
+                    )
+                },
+                **(
+                    {"content_text": str(document.get("content_text") or "")}
+                    if index < FULL_ARTICLE_DOCUMENT_LIMIT
+                    else {}
+                ),
             }
-            for document in pack.get("documents", [])[:12]
+            for index, document in enumerate(pack.get("documents", [])[:12])
         ],
         # Keep the grounding fields the writer actually consumes. Notes repeat
         # claim text and can push Groq free/on-demand requests over their TPM cap.
@@ -761,7 +776,14 @@ def narrative_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
     }
     relevant_claims: list[dict[str, Any]] = []
     relevant_evidence_ids: set[str] = set()
-    relevant_document_ids: set[str] = set()
+    # The top-ranked articles are the narrative writer's primary context, even
+    # when deterministic lexical filtering finds too little overlap in their
+    # first extracted claims. Always retain both complete bodies in the prompt.
+    relevant_document_ids: set[str] = {
+        str(document.get("document_id"))
+        for document in compact.get("documents", [])[:FULL_ARTICLE_DOCUMENT_LIMIT]
+        if document.get("document_id")
+    }
     relevant_context: list[str] = []
     for index, claim in enumerate(claims):
         evidence_ids = [str(value) for value in claim.get("evidence_ids", [])]

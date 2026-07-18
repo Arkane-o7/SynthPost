@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -91,6 +92,77 @@ def _kokoro(settings) -> DiagnosticCheck:
         "available",
         "feature",
         f"{version} via {interpreter}",
+    )
+
+
+def _codex(settings) -> DiagnosticCheck:
+    binary = settings.llm.codex_binary
+    path = shutil.which(binary)
+    if not path:
+        return DiagnosticCheck(
+            "codex",
+            "missing",
+            "feature",
+            f"Codex CLI not found at {binary!r}",
+            "Install Codex or set SYNTHPOST_CODEX_BINARY.",
+        )
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key
+        in {
+            "CODEX_HOME",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "LOGNAME",
+            "PATH",
+            "SHELL",
+            "TMPDIR",
+            "USER",
+        }
+    }
+    try:
+        result = subprocess.run(
+            [path, "login", "status"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+            env=environment,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return DiagnosticCheck(
+            "codex",
+            "misconfigured",
+            "feature",
+            f"Could not check Codex login: {type(exc).__name__}",
+            "Run `codex login`, then retry `make doctor`.",
+        )
+    status = f"{result.stdout}\n{result.stderr}".strip()
+    if result.returncode != 0 or "logged in" not in status.casefold():
+        return DiagnosticCheck(
+            "codex",
+            "misconfigured",
+            "feature",
+            "Codex CLI is installed but has no usable saved login.",
+            "Run `codex login` and choose your ChatGPT account.",
+        )
+    sandbox = shutil.which(settings.llm.codex_sandbox_binary)
+    if not sandbox:
+        return DiagnosticCheck(
+            "codex_sandbox",
+            "missing",
+            "feature",
+            f"sandbox-exec not found at {settings.llm.codex_sandbox_binary!r}",
+            "Set SYNTHPOST_CODEX_SANDBOX_BINARY to /usr/bin/sandbox-exec.",
+        )
+    mode = "ChatGPT" if "chatgpt" in status.casefold() else "configured account"
+    return DiagnosticCheck(
+        "codex",
+        "available",
+        "feature",
+        f"{Path(path).name} authenticated with {mode}; model={settings.llm.codex_model}",
     )
 
 
@@ -212,6 +284,8 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
             ),
         ]
     )
+    if settings.llm.provider == "codex":
+        checks.append(_codex(settings))
     checks.append(_kokoro(settings))
     rhubarb = PROJECT_ROOT / "Rhubarb-Lip-Sync-1.14.0-macOS" / "rhubarb"
     checks.append(

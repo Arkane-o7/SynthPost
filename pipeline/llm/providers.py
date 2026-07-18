@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
+import signal
+import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Protocol
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -17,6 +23,34 @@ try:
 except ImportError:
     genai = None
     types = None
+
+
+_CODEX_DISABLED_FEATURES = (
+    "plugins",
+    "remote_plugin",
+    "plugin_sharing",
+    "shell_tool",
+    "unified_exec",
+    "shell_snapshot",
+    "browser_use",
+    "browser_use_external",
+    "browser_use_full_cdp_access",
+    "in_app_browser",
+    "computer_use",
+    "image_generation",
+    "apps",
+    "workspace_dependencies",
+    "code_mode_host",
+    "code_mode",
+    "code_mode_only",
+    "collaboration_modes",
+    "multi_agent",
+    "multi_agent_v2",
+    "enable_fanout",
+    "artifact",
+    "goals",
+    "default_mode_request_user_input",
+)
 
 
 class LLMProvider(Protocol):
@@ -39,6 +73,10 @@ class ProviderRateLimitError(ValueError):
         self.retry_after_seconds = max(0.0, retry_after_seconds)
 
 
+class ProviderConfigurationError(ValueError):
+    """A deterministic provider setup failure that retries cannot repair."""
+
+
 @dataclass(frozen=True)
 class ProviderAvailability:
     name: str
@@ -54,6 +92,30 @@ def provider_availability(provider_name: str | None = None) -> ProviderAvailabil
     settings = app_config.get_settings().llm
     if name == "mock":
         return ProviderAvailability(name, True, "deterministic offline provider")
+    if name == "codex":
+        binary = settings.codex_binary
+        resolved = shutil.which(binary)
+        sandbox = shutil.which(settings.codex_sandbox_binary)
+        if not resolved:
+            return ProviderAvailability(
+                name,
+                False,
+                (
+                    f"Codex CLI not found or not executable at {binary!r}; install "
+                    "Codex or set SYNTHPOST_CODEX_BINARY"
+                ),
+            )
+        if not sandbox:
+            return ProviderAvailability(
+                name,
+                False,
+                "macOS sandbox-exec is required for the Codex provider",
+            )
+        return ProviderAvailability(
+            name,
+            True,
+            f"Codex CLI available at {resolved}; saved ChatGPT login is checked at generation time",
+        )
     if name == "gemini":
         if genai is None:
             return ProviderAvailability(name, False, "google-genai is not installed")
@@ -95,6 +157,245 @@ def groq_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
                 groq_strict_schema(value) for value in normalized[keyword]
             ]
     return normalized
+
+
+def _codex_environment() -> dict[str, str]:
+    """Build a minimal child environment without provider keys or app secrets."""
+
+    allowed = {
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "SHELL",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "TMPDIR",
+        "USER",
+    }
+    environment = {key: value for key, value in os.environ.items() if key in allowed}
+    if codex_home := os.environ.get("CODEX_HOME"):
+        environment["CODEX_HOME"] = codex_home
+    environment["NO_COLOR"] = "1"
+    return environment
+
+
+def _run_codex_command(
+    command: list[str],
+    *,
+    prompt: str,
+    timeout_seconds: float,
+    environment: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """Run Codex in its own process group so timeouts also stop child commands."""
+
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(prompt, timeout=timeout_seconds)
+    except BaseException as exc:
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+        if isinstance(exc, subprocess.TimeoutExpired):
+            raise TimeoutError(
+                f"Codex generation exceeded {timeout_seconds:g} seconds"
+            ) from exc
+        raise
+    return subprocess.CompletedProcess(
+        command,
+        process.returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def _codex_failure_message(result: subprocess.CompletedProcess[str]) -> str:
+    combined = "\n".join(
+        value.strip() for value in (result.stderr, result.stdout) if value.strip()
+    )
+    summary = safe_text(combined or f"Codex exited with status {result.returncode}")
+    return summary[-2000:]
+
+
+def _codex_sandbox_profile(binary: str) -> str:
+    escaped = binary.replace("\\", "\\\\").replace('"', '\\"')
+    return (
+        "(version 1) "
+        "(allow default) "
+        "(deny process-exec) "
+        "(deny process-fork) "
+        f'(allow process-exec (literal "{escaped}"))'
+    )
+
+
+@dataclass
+class CodexProvider:
+    """Structured local provider backed by an authenticated Codex CLI session."""
+
+    binary: str = field(
+        default_factory=lambda: app_config.get_settings().llm.codex_binary
+    )
+    sandbox_binary: str = field(
+        default_factory=lambda: app_config.get_settings().llm.codex_sandbox_binary
+    )
+    model: str = field(
+        default_factory=lambda: app_config.get_settings().llm.codex_model
+    )
+    reasoning_effort: str = field(
+        default_factory=lambda: app_config.get_settings().llm.codex_reasoning_effort
+    )
+    timeout_seconds: float = field(
+        default_factory=lambda: app_config.get_settings().llm.codex_timeout_seconds
+    )
+    name: str = "codex"
+    last_model: str | None = None
+
+    def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
+    ) -> dict[str, Any]:
+        del temperature  # Codex controls sampling through its selected model profile.
+        resolved = shutil.which(self.binary)
+        if not resolved:
+            raise ProviderConfigurationError(
+                f"Codex CLI not found or not executable at {self.binary!r}; install Codex or set "
+                "SYNTHPOST_CODEX_BINARY"
+            )
+        sandbox = shutil.which(self.sandbox_binary)
+        if not sandbox:
+            raise ProviderConfigurationError(
+                "macOS sandbox-exec is required for the Codex provider"
+            )
+
+        self.last_model = self.model
+        strict_schema = groq_strict_schema(schema)
+        instruction = (
+            "Act only as SynthPost's structured newsroom generation engine. "
+            "Do not use tools, inspect files, browse, execute commands, or modify anything. "
+            "Use only the supplied task text as source material. Return exactly one JSON "
+            "object that conforms to the attached output schema.\n\n"
+            "SYNTHPOST TASK\n"
+            f"{prompt}"
+        )
+        with tempfile.TemporaryDirectory(prefix="synthpost-codex-") as directory:
+            working_directory = Path(directory)
+            schema_path = working_directory / "response.schema.json"
+            output_path = working_directory / "response.json"
+            schema_path.write_text(
+                json.dumps(strict_schema, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            command = [
+                sandbox,
+                "-p",
+                _codex_sandbox_profile(resolved),
+                resolved,
+                "exec",
+                "--ephemeral",
+                "--ignore-user-config",
+                "--ignore-rules",
+            ]
+            for feature in _CODEX_DISABLED_FEATURES:
+                command.extend(("--disable", feature))
+            command.extend(
+                [
+                    "--skip-git-repo-check",
+                    "--sandbox",
+                    "read-only",
+                    "--cd",
+                    str(working_directory),
+                    "--model",
+                    self.model,
+                    "--config",
+                    f'model_reasoning_effort="{self.reasoning_effort}"',
+                    "--config",
+                    'web_search="disabled"',
+                    "--config",
+                    "agents.max_threads=1",
+                    "--config",
+                    "agents.max_depth=0",
+                    "--output-schema",
+                    str(schema_path),
+                    "--output-last-message",
+                    str(output_path),
+                    "--color",
+                    "never",
+                    "-",
+                ]
+            )
+            try:
+                result = _run_codex_command(
+                    command,
+                    prompt=instruction,
+                    timeout_seconds=self.timeout_seconds,
+                    environment=_codex_environment(),
+                )
+            except PermissionError as exc:
+                raise ProviderConfigurationError(
+                    f"Codex or sandbox executable is not runnable: {safe_text(exc)}"
+                ) from exc
+            if result.returncode != 0:
+                message = _codex_failure_message(result)
+                if any(
+                    marker in message.casefold()
+                    for marker in (
+                        "429",
+                        "rate limit",
+                        "usage limit",
+                        "credit",
+                        "too many requests",
+                    )
+                ):
+                    raise ProviderRateLimitError(
+                        f"Codex usage limit: {message}",
+                        retry_after_seconds=60.0,
+                    )
+                if "not logged in" in message.casefold():
+                    raise ProviderConfigurationError(
+                        "Codex is not authenticated. Run `codex login` with your "
+                        "ChatGPT account, then restart SynthPost."
+                    )
+                if any(
+                    marker in message.casefold()
+                    for marker in (
+                        "unknown model",
+                        "invalid model",
+                        "model is not supported",
+                        "model not found",
+                        "unknown feature",
+                        "operation not permitted",
+                    )
+                ):
+                    raise ProviderConfigurationError(
+                        f"Codex configuration failed: {message}"
+                    )
+                raise ValueError(f"Codex generation failed: {message}")
+            if not output_path.is_file():
+                raise ValueError(
+                    "Codex completed without writing a structured response"
+                )
+            return parse_json_object(output_path.read_text(encoding="utf-8"))
 
 
 @dataclass
@@ -777,6 +1078,8 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
     provider = (provider_name or app_config.get_settings().llm.provider).strip().lower()
     if provider == "mock":
         return MockProvider()
+    if provider == "codex":
+        return CodexProvider()
     if provider == "gemini":
         return GeminiProvider()
     if provider == "groq":
@@ -785,7 +1088,7 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
         return HostedFallbackProvider(GroqProvider(), GeminiProvider())
     raise ValueError(
         f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}. "
-        "Use groq, gemini, or the explicit hosted_fallback option."
+        "Use codex, groq, gemini, or the explicit hosted_fallback option."
     )
 
 
@@ -813,6 +1116,7 @@ def structured_generate(
     *,
     max_retries: int = 2,
 ) -> tuple[Any, list[dict[str, Any]]]:
+    max_retries = min(max_retries, app_config.get_settings().llm.max_retries)
     attempts: list[dict[str, Any]] = []
     current_prompt = prompt
     for attempt in range(max_retries + 1):
@@ -852,6 +1156,20 @@ def structured_generate(
                 time.sleep(min(65.0, exc.retry_after_seconds + 1.0))
                 current_prompt = prompt
                 continue
+        except ProviderConfigurationError as exc:
+            attempts.append(
+                {
+                    "attempt": attempt + 1,
+                    "ok": False,
+                    "prompt": current_prompt,
+                    "error": str(exc),
+                    "provider": getattr(provider, "last_provider", None)
+                    or provider.name,
+                    "model": getattr(provider, "last_model", None),
+                    "elapsed_seconds": round(time.time() - started, 3),
+                }
+            )
+            break
         except Exception as exc:
             failure = {
                 "attempt": attempt + 1,

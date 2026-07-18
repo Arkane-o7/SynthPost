@@ -63,6 +63,20 @@ export const SettingsPage: React.FC = () => {
         <div className="stack" style={{ gap: 8 }}>
           {[
             { label: "Provider", env: "SYNTHPOST_LLM_PROVIDER" },
+            { label: "Codex binary", env: "SYNTHPOST_CODEX_BINARY" },
+            {
+              label: "Codex sandbox",
+              env: "SYNTHPOST_CODEX_SANDBOX_BINARY",
+            },
+            { label: "Codex model", env: "SYNTHPOST_CODEX_MODEL" },
+            {
+              label: "Codex reasoning",
+              env: "SYNTHPOST_CODEX_REASONING_EFFORT",
+            },
+            {
+              label: "Codex timeout",
+              env: "SYNTHPOST_CODEX_TIMEOUT_SECONDS",
+            },
             { label: "Groq API key", env: "GROQ_API_KEY" },
             { label: "Groq model", env: "SYNTHPOST_GROQ_MODEL" },
             { label: "Gemini API key", env: "GEMINI_API_KEY" },
@@ -94,8 +108,9 @@ export const SettingsPage: React.FC = () => {
           className="validation-msg validation-warning"
           style={{ fontSize: 12 }}
         >
-          ℹ These are set via environment variables at server start. Never put
-          API keys in source files. Changes require an API/worker restart.
+          ℹ Codex uses the saved local <code>codex login</code> session; Groq
+          and Gemini use API keys. Settings are read at server/worker start, so
+          changes require a restart. Never put credentials in source files.
         </div>
       </div>
 

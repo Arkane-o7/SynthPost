@@ -36,7 +36,7 @@ flowchart LR
 | `pipeline/db/` | SQLite connection, migrations, and repository operations | `Repository` |
 | `pipeline/discovery/` | Source polling, candidate normalization, scoring, assignment desk | Candidate models and repository |
 | `pipeline/research/` | Related-source extraction, evidence, claims, research packs | `ResearchPack` |
-| `pipeline/llm/` | Structured Groq, Gemini, fallback, and deterministic mock providers | `LLMProvider`, `provider_availability()` |
+| `pipeline/llm/` | Structured Codex CLI, Groq, Gemini, fallback, and deterministic mock providers | `LLMProvider`, `provider_availability()` |
 | `pipeline/scripts/` | Script generation, validation, approval, and deterministic text shaping | `ScriptDocument` |
 | `pipeline/narration/` | Local Kokoro synthesis, versioned canonical audio, sample-exact beat alignment | `NarrationArtifact` |
 | `pipeline/visuals/` | Local/SearXNG discovery, download, broadcast-fit and rights review | `VisualSource`, `VisualCandidate` |
@@ -97,6 +97,17 @@ Do not treat episode output folders as source code. The repository ignores them 
 ## Providers and extension points
 
 Structured language providers implement `LLMProvider.generate_json()` and register in `configured_provider()`. Availability checks must not make a paid/network request. Visual sources implement `VisualSource.available()` and `VisualSource.search()` and register in `configured_visual_sources()` in deterministic precedence order. Provider adapters own credentials, timeouts, normalization, and provider-specific errors; business services own editorial policy.
+
+The `codex` adapter is a local transport over non-interactive `codex exec`.
+It reuses an existing Codex/ChatGPT login, sends the feature-owned prompt plus
+JSON Schema through stdin, and returns the same validated object as direct API
+providers. It runs from an empty temporary directory with repository
+instructions, plugins, browser/web, shell/code execution, apps, and delegation
+disabled; thread/depth caps also prevent advertised collaboration tools from
+spawning workers. On macOS, an outer `sandbox-exec` policy denies process
+execution and forking for defense in depth against prompt injection in
+untrusted news text. The provider fails closed without that OS boundary.
+Feature services do not know or care which transport produced the object.
 
 ## Where to add common features
 

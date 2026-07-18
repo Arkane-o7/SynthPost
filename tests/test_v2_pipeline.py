@@ -899,10 +899,12 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 {
                     "document_id": "doc_motor",
                     "title": "Vimag magnet-free electric motor",
+                    "content_text": "Complete lead article about Vimag's motor.",
                 },
                 {
                     "document_id": "doc_health",
                     "title": "India medical research programme",
+                    "content_text": "Complete second-ranked article body.",
                 },
             ],
             "systems": ["ai", "electric motor supply chain"],
@@ -920,7 +922,15 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             {document["document_id"] for document in projected["documents"]},
-            {"doc_motor"},
+            {"doc_motor", "doc_health"},
+        )
+        self.assertEqual(
+            projected["documents"][0]["content_text"],
+            "Complete lead article about Vimag's motor.",
+        )
+        self.assertEqual(
+            projected["documents"][1]["content_text"],
+            "Complete second-ranked article body.",
         )
         self.assertNotIn("ai", projected["systems"])
         self.assertNotIn(
@@ -2412,22 +2422,40 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertTrue(all(value > 0 for value in targets.values()))
         self.assertNotIn("outro", targets)
 
-    def test_generation_prompt_pack_excludes_scraped_document_bodies(self) -> None:
+    def test_generation_prompt_pack_includes_full_top_two_article_bodies(self) -> None:
         compact = compact_research_pack_for_prompt(
             {
                 "story_id": "story_unit",
                 "documents": [
                     {
-                        "document_id": "doc_unit",
-                        "title": "Unit source",
-                        "content_text": "large scraped article body",
-                    }
+                        "document_id": "doc_lead",
+                        "title": "Lead source",
+                        "content_text": "complete lead article body",
+                    },
+                    {
+                        "document_id": "doc_second",
+                        "title": "Second source",
+                        "content_text": "complete second article body",
+                    },
+                    {
+                        "document_id": "doc_third",
+                        "title": "Third source",
+                        "content_text": "lower-ranked article body",
+                    },
                 ],
                 "claims": [],
                 "people": ["boilerplate entity"],
             }
         )
-        self.assertNotIn("content_text", compact["documents"][0])
+        self.assertEqual(
+            compact["documents"][0]["content_text"],
+            "complete lead article body",
+        )
+        self.assertEqual(
+            compact["documents"][1]["content_text"],
+            "complete second article body",
+        )
+        self.assertNotIn("content_text", compact["documents"][2])
         self.assertNotIn("people", compact)
 
     def test_generation_prompt_pack_removes_redundant_claim_notes(self) -> None:
