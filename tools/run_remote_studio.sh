@@ -37,7 +37,11 @@ else
   TAILSCALED_BIN=""
 fi
 
-if command -v uv >/dev/null 2>&1; then
+if [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
+  # Prefer the project interpreter so the PID recorded below belongs to the
+  # actual API/supervisor process rather than to an `uv run` wrapper.
+  PYTHON_CMD=("$ROOT_DIR/.venv/bin/python")
+elif command -v uv >/dev/null 2>&1; then
   PYTHON_CMD=(uv run --python 3.11 --with-requirements requirements.txt python)
 else
   PYTHON_CMD=("${PYTHON_BIN:-python3}")
@@ -84,10 +88,90 @@ npm --prefix web run build
 
 api_pid=""
 worker_supervisor_pid=""
+
+collect_descendants() {
+  local parent_pid="$1"
+  local child_pid
+  while IFS= read -r child_pid; do
+    [[ -n "$child_pid" ]] || continue
+    PROCESS_TREE_PIDS+=("$child_pid")
+    collect_descendants "$child_pid"
+  done < <(pgrep -P "$parent_pid" 2>/dev/null || true)
+}
+
+terminate_process_tree() {
+  local root_pid="$1"
+  local pid
+  local attempt
+  [[ -n "$root_pid" ]] || return 0
+
+  # `uv run` remains alive as a wrapper around Python. Record the complete
+  # tree before signalling anything so its children cannot be orphaned when
+  # the wrapper exits first.
+  PROCESS_TREE_PIDS=("$root_pid")
+  collect_descendants "$root_pid"
+  for pid in "${PROCESS_TREE_PIDS[@]}"; do
+    kill -TERM "$pid" >/dev/null 2>&1 || true
+  done
+  for attempt in {1..50}; do
+    local any_running=0
+    for pid in "${PROCESS_TREE_PIDS[@]}"; do
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        any_running=1
+        break
+      fi
+    done
+    [[ "$any_running" -eq 0 ]] && return 0
+    sleep 0.1
+  done
+  for pid in "${PROCESS_TREE_PIDS[@]}"; do
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+reap_orphan_workers() {
+  local pid
+  local parent_pid
+  local command
+  local attempt
+  local -a orphan_pids=()
+
+  # A terminal or automation host can be killed before Bash gets a chance to
+  # run the EXIT trap. In that case the supervisor disappears but its
+  # start_new_session workers are re-parented to launchd (PID 1) and continue
+  # holding every configured slot. They cannot be supervised or shut down by
+  # the new pool, so reclaim them before starting its replacement.
+  while read -r pid parent_pid command; do
+    if [[ "$parent_pid" == "1" && "$command" == *"-m pipeline.jobs.worker"* ]]; then
+      orphan_pids+=("$pid")
+    fi
+  done < <(ps -axo pid=,ppid=,command=)
+
+  [[ "${#orphan_pids[@]}" -gt 0 ]] || return 0
+  echo "[workers] reclaiming ${#orphan_pids[@]} orphaned worker process(es)" >&2
+  for pid in "${orphan_pids[@]}"; do
+    kill -TERM "$pid" >/dev/null 2>&1 || true
+  done
+  for attempt in {1..50}; do
+    local any_running=0
+    for pid in "${orphan_pids[@]}"; do
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        any_running=1
+        break
+      fi
+    done
+    [[ "$any_running" -eq 0 ]] && return 0
+    sleep 0.1
+  done
+  for pid in "${orphan_pids[@]}"; do
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+  done
+}
+
 cleanup() {
   "${TAILSCALE_CMD[@]}" serve --https=443 off >/dev/null 2>&1 || true
-  [[ -n "$worker_supervisor_pid" ]] && kill "$worker_supervisor_pid" >/dev/null 2>&1 || true
-  [[ -n "$api_pid" ]] && kill "$api_pid" >/dev/null 2>&1 || true
+  terminate_process_tree "$worker_supervisor_pid"
+  terminate_process_tree "$api_pid"
   [[ -n "$tailscaled_pid" ]] && kill "$tailscaled_pid" >/dev/null 2>&1 || true
   for pid in "$worker_supervisor_pid" "$api_pid"; do
     [[ -n "$pid" ]] && wait "$pid" >/dev/null 2>&1 || true
@@ -95,6 +179,8 @@ cleanup() {
   rm -rf "$INSTANCE_LOCK_DIR"
 }
 trap cleanup EXIT INT TERM
+
+reap_orphan_workers
 
 "${PYTHON_CMD[@]}" -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 &
 api_pid=$!
