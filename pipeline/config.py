@@ -35,7 +35,7 @@ class StorageSettings(SettingsModel):
 
 class LLMSettings(SettingsModel):
     provider: Literal[
-        "groq", "gemini", "hosted_fallback", "groq_then_gemini", "mock"
+        "groq", "gemini", "hosted_fallback", "groq_then_gemini", "hermes", "mock"
     ] = "groq"
     request_timeout_seconds: float = Field(default=45.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=10)
@@ -64,6 +64,42 @@ class LLMSettings(SettingsModel):
             ]
             if missing:
                 return f"{', '.join(missing)} required for hosted_fallback"
+        return None
+
+
+class HermesSettings(SettingsModel):
+    """Connection and per-stage routing for the local Hermes agent runtime."""
+
+    enabled: bool = False
+    base_url: str = "http://127.0.0.1:8642"
+    api_key: str | None = None
+    request_timeout_seconds: float = Field(default=30.0, gt=0)
+    run_timeout_seconds: float = Field(default=1200.0, gt=0)
+    poll_interval_seconds: float = Field(default=0.75, gt=0, le=30)
+    max_concurrent_runs: int = Field(default=3, ge=1, le=32)
+    discovery_provider: Literal["native", "hermes"] = "native"
+    research_provider: Literal["native", "hermes"] = "native"
+    script_provider: Literal["native", "hermes"] = "native"
+    visual_provider: Literal["native", "hermes"] = "native"
+
+    @property
+    def selected_for_any_stage(self) -> bool:
+        return "hermes" in {
+            self.discovery_provider,
+            self.research_provider,
+            self.script_provider,
+            self.visual_provider,
+        }
+
+    def configuration_problem(self) -> str | None:
+        if not self.enabled and self.selected_for_any_stage:
+            return (
+                "SYNTHPOST_HERMES_ENABLED must be true when a stage provider is hermes"
+            )
+        if self.enabled and not self.api_key:
+            return "SYNTHPOST_HERMES_API_KEY is required when Hermes is enabled"
+        if not self.base_url.startswith(("http://", "https://")):
+            return "SYNTHPOST_HERMES_BASE_URL must be an http(s) URL"
         return None
 
 
@@ -169,6 +205,7 @@ class SynthPostSettings(SettingsModel):
     server: ServerSettings
     storage: StorageSettings
     llm: LLMSettings
+    hermes: HermesSettings
     search: SearchSettings
     visuals: VisualSettings
     avatar: AvatarSettings
@@ -269,6 +306,41 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 groq_max_completion_tokens=r.integer(
                     "SYNTHPOST_GROQ_MAX_COMPLETION_TOKENS", 2300
                 ),
+            ),
+            hermes=HermesSettings(
+                enabled=r.boolean("SYNTHPOST_HERMES_ENABLED", False),
+                base_url=(
+                    r.text("SYNTHPOST_HERMES_BASE_URL", "http://127.0.0.1:8642")
+                    or "http://127.0.0.1:8642"
+                ).rstrip("/"),
+                api_key=r.text(
+                    "SYNTHPOST_HERMES_API_KEY",
+                    aliases=("HERMES_API_KEY", "API_SERVER_KEY"),
+                ),
+                request_timeout_seconds=r.number(
+                    "SYNTHPOST_HERMES_REQUEST_TIMEOUT_SECONDS", 30.0
+                ),
+                run_timeout_seconds=r.number(
+                    "SYNTHPOST_HERMES_RUN_TIMEOUT_SECONDS", 1200.0
+                ),
+                poll_interval_seconds=r.number(
+                    "SYNTHPOST_HERMES_POLL_INTERVAL_SECONDS", 0.75
+                ),
+                max_concurrent_runs=r.integer(
+                    "SYNTHPOST_HERMES_MAX_CONCURRENT_RUNS", 3
+                ),
+                discovery_provider=(
+                    r.text("SYNTHPOST_DISCOVERY_PROVIDER", "native") or "native"
+                ).lower(),
+                research_provider=(
+                    r.text("SYNTHPOST_RESEARCH_PROVIDER", "native") or "native"
+                ).lower(),
+                script_provider=(
+                    r.text("SYNTHPOST_SCRIPT_PROVIDER", "native") or "native"
+                ).lower(),
+                visual_provider=(
+                    r.text("SYNTHPOST_VISUAL_PLANNER_PROVIDER", "native") or "native"
+                ).lower(),
             ),
             search=SearchSettings(
                 searxng_url=r.text("SYNTHPOST_SEARXNG_URL"),
@@ -430,6 +502,8 @@ def get_settings() -> SynthPostSettings:
 def validate_startup(*, require_provider_credentials: bool = False) -> SynthPostSettings:
     settings = get_settings()
     if require_provider_credentials and (problem := settings.llm.provider_problem()):
+        raise ConfigurationError(problem)
+    if problem := settings.hermes.configuration_problem():
         raise ConfigurationError(problem)
     return settings
 

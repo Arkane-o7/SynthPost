@@ -53,7 +53,7 @@ from pipeline.models import (
     TimelinePlan,
     TimelineStatus,
 )
-from pipeline.observability import LogContext, format_event
+from pipeline.observability import LogContext, format_event, safe_text
 from pipeline.scripts.generation import (
     approve_script,
     begin_script_generation,
@@ -172,7 +172,8 @@ async def value_error_handler(request: Request, exc: ValueError):
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    jobs = config.get_settings().jobs
+    settings = config.get_settings()
+    jobs = settings.jobs
     return {
         "ok": True,
         "name": "SynthPost Studio",
@@ -182,7 +183,52 @@ def health() -> dict[str, Any]:
             "media": jobs.media_workers,
             "render": jobs.render_workers,
         },
+        "newsroom_providers": {
+            "discovery": settings.hermes.discovery_provider,
+            "research": settings.hermes.research_provider,
+            "script": settings.hermes.script_provider,
+            "visuals": settings.hermes.visual_provider,
+        },
     }
+
+
+@app.get("/api/hermes/status")
+def hermes_status() -> dict[str, Any]:
+    settings = config.get_settings().hermes
+    base = {
+        "enabled": settings.enabled,
+        "configured": not bool(settings.configuration_problem()),
+        "base_url": settings.base_url,
+        "providers": {
+            "discovery": settings.discovery_provider,
+            "research": settings.research_provider,
+            "script": settings.script_provider,
+            "visuals": settings.visual_provider,
+        },
+        "available": False,
+        "model": None,
+        "features": {},
+        "error": settings.configuration_problem(),
+    }
+    if not settings.enabled or settings.configuration_problem():
+        return base
+    try:
+        from pipeline.agents.hermes import HermesClient
+
+        client = HermesClient(request_timeout_seconds=2.0)
+        health_result = client.health()
+        capabilities = client.capabilities()
+        base.update(
+            {
+                "available": health_result.get("status") == "ok",
+                "model": capabilities.get("model") or "hermes-agent",
+                "features": capabilities.get("features") or {},
+                "error": None,
+            }
+        )
+    except Exception as exc:
+        base["error"] = safe_text(str(exc))
+    return base
 
 
 @app.get("/api/templates")

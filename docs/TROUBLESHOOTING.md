@@ -43,6 +43,21 @@ Jobs for the same story intentionally wait for one another, and episode assembly
 - Increase `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` only after confirming normal connectivity.
 - Use `SYNTHPOST_LLM_PROVIDER=mock` solely to prove the offline pipeline path.
 
+## Hermes newsroom failures
+
+- `make doctor` must report both the Runs API and the enabled newsroom toolsets.
+- Start the managed gateway with `hermes gateway start`; use `hermes gateway run`
+  only when no supervised gateway is active.
+- A 401/403 means `SYNTHPOST_HERMES_API_KEY` does not match Hermes's
+  `API_SERVER_KEY`. Rotate both without printing either value.
+- A toolset safety error means the Hermes `api_server` platform exposes a tool
+  outside `web`, `browser`, `vision`, and optional `video`. Run `hermes tools`
+  and restrict that platform; do not bypass this guard.
+- A run waiting for approval indicates a research tool was not pre-approved in
+  the dedicated API profile. SynthPost fails the job instead of hanging.
+- Switch any individual `SYNTHPOST_*_PROVIDER` back to `native` and restart API
+  plus workers to roll back that stage without changing stored projects.
+
 ## SearXNG/search issues
 
 ```bash

@@ -49,6 +49,17 @@ type VisualPatch = Partial<
 export const api = {
   health: () =>
     request<{ ok: boolean; name: string; version: string }>("/api/health"),
+  hermesStatus: () =>
+    request<{
+      enabled: boolean;
+      configured: boolean;
+      available: boolean;
+      base_url: string;
+      model: string | null;
+      providers: Record<"discovery" | "research" | "script" | "visuals", string>;
+      features: Record<string, boolean>;
+      error: string | null;
+    }>("/api/hermes/status"),
   templates: () => request<Array<Record<string, unknown>>>("/api/templates"),
   editorialCharter: () => request<Record<string, unknown>>("/api/editorial/charter"),
 

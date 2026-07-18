@@ -43,6 +43,19 @@ Open `http://127.0.0.1:5173`. Add the API key for the selected LLM provider in `
 
 Run components separately with `make backend`, `make workers`, `make worker LANE=render SLOT=1`, and `make web`. SynthPost serializes stages that target the same story and prevents episode assembly from overlapping work in that episode; unrelated projects and episodes remain parallel.
 
+### Optional Hermes newsroom engine
+
+SynthPost can delegate story discovery, multi-source research, narrative-first
+script generation, and image/video lead aggregation to a separately running
+local Hermes Agent gateway. SynthPost still owns validation, workflow state,
+approval, media acquisition, rights review, timing, and rendering.
+
+Start Hermes with `hermes gateway start` (or `hermes gateway run` in a foreground
+terminal), copy its `API_SERVER_KEY` into the ignored
+SynthPost `.env` as `SYNTHPOST_HERMES_API_KEY`, enable Hermes, and switch only
+the desired stage providers from `native` to `hermes`. Run `make doctor` and
+check the Hermes card in Studio Settings. See [Hermes integration](docs/HERMES.md).
+
 ## Basic workflow
 
 1. Create a project and episode.
@@ -125,6 +138,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 - [Development](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Contributing](CONTRIBUTING.md)
+- [Hermes integration](docs/HERMES.md)
 - [Avatar Engine](avatar-engine/README.md)
 
 ## Safety and compatibility

@@ -26,15 +26,27 @@ The queue-backed production pipeline contains nine registered stages. `pipeline/
 
 Sources are read from SQLite and fetched concurrently. URLs are canonicalized, duplicates clustered, deterministic scores calculated, and the optional assignment desk adds editorial ranking. Source failures update source health and remain visible. Run through the Studio or enqueue via `POST /api/discovery/start`.
 
+With `SYNTHPOST_DISCOVERY_PROVIDER=hermes`, Hermes searches for distinct current
+events and returns sourced ideas. SynthPost validates public URLs, reconstructs
+ordinary candidates, and applies the same deterministic assignment policy.
+
 ### Research
 
 The selected story remains the lead document. Related coverage is collected through SearXNG when configured, extracted, normalized, de-duplicated, and turned into evidence/claims. Network/provider errors are not converted into empty success. The result is independently testable through `build_research_pack(repository, story_id)`.
+
+With `SYNTHPOST_RESEARCH_PROVIDER=hermes`, Hermes must return source documents,
+evidence excerpts, and claims linked to those evidence records. Unlinked claims
+are discarded, and empty documents/evidence/claims fail before workflow advance.
 
 ### Script
 
 Script generation is narrative-first. The configured structured LLM provider first produces a story-level brief that allocates evidence across one progressive arc, then writes the complete uninterrupted narration in a single response. A deterministic quality gate rejects repeated scene openings, near-duplicate beats, repeated phrases, and obvious sentence-start grammar failures; a failed draft receives one whole-narrative continuity repair and must pass the gate afterward.
 
 Only accepted narration is segmented. The segmentation response may reference stable narration beat IDs exactly once and in order, but cannot return or rewrite narration text. Each compact narration beat must link to at least one supported research claim. Section metadata, visual queries, template hints, lower thirds, and chyrons are derived after this boundary. The resulting sections are converted into the existing `ScriptDocument`, so visuals, timelines, manifests, and legacy stored scripts remain compatible. Every provider stage and normalization is recorded as a versioned generation audit.
+
+With `SYNTHPOST_SCRIPT_PROVIDER=hermes`, these same narrative-first stages and
+validators execute through isolated Hermes runs. The contract and approval flow
+do not change.
 
 Generating or manually saving a new script revision returns the story to `script_review`, invalidating downstream workflow state without deleting its audit history. This also applies to rendered and completed productions: regeneration enters `script_generating` as soon as the job is queued, reopens the episode as `in_progress`, and keeps the Script workspace focused. The previous final video remains available as a historical output. After approving the new script, the editor proceeds through visuals, timeline, preview, render, and assembly again. Only the newest script and timeline revisions can cross production approval boundaries, so an older approved revision cannot be rendered after a newer draft is saved. Script edits and approval are blocked while generation is active to prevent competing revisions.
 
@@ -48,7 +60,13 @@ Deterministic unit tests can request a synthetic test WAV, but that mode is reco
 
 ### Visual discovery and review
 
-Sources run in registry order: the episode-isolated media inbox, then SearXNG if available. Downloaded media is probed for actual type, size, aspect, audio, and broadcast fit. A repeated result can be associated with every relevant section, but it is stored and downloaded only once. Re-searching or rescanning preserves acquired media and editor decisions; replacing or reacquiring the bytes of a local file deliberately clears stale approval and returns that asset to review. Same-named uploads and inbox files receive collision-safe destinations instead of overwriting one another.
+Sources run in registry order: the episode-isolated media inbox, optional Hermes
+aggregation, then SearXNG if available. Downloaded media is probed for actual type, size, aspect, audio, and broadcast fit. A repeated result can be associated with every relevant section, but it is stored and downloaded only once. Re-searching or rescanning preserves acquired media and editor decisions; replacing or reacquiring the bytes of a local file deliberately clears stale approval and returns that asset to review. Same-named uploads and inbox files receive collision-safe destinations instead of overwriting one another.
+
+With `SYNTHPOST_VISUAL_PLANNER_PROVIDER=hermes`, Hermes plans grounded queries
+and returns real source-page image/video leads. SynthPost still performs every
+download, media probe, broadcast-fit decision, rights classification, and
+editorial approval.
 
 Search results do not establish rights or content cleanliness. Newly acquired files remain `needs_review` until an editor approves them. A technically eligible local suggestion may be selected automatically, with a timeline warning, because visual approval is optional. Manual approval records the editorial rights and content-review decision and pins that choice above suggestions; the most recently approved candidate wins when an editor changes the pin. Yellow assets require manual approval to be pinned. An explicit manual override reclassifies a red candidate to yellow/manual-approved and remains visible in its metadata. Rejected or blocked assets never render.
 

@@ -88,7 +88,7 @@ Place domain/persistence contracts in `models.py`, use-case behavior in its feat
 
 ## Adding a provider
 
-For structured LLMs, implement `LLMProvider.generate_json()`, isolate credentials/timeouts/errors in the adapter, add a no-network availability check, and register it in `configured_provider()`. For visual discovery, implement `VisualSource.available()`/`search()` and register it in `configured_visual_sources()`. Normalize provider payloads before they reach domain services and provide an offline test double.
+For structured LLMs, implement `LLMProvider.generate_json()`, isolate credentials/timeouts/errors in the adapter, add a no-network availability check, and register it in `configured_provider()`. For visual discovery, implement `VisualSource.available()`/`search()` and register it in `configured_visual_sources()`. Normalize provider payloads before they reach domain services and provide an offline test double. Agent runtimes must use the bounded backend adapter pattern in `pipeline/agents/`; read `docs/HERMES.md` before adding tools or widening agent permissions.
 
 ## Adding a template
 

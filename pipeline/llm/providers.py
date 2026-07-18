@@ -54,6 +54,14 @@ def provider_availability(provider_name: str | None = None) -> ProviderAvailabil
     settings = app_config.get_settings().llm
     if name == "mock":
         return ProviderAvailability(name, True, "deterministic offline provider")
+    if name == "hermes":
+        settings = app_config.get_settings().hermes
+        problem = settings.configuration_problem()
+        return ProviderAvailability(
+            name,
+            not problem,
+            problem or f"configured at {settings.base_url}",
+        )
     if name == "gemini":
         if genai is None:
             return ProviderAvailability(name, False, "google-genai is not installed")
@@ -777,6 +785,12 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
     provider = (provider_name or app_config.get_settings().llm.provider).strip().lower()
     if provider == "mock":
         return MockProvider()
+    if provider == "hermes":
+        # Imported lazily to keep the generic provider module independent of
+        # agent-runtime initialization and avoid a module import cycle.
+        from pipeline.agents.hermes import HermesProvider
+
+        return HermesProvider()
     if provider == "gemini":
         return GeminiProvider()
     if provider == "groq":
@@ -785,7 +799,7 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
         return HostedFallbackProvider(GroqProvider(), GeminiProvider())
     raise ValueError(
         f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}. "
-        "Use groq, gemini, or the explicit hosted_fallback option."
+        "Use groq, gemini, hermes, or the explicit hosted_fallback option."
     )
 
 
@@ -830,6 +844,7 @@ def structured_generate(
                     "provider": getattr(provider, "last_provider", None)
                     or provider.name,
                     "model": getattr(provider, "last_model", None),
+                    "run_id": getattr(provider, "last_run_id", None),
                     "elapsed_seconds": round(time.time() - started, 3),
                 }
             )
@@ -844,6 +859,7 @@ def structured_generate(
                     "provider": getattr(provider, "last_provider", None)
                     or provider.name,
                     "model": getattr(provider, "last_model", None),
+                    "run_id": getattr(provider, "last_run_id", None),
                     "elapsed_seconds": round(time.time() - started, 3),
                     "retry_after_seconds": exc.retry_after_seconds,
                 }
@@ -861,6 +877,7 @@ def structured_generate(
                 "provider": getattr(provider, "last_provider", None)
                 or provider.name,
                 "model": getattr(provider, "last_model", None),
+                "run_id": getattr(provider, "last_run_id", None),
                 "elapsed_seconds": round(time.time() - started, 3),
             }
             if isinstance(raw, dict):
