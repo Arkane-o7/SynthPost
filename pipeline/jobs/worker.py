@@ -20,6 +20,10 @@ from pipeline import config
 from pipeline.db.repository import NotFoundError, Repository, get_repository
 from pipeline.db.sqlite import database_path
 from pipeline.discovery.discover import discover
+from pipeline.agents.editorial import (
+    build_research_pack_with_hermes,
+    discover_with_hermes,
+)
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.narration.service import generate_narration
 from pipeline.models import (
@@ -150,14 +154,27 @@ class JobContext:
 def handle_discovery(ctx: JobContext) -> dict[str, str]:
     payload = ctx.job.payload
     ctx.progress(5, "loading sources")
-    candidates = discover(
-        ctx.repository,
-        episode_id=payload.get("episode_id"),
-        category=payload.get("category"),
-        progress_callback=lambda fraction, stage: ctx.progress(
-            8 + fraction * 80, stage
-        ),
-    )
+    settings = config.get_settings()
+    if settings.hermes.discovery_provider == "hermes":
+        candidates = discover_with_hermes(
+            ctx.repository,
+            episode_id=payload.get("episode_id"),
+            category=payload.get("category"),
+            progress_callback=lambda fraction, stage: ctx.progress(
+                8 + fraction * 80, stage
+            ),
+            cancel_check=ctx.raise_if_cancelled,
+            idempotency_key=ctx.job.job_id,
+        )
+    else:
+        candidates = discover(
+            ctx.repository,
+            episode_id=payload.get("episode_id"),
+            category=payload.get("category"),
+            progress_callback=lambda fraction, stage: ctx.progress(
+                8 + fraction * 80, stage
+            ),
+        )
     ctx.progress(100, f"discovered {len(candidates)} candidates")
     return {"candidate_count": str(len(candidates))}
 
@@ -165,8 +182,21 @@ def handle_discovery(ctx: JobContext) -> dict[str, str]:
 def handle_research(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("research job requires story_id")
-    ctx.progress(10, "extracting source document")
-    pack = build_research_pack(ctx.repository, ctx.job.story_id)
+    settings = config.get_settings()
+    if settings.hermes.research_provider == "hermes":
+        ctx.progress(10, "starting Hermes multi-source research")
+        pack = build_research_pack_with_hermes(
+            ctx.repository,
+            ctx.job.story_id,
+            progress_callback=lambda fraction, stage: ctx.progress(
+                10 + fraction * 80, stage
+            ),
+            cancel_check=ctx.raise_if_cancelled,
+            idempotency_key=ctx.job.job_id,
+        )
+    else:
+        ctx.progress(10, "extracting source document")
+        pack = build_research_pack(ctx.repository, ctx.job.story_id)
     publishers = {
         document.publisher for document in pack.documents if document.publisher
     }
@@ -187,10 +217,14 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("script job requires story_id")
     ctx.progress(10, "planning coherent production narration")
+    configured_script_provider = config.get_settings().hermes.script_provider
+    provider_name = ctx.job.payload.get("provider")
+    if not provider_name and configured_script_provider == "hermes":
+        provider_name = "hermes"
     script = generate_script(
         ctx.repository,
         ctx.job.story_id,
-        provider_name=ctx.job.payload.get("provider"),
+        provider_name=provider_name,
         target_duration_seconds=int(
             ctx.job.payload.get("target_duration_seconds") or 600
         ),

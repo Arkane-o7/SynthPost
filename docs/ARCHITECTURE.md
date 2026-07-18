@@ -98,12 +98,19 @@ Do not treat episode output folders as source code. The repository ignores them 
 
 Structured language providers implement `LLMProvider.generate_json()` and register in `configured_provider()`. Availability checks must not make a paid/network request. Visual sources implement `VisualSource.available()` and `VisualSource.search()` and register in `configured_visual_sources()` in deterministic precedence order. Provider adapters own credentials, timeouts, normalization, and provider-specific errors; business services own editorial policy.
 
+Hermes Agent is an optional asynchronous newsroom provider under
+`pipeline/agents/`. Its Runs API does not own SynthPost workflow state or write
+production artifacts directly. Dedicated typed services reconstruct discovery
+and research domain models; script and visual planning reuse the structured
+provider boundary. See [Hermes integration](HERMES.md).
+
 ## Where to add common features
 
 - Domain field or state: `pipeline/models.py`, migration/compatibility reader, JSON Schema, TypeScript contract, tests.
 - API operation: request model in `pipeline/api/schemas.py`, feature router (or existing route group), typed method in `web/src/api/client.ts`.
 - Pipeline stage: `StageName`/`STAGE_CONTRACTS`, handler, retry classification, API enqueue route, tests, `docs/PIPELINE.md`.
 - LLM provider: implement `LLMProvider`, availability check, registry entry, mocked adapter tests.
+- Agent runtime: add a typed client under `pipeline/agents/`, preserve job cancellation and validation, and never expose its credential to the Studio.
 - Visual provider: implement `VisualSource`, registry entry, rights mapping, offline tests.
 - Remotion template: template component, `registry/templates.ts`, Python timeline registry/validation, rendering test.
 - Avatar renderer: follow `avatar-engine/AGENTS.md`; preserve protected Blender and compatibility contracts.

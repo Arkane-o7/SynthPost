@@ -292,6 +292,10 @@ class APIContractTests(unittest.TestCase):
             set(health.json()["worker_capacity"]),
             {"editorial", "media", "render"},
         )
+        hermes = client.get("/api/hermes/status")
+        self.assertEqual(hermes.status_code, 200)
+        self.assertFalse(hermes.json()["enabled"])
+        self.assertNotIn("api_key", hermes.json())
         response = client.patch(
             "/api/projects/not-used",
             json={"project_id": "identity-fields-cannot-be-patched"},

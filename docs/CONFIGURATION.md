@@ -20,7 +20,7 @@ Required means required for the named feature, not for opening the local Studio.
 
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
-| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `hosted_fallback` | `groq`, `gemini`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. |
+| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `hosted_fallback` | `groq`, `gemini`, `hermes`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. Prefer the per-stage Hermes selectors below. |
 | `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` | `45` | no | `60` | Positive request timeout. |
 | `SYNTHPOST_LLM_MAX_RETRIES` | `2` | no | `2` | Structured-output validation attempts, 0–10. |
 | `SYNTHPOST_SAVE_LLM_DEBUG` | `0` | no | `0` | Debug output can contain provider text; keep disabled and never commit it. |
@@ -31,6 +31,31 @@ Required means required for the named feature, not for opening the local Studio.
 | `GEMINI_API_KEY` | empty | Gemini/fallback | `AIza…` | Secret. Never include in logs/docs/commits. |
 | `SYNTHPOST_GEMINI_MODEL` | `gemini-3.5-flash` | no | `gemini-3.5-flash` | Hosted Gemini model ID. |
 | `SYNTHPOST_GEMINI_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
+
+## Hermes Agent
+
+Hermes is called only by the SynthPost backend. Start it with `hermes gateway start`
+for the managed service or `hermes gateway run` in a foreground terminal; do not
+point the Studio browser directly at its API. Keep the Hermes API on loopback and
+copy its API server key into the uncommitted SynthPost `.env`.
+
+The integration validates `/v1/toolsets` before every agent run and refuses an
+API-server profile with machine-mutating or unrelated tools. Enable only `web`,
+`browser`, `vision`, and optionally `video` for the Hermes `api_server` platform.
+
+| Variable | Default | Required | Example | Notes |
+|---|---:|---|---|---|
+| `SYNTHPOST_HERMES_ENABLED` | `0` | Hermes stages | `1` | Master switch. Selecting a Hermes stage while this is false is a configuration error. |
+| `SYNTHPOST_HERMES_BASE_URL` | `http://127.0.0.1:8642` | Hermes | `http://127.0.0.1:8642` | Backend-to-backend API origin; omit `/v1`. |
+| `SYNTHPOST_HERMES_API_KEY` | empty | Hermes | `replace-me` | Secret bearer token matching Hermes `API_SERVER_KEY`. Never expose it to the Studio. `HERMES_API_KEY` and `API_SERVER_KEY` are accepted aliases. |
+| `SYNTHPOST_HERMES_REQUEST_TIMEOUT_SECONDS` | `30` | no | `30` | Timeout for one API request/status poll. |
+| `SYNTHPOST_HERMES_RUN_TIMEOUT_SECONDS` | `1200` | no | `1800` | Overall agent-run deadline; timed-out runs are stopped. |
+| `SYNTHPOST_HERMES_POLL_INTERVAL_SECONDS` | `0.75` | no | `1` | Status reconciliation interval. |
+| `SYNTHPOST_HERMES_MAX_CONCURRENT_RUNS` | `3` | no | `3` | Declared local agent capacity. SynthPost queue lanes remain authoritative. |
+| `SYNTHPOST_DISCOVERY_PROVIDER` | `native` | no | `hermes` | `native` fetches configured feeds; `hermes` searches and proposes current story ideas. |
+| `SYNTHPOST_RESEARCH_PROVIDER` | `native` | no | `hermes` | `hermes` builds an evidence-linked multi-source research pack. |
+| `SYNTHPOST_SCRIPT_PROVIDER` | `native` | no | `hermes` | `hermes` runs the existing narrative-first structured script stages. |
+| `SYNTHPOST_VISUAL_PLANNER_PROVIDER` | `native` | no | `hermes` | `hermes` plans queries and aggregates image/video leads; SynthPost still downloads and reviews them. |
 
 ## Discovery, assignment, and research
 

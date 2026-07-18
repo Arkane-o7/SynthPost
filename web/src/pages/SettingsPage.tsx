@@ -1,11 +1,17 @@
 import React from "react";
 import { StatusBadge } from "../components/StatusBadge";
+import { api } from "../api/client";
 
 export const SettingsPage: React.FC = () => {
   const supported = "Notification" in window;
   const [permission, setPermission] = React.useState<NotificationPermission | "unsupported">(
     supported ? Notification.permission : "unsupported",
   );
+  const [hermes, setHermes] = React.useState<Awaited<ReturnType<typeof api.hermesStatus>> | null>(null);
+
+  React.useEffect(() => {
+    void api.hermesStatus().then(setHermes).catch(() => setHermes(null));
+  }, []);
 
   const enableNotifications = async () => {
     if (!supported) return;
@@ -96,6 +102,40 @@ export const SettingsPage: React.FC = () => {
         >
           ℹ These are set via environment variables at server start. Never put
           API keys in source files. Changes require an API/worker restart.
+        </div>
+      </div>
+
+      <div className="card stack">
+        <div className="row-between">
+          <div>
+            <div className="mobile-section-kicker">Agent runtime</div>
+            <h2>Hermes Newsroom Engine</h2>
+          </div>
+          <StatusBadge
+            status={hermes?.available ? "completed" : hermes?.enabled ? "failed" : "disabled"}
+          >
+            {hermes?.available ? "available" : hermes?.enabled ? "unavailable" : "disabled"}
+          </StatusBadge>
+        </div>
+        <p className="text-muted" style={{ fontSize: 13 }}>
+          {hermes?.available
+            ? `${hermes.model ?? "hermes-agent"} is connected at ${hermes.base_url}.`
+            : hermes?.error ?? "Enable Hermes through the backend environment configuration."}
+        </p>
+        <div className="stack" style={{ gap: 8 }}>
+          {(["discovery", "research", "script", "visuals"] as const).map((stage) => (
+            <div key={stage} className="row-between">
+              <span className="text-muted" style={{ fontSize: 13, textTransform: "capitalize" }}>
+                {stage}
+              </span>
+              <code className="font-mono" style={{ fontSize: 11 }}>
+                {hermes?.providers[stage] ?? "native"}
+              </code>
+            </div>
+          ))}
+        </div>
+        <div className="validation-msg validation-warning" style={{ fontSize: 12 }}>
+          Hermes runs on the backend. Its API key is never sent to this browser.
         </div>
       </div>
 

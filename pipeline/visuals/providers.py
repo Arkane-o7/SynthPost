@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pipeline import config
+from pipeline.agents.hermes import HermesClient
 from pipeline.llm.providers import (
     StructuredGenerationError,
     configured_provider,
@@ -982,7 +983,12 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
     if not config.get_settings().visuals.ai_query_planning:
         return _fallback_visual_search_plan(repository, story_id)
 
-    provider = configured_provider()
+    provider_name = (
+        "hermes"
+        if config.get_settings().hermes.visual_provider == "hermes"
+        else None
+    )
+    provider = configured_provider(provider_name)
     research_pack_loader = getattr(repository, "latest_research_pack", None)
     research_pack = (
         research_pack_loader(story_id) if research_pack_loader else None
@@ -1678,6 +1684,207 @@ class SearXNGVisualSource:
         )
 
 
+def _hermes_visual_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "required": ["candidates"],
+        "properties": {
+            "candidates": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": [
+                        "section_id",
+                        "media_type",
+                        "title",
+                        "source_url",
+                        "media_url",
+                        "thumbnail_url",
+                        "description",
+                        "rationale",
+                        "confidence",
+                    ],
+                    "properties": {
+                        "section_id": {"type": "string"},
+                        "media_type": {
+                            "type": "string",
+                            "enum": ["image", "video"],
+                        },
+                        "title": {"type": "string"},
+                        "source_url": {"type": "string"},
+                        "media_url": {"type": ["string", "null"]},
+                        "thumbnail_url": {"type": ["string", "null"]},
+                        "description": {"type": "string"},
+                        "rationale": {"type": "string"},
+                        "publisher": {"type": ["string", "null"]},
+                        "published_at": {"type": ["string", "null"]},
+                        "confidence": {"type": "number"},
+                    },
+                },
+            }
+        },
+    }
+
+
+def search_hermes_visuals(
+    repository,
+    story_id: str,
+    *,
+    progress_callback=None,
+    cancel_check=None,
+) -> list[VisualCandidate]:
+    """Ask Hermes for real image/video leads, then stage them through SynthPost."""
+
+    script = repository.latest_script(story_id)
+    if not script:
+        return []
+    candidate = repository.candidate_for_story(story_id)
+    research = repository.latest_research_pack(story_id) or {}
+    prompt_input = {
+        "story": candidate.title,
+        "verified_people": research.get("people", []),
+        "verified_organizations": research.get("organizations", []),
+        "verified_locations": research.get("locations", []),
+        "verified_dates": research.get("dates", []),
+        "sections": [
+            {
+                "section_id": section.section_id,
+                "narration": section.text,
+                "visual_direction": section.suggested_visual_types,
+            }
+            for section in script.sections
+        ],
+    }
+    prompt = f"""
+Find authentic editorial image and video leads for this approved SynthPost
+script. Use web search, extraction, browser and vision tools where helpful.
+Return up to two strong candidates per section. Prefer original official media,
+primary documents, real event footage, named people/places/objects and clean
+horizontal visuals. Avoid broadcaster packages, commentary videos, generic
+stock, AI-generated imagery and unrelated thumbnails.
+
+source_url must be the real public page where an editor can verify provenance.
+For images, media_url should be the best direct image URL you actually found.
+For videos, source_url should be the watch/source page and media_url may be null.
+Do not claim a license. SynthPost will mark every result for manual rights review.
+Do not invent URLs. A missing usable candidate is better than an unrelated one.
+
+INPUT JSON:
+{json.dumps(prompt_input, ensure_ascii=True)}
+""".strip()
+    client = HermesClient()
+
+    def agent_progress(status: str, _: dict[str, Any]) -> None:
+        if progress_callback:
+            progress_callback(
+                0.08 if status == "running" else 0.72,
+                f"Hermes visual aggregation: {status}",
+            )
+
+    raw, _state = client.run_json(
+        prompt,
+        _hermes_visual_schema(),
+        session_id=f"synthpost-visuals-{story_id}-{script.script_id}",
+        progress_callback=agent_progress,
+        cancel_check=cancel_check,
+    )
+    valid_sections = {section.section_id for section in script.sections}
+    visuals: list[VisualCandidate] = []
+    seen: set[tuple[str, str]] = set()
+    for rank, row in enumerate(raw.get("candidates", [])):
+        if cancel_check:
+            cancel_check()
+        if not isinstance(row, dict):
+            continue
+        section_id = str(row.get("section_id") or "").strip()
+        media_value = str(row.get("media_type") or "").strip().lower()
+        source_url = str(row.get("source_url") or "").strip()
+        if section_id not in valid_sections or media_value not in {"image", "video"}:
+            continue
+        try:
+            _assert_public_http_url(source_url)
+        except ValueError:
+            continue
+        media_type = MediaType(media_value)
+        media_url = str(row.get("media_url") or "").strip() or None
+        thumbnail_url = str(row.get("thumbnail_url") or "").strip() or None
+        if media_url:
+            try:
+                _assert_public_http_url(media_url)
+            except ValueError:
+                media_url = None
+        if thumbnail_url:
+            try:
+                _assert_public_http_url(thumbnail_url)
+            except ValueError:
+                thumbnail_url = None
+        identity = (source_url, media_url or "")
+        if identity in seen:
+            continue
+        seen.add(identity)
+        result = SearXNGResult(
+            title=str(row.get("title") or source_url)[:500],
+            url=source_url,
+            snippet=(
+                str(row.get("description") or "")
+                + "\nHermes rationale: "
+                + str(row.get("rationale") or "")
+            )[:1200],
+            engine="hermes",
+            category="images" if media_type == MediaType.image else "videos",
+            source_domain=urlparse(source_url).hostname,
+            published_date=str(row.get("published_at") or "") or None,
+            image_url=media_url if media_type == MediaType.image else None,
+            thumbnail_url=thumbnail_url,
+            score=max(0.0, min(1.0, float(row.get("confidence") or 0.0))),
+            metadata={"hermes_rationale": str(row.get("rationale") or "")[:500]},
+        )
+        visual = _stage_searxng_result(
+            repository,
+            story_id,
+            section_id,
+            result,
+            media_type,
+            rank,
+        )
+        if visual is None:
+            continue
+        visual.provider = "hermes"
+        visual.source_metadata["agent"] = "hermes"
+        visual.source_metadata["rationale"] = str(row.get("rationale") or "")[:500]
+        repository.upsert_visual(visual)
+        visuals.append(visual)
+    if not visuals:
+        raise ValueError("Hermes returned no valid public visual candidates")
+    if progress_callback:
+        progress_callback(0.92, f"staged {len(visuals)} Hermes visual leads")
+    return visuals
+
+
+@dataclass(frozen=True)
+class HermesVisualSource:
+    name: str = "hermes"
+
+    def available(self) -> bool:
+        settings = config.get_settings().hermes
+        return settings.enabled and settings.visual_provider == "hermes"
+
+    def search(
+        self,
+        repository,
+        story_id: str,
+        *,
+        progress_callback=None,
+        cancel_check=None,
+    ) -> list[VisualCandidate]:
+        return search_hermes_visuals(
+            repository,
+            story_id,
+            progress_callback=progress_callback,
+            cancel_check=cancel_check,
+        )
+
+
 def configured_visual_sources() -> tuple[VisualSource, ...]:
     """Return sources in deterministic precedence order.
 
@@ -1685,7 +1892,11 @@ def configured_visual_sources() -> tuple[VisualSource, ...]:
     orchestration, review policy, and fallback generation stay unchanged.
     """
 
-    return (EpisodeMediaInboxSource(), SearXNGVisualSource())
+    sources: list[VisualSource] = [EpisodeMediaInboxSource()]
+    if config.get_settings().hermes.visual_provider == "hermes":
+        sources.append(HermesVisualSource())
+    sources.append(SearXNGVisualSource())
+    return tuple(sources)
 
 
 def search_visuals(
@@ -1695,7 +1906,7 @@ def search_visuals(
     progress_callback=None,
     cancel_check=None,
 ) -> list[VisualCandidate]:
-    """Search the episode-isolated media inbox, then SearXNG and fallbacks."""
+    """Search local media, optional Hermes leads, SearXNG, then fallbacks."""
 
     script = repository.latest_script(story_id)
     if not script or script.status != ScriptStatus.approved:

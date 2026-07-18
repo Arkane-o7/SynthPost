@@ -130,6 +130,25 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
             else "",
         )
     )
+    hermes_problem = settings.hermes.configuration_problem()
+    checks.append(
+        DiagnosticCheck(
+            "hermes",
+            "misconfigured"
+            if hermes_problem
+            else ("configured" if settings.hermes.enabled else "optional_missing"),
+            "feature",
+            hermes_problem
+            or (
+                f"configured at {settings.hermes.base_url}"
+                if settings.hermes.enabled
+                else "disabled; native newsroom providers remain active"
+            ),
+            "Set the SYNTHPOST_HERMES_* variables and start `hermes gateway start`."
+            if hermes_problem
+            else "",
+        )
+    )
     db_path = resolve_project_path(settings.storage.database_path)
     checks.append(
         DiagnosticCheck(
@@ -152,6 +171,47 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
     )
     if config_only:
         return checks
+
+    if settings.hermes.enabled and not hermes_problem:
+        try:
+            from pipeline.agents.hermes import HermesClient
+
+            client = HermesClient(
+                request_timeout_seconds=min(
+                    5.0, settings.hermes.request_timeout_seconds
+                )
+            )
+            health = client.health()
+            capabilities = client.capabilities()
+            enabled_toolsets = client.assert_newsroom_safe()
+            features = capabilities.get("features") or {}
+            required = ("run_submission", "run_status", "run_stop")
+            missing = [name for name in required if not features.get(name)]
+            if health.get("status") != "ok" or missing:
+                raise RuntimeError(
+                    "missing capabilities: " + ", ".join(missing)
+                    if missing
+                    else "health status is not ok"
+                )
+            checks.append(
+                DiagnosticCheck(
+                    "hermes_runtime",
+                    "available",
+                    "feature",
+                    f"{capabilities.get('model') or 'hermes-agent'}; Runs API ready; "
+                    f"toolsets={','.join(sorted(enabled_toolsets))}",
+                )
+            )
+        except Exception as exc:
+            checks.append(
+                DiagnosticCheck(
+                    "hermes_runtime",
+                    "missing",
+                    "feature",
+                    f"Hermes readiness failed: {exc}",
+                    "Start `hermes gateway start` and verify its API key and tool configuration.",
+                )
+            )
 
     python_status = "available" if sys.version_info >= (3, 11) else "missing"
     checks.append(
