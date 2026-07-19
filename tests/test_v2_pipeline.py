@@ -906,6 +906,21 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     "title": "India medical research programme",
                     "content_text": "Complete second-ranked article body.",
                 },
+                {
+                    "document_id": "doc_third",
+                    "title": "Third-ranked source",
+                    "content_text": "Complete third-ranked article body.",
+                },
+                {
+                    "document_id": "doc_fourth",
+                    "title": "Fourth-ranked source",
+                    "content_text": "Complete fourth-ranked article body.",
+                },
+                {
+                    "document_id": "doc_fifth",
+                    "title": "Fifth-ranked source",
+                    "content_text": "Lower-ranked article body.",
+                },
             ],
             "systems": ["ai", "electric motor supply chain"],
             "trade_offs": [
@@ -922,7 +937,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             {document["document_id"] for document in projected["documents"]},
-            {"doc_motor", "doc_health"},
+            {"doc_motor", "doc_health", "doc_third", "doc_fourth"},
         )
         self.assertEqual(
             projected["documents"][0]["content_text"],
@@ -931,6 +946,14 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertEqual(
             projected["documents"][1]["content_text"],
             "Complete second-ranked article body.",
+        )
+        self.assertEqual(
+            projected["documents"][2]["content_text"],
+            "Complete third-ranked article body.",
+        )
+        self.assertEqual(
+            projected["documents"][3]["content_text"],
+            "Complete fourth-ranked article body.",
         )
         self.assertNotIn("ai", projected["systems"])
         self.assertNotIn(
@@ -2422,7 +2445,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertTrue(all(value > 0 for value in targets.values()))
         self.assertNotIn("outro", targets)
 
-    def test_generation_prompt_pack_includes_full_top_two_article_bodies(self) -> None:
+    def test_generation_prompt_pack_includes_full_top_four_article_bodies(self) -> None:
         compact = compact_research_pack_for_prompt(
             {
                 "story_id": "story_unit",
@@ -2440,6 +2463,16 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     {
                         "document_id": "doc_third",
                         "title": "Third source",
+                        "content_text": "complete third article body",
+                    },
+                    {
+                        "document_id": "doc_fourth",
+                        "title": "Fourth source",
+                        "content_text": "complete fourth article body",
+                    },
+                    {
+                        "document_id": "doc_fifth",
+                        "title": "Fifth source",
                         "content_text": "lower-ranked article body",
                     },
                 ],
@@ -2455,7 +2488,15 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             compact["documents"][1]["content_text"],
             "complete second article body",
         )
-        self.assertNotIn("content_text", compact["documents"][2])
+        self.assertEqual(
+            compact["documents"][2]["content_text"],
+            "complete third article body",
+        )
+        self.assertEqual(
+            compact["documents"][3]["content_text"],
+            "complete fourth article body",
+        )
+        self.assertNotIn("content_text", compact["documents"][4])
         self.assertNotIn("people", compact)
 
     def test_generation_prompt_pack_removes_redundant_claim_notes(self) -> None:

@@ -147,7 +147,7 @@ NARRATIVE_BRIEF_PROMPT_VERSION = "synthpost.narrative-brief.v4"
 NARRATIVE_DRAFT_PROMPT_VERSION = "synthpost.narrative-draft.v4"
 NARRATIVE_REPAIR_PROMPT_VERSION = "synthpost.narrative-repair.v4"
 NARRATIVE_SEGMENT_PROMPT_VERSION = "synthpost.narrative-segmentation.v1"
-FULL_ARTICLE_DOCUMENT_LIMIT = 2
+FULL_ARTICLE_DOCUMENT_LIMIT = 4
 
 
 def target_word_count(duration_seconds: int) -> int:
@@ -203,7 +203,7 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
 
     Research documents are stored in editorial rank order: the selected lead
     first, followed by diversified related coverage ordered by relevance. The
-    writer gets the complete extracted text for the first two documents so it
+    writer gets the complete extracted text for the first four documents so it
     can follow each article's structure and context. Lower-ranked documents stay
     metadata-only to avoid multiplying prompt size without losing provenance.
     """
@@ -778,7 +778,7 @@ def narrative_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
     relevant_evidence_ids: set[str] = set()
     # The top-ranked articles are the narrative writer's primary context, even
     # when deterministic lexical filtering finds too little overlap in their
-    # first extracted claims. Always retain both complete bodies in the prompt.
+    # first extracted claims. Always retain all four complete bodies in the prompt.
     relevant_document_ids: set[str] = {
         str(document.get("document_id"))
         for document in compact.get("documents", [])[:FULL_ARTICLE_DOCUMENT_LIMIT]
