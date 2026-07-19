@@ -86,7 +86,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       cursor += duration;
       return next;
     });
-    setTimeline({ ...timeline, segments: fixed });
+    setTimeline({ ...timeline, status: "review", segments: fixed });
   };
 
   const totalDuration = timeline
@@ -274,7 +274,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             }
             onClick={() =>
               act(async () => {
-                await api.approveTimeline(storyId);
+                await api.approveTimeline(storyId, timeline);
                 await load();
               })
             }

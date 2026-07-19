@@ -2495,6 +2495,11 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 StoryWorkflowState.completed, StoryWorkflowState.script_review
             )
         )
+        self.assertTrue(
+            can_transition(
+                StoryWorkflowState.completed, StoryWorkflowState.timeline_review
+            )
+        )
 
     def test_new_script_revision_invalidates_completed_workflow_state(self) -> None:
         temp = tempfile.TemporaryDirectory()

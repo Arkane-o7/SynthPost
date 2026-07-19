@@ -37,6 +37,10 @@ from pipeline.models import (
     now_iso,
 )
 from pipeline.provenance import ffprobe_summary
+from pipeline.revisions import (
+    assert_story_can_move_for_revision,
+    move_story_for_revision,
+)
 from pipeline.search.searxng_client import (
     SearXNGError,
     SearXNGResult,
@@ -537,6 +541,7 @@ def stage_local_visual(
     if source.suffix.lower() not in SUPPORTED_VISUAL_EXTENSIONS:
         supported = ", ".join(sorted(SUPPORTED_VISUAL_EXTENSIONS))
         raise ValueError(f"unsupported visual file type; expected one of: {supported}")
+    _assert_visual_revision_allowed(repository, story_id)
     episode = repository.episode_for_story(story_id)
     original_name = source.name
     episode_inbox = episode_media_inbox_dir(
@@ -630,10 +635,7 @@ def stage_local_visual(
     )
     visual = _merge_rediscovered_visual(repository, visual)
     repository.upsert_visual(visual)
-    candidate = repository.candidate_for_story(story_id)
-    if candidate.workflow_state == StoryWorkflowState.script_approved:
-        repository.transition_story(story_id, StoryWorkflowState.visuals_searching)
-        repository.transition_story(story_id, StoryWorkflowState.visuals_review)
+    mark_visuals_revised(repository, story_id)
     return visual
 
 
@@ -644,6 +646,60 @@ def _advance_to_visuals_review(repository, story_id: str) -> None:
         repository.transition_story(story_id, StoryWorkflowState.visuals_review)
     elif candidate.workflow_state == StoryWorkflowState.visuals_searching:
         repository.transition_story(story_id, StoryWorkflowState.visuals_review)
+
+
+def begin_visual_search_revision(repository, story_id: str) -> None:
+    """Invalidate timeline/render state before refreshing visual candidates."""
+
+    move_story_for_revision(
+        repository,
+        story_id,
+        StoryWorkflowState.visuals_searching,
+    )
+
+
+def mark_visuals_revised(repository, story_id: str) -> None:
+    """Require timeline review after an editor changes renderable visuals."""
+
+    candidate_loader = getattr(repository, "candidate_for_story", None)
+    if not callable(candidate_loader):
+        return
+    current = candidate_loader(story_id).workflow_state
+    if current in {
+        StoryWorkflowState.selected,
+        StoryWorkflowState.researching,
+        StoryWorkflowState.research_ready,
+        StoryWorkflowState.script_generating,
+        StoryWorkflowState.script_review,
+        StoryWorkflowState.visuals_searching,
+    }:
+        return
+    move_story_for_revision(
+        repository,
+        story_id,
+        StoryWorkflowState.visuals_review,
+    )
+
+
+def _assert_visual_revision_allowed(repository, story_id: str) -> None:
+    candidate_loader = getattr(repository, "candidate_for_story", None)
+    if not callable(candidate_loader):
+        return
+    current = candidate_loader(story_id).workflow_state
+    if current in {
+        StoryWorkflowState.selected,
+        StoryWorkflowState.researching,
+        StoryWorkflowState.research_ready,
+        StoryWorkflowState.script_generating,
+        StoryWorkflowState.script_review,
+        StoryWorkflowState.visuals_searching,
+    }:
+        return
+    assert_story_can_move_for_revision(
+        repository,
+        story_id,
+        StoryWorkflowState.visuals_review,
+    )
 
 
 def generate_script_visual_cards(repository, story_id: str) -> list[VisualCandidate]:
@@ -1702,6 +1758,7 @@ def search_visuals(
         raise ValueError(
             "The latest script revision must be approved before searching for visuals"
         )
+    begin_visual_search_revision(repository, story_id)
     visuals: list[VisualCandidate] = []
     for source in configured_visual_sources():
         if not source.available():
@@ -1902,6 +1959,7 @@ def approve_visual(
     attribution_text: str | None = None,
 ) -> VisualCandidate:
     visual = repository.get_visual(asset_id)
+    _assert_visual_revision_allowed(repository, visual.story_id)
     if not visual.download_path:
         raise ValueError(
             "visual is a research lead without local media; download or stage a "
@@ -1950,6 +2008,7 @@ def approve_visual(
     if attribution_text is not None:
         visual.attribution_text = attribution_text
     repository.upsert_visual(visual)
+    mark_visuals_revised(repository, visual.story_id)
     return visual
 
 
@@ -1957,14 +2016,17 @@ def reject_visual(
     repository, asset_id: str, *, blocked: bool = False
 ) -> VisualCandidate:
     visual = repository.get_visual(asset_id)
+    _assert_visual_revision_allowed(repository, visual.story_id)
     visual.review_status = ReviewStatus.blocked if blocked else ReviewStatus.rejected
     visual.reviewed_at = now_iso()
     repository.upsert_visual(visual)
+    mark_visuals_revised(repository, visual.story_id)
     return visual
 
 
 def update_visual(repository, asset_id: str, patch: dict) -> VisualCandidate:
     visual = repository.get_visual(asset_id)
+    _assert_visual_revision_allowed(repository, visual.story_id)
     data = visual.model_dump(mode="json")
     normalized_patch = dict(patch)
     if normalized_patch.get("section_ids") is not None:
@@ -2003,4 +2065,5 @@ def update_visual(repository, asset_id: str, patch: dict) -> VisualCandidate:
         raise ValueError("an approved visual cannot have an empty attribution")
     updated = VisualCandidate.model_validate(data)
     repository.upsert_visual(updated)
+    mark_visuals_revised(repository, updated.story_id)
     return updated

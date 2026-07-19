@@ -663,6 +663,7 @@ class Repository:
         if timeline.version in existing_versions:
             timeline.version = max(existing_versions) + 1
             timeline.timeline_id = new_id("timeline")
+            timeline.created_at = now_iso()
         timeline.updated_at = now_iso()
         data = timeline.model_dump(mode="json")
         with self.connection:

@@ -175,7 +175,14 @@ export const EpisodesPage: React.FC<{ onOpenStudio: () => void }> = ({
 
                 {episode.final_output_path && (
                   <div className="episode-output-preview">
-                    <video controls preload="metadata" src={artifactUrl(episode.final_output_path)} />
+                    <video
+                      controls
+                      preload="metadata"
+                      src={artifactUrl(
+                        episode.final_output_path,
+                        episode.updated_at,
+                      )}
+                    />
                     <a className="btn btn-download" href={artifactUrl(episode.final_output_path)} download>
                       ↓ Download final video
                     </a>

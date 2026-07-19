@@ -160,7 +160,7 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             </div>
             <video
               controls
-              src={artifactUrl(episode.final_output_path)}
+              src={artifactUrl(episode.final_output_path, episode.updated_at)}
               style={{
                 width: "100%",
                 borderRadius: "var(--radius-md)",
@@ -188,7 +188,15 @@ export const AssemblePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             </div>
             <video
               controls
-              src={artifactUrl(latestPreviewOutput)}
+              src={artifactUrl(
+                latestPreviewOutput,
+                episodeJobs.find(
+                  (job) =>
+                    job.status === "completed" &&
+                    job.render_profile === "preview" &&
+                    job.output_paths?.final_output_path === latestPreviewOutput,
+                )?.completed_at,
+              )}
               style={{
                 width: "100%",
                 borderRadius: "var(--radius-md)",

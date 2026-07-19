@@ -437,14 +437,17 @@ def job_deadline(job_type: str):
         signal.signal(signal.SIGALRM, previous)
 
 
-def _restore_script_state_after_terminal_failure(
+def _restore_workflow_after_terminal_failure(
     repository: Repository, job: RenderJob
 ) -> str | None:
-    if job.job_type != "script_generate" or not job.story_id:
+    if not job.story_id:
         return None
     try:
         candidate = repository.candidate_for_story(job.story_id)
-        if candidate.workflow_state == StoryWorkflowState.script_generating:
+        if (
+            job.job_type == "script_generate"
+            and candidate.workflow_state == StoryWorkflowState.script_generating
+        ):
             previous_value = job.payload.get("_previous_workflow_state")
             try:
                 previous_state = StoryWorkflowState(str(previous_value))
@@ -458,9 +461,38 @@ def _restore_script_state_after_terminal_failure(
             repository.transition_story(
                 job.story_id, previous_state
             )
+        elif (
+            job.job_type == "research"
+            and candidate.workflow_state == StoryWorkflowState.researching
+        ):
+            previous_value = job.payload.get("_restore_workflow_state")
+            try:
+                previous_state = StoryWorkflowState(str(previous_value))
+            except ValueError:
+                previous_state = StoryWorkflowState.research_ready
+            if previous_state not in {
+                StoryWorkflowState.selected,
+                StoryWorkflowState.research_ready,
+            }:
+                previous_state = StoryWorkflowState.research_ready
+            repository.transition_story(job.story_id, previous_state)
+        elif (
+            job.job_type == "visual_search"
+            and candidate.workflow_state == StoryWorkflowState.visuals_searching
+        ):
+            repository.transition_story(
+                job.story_id, StoryWorkflowState.visuals_review
+            )
     except Exception as exc:
         return safe_text(exc)
     return None
+
+
+# Compatibility alias retained for tests and local tooling that imported the
+# earlier script-only helper before it was expanded to all revision jobs.
+_restore_script_state_after_terminal_failure = (
+    _restore_workflow_after_terminal_failure
+)
 
 
 def recover_stale_jobs(
@@ -512,12 +544,12 @@ def recover_stale_jobs(
         if not repository.update_job_if_status(job, JobStatus.running):
             continue
         if job.status == JobStatus.failed:
-            restore_error = _restore_script_state_after_terminal_failure(
+            restore_error = _restore_workflow_after_terminal_failure(
                 repository, job
             )
             if restore_error:
                 print(
-                    "[worker] WARNING: could not restore script workflow state "
+                    "[worker] WARNING: could not restore revision workflow state "
                     f"for {job.job_id}: {restore_error}",
                     flush=True,
                 )
@@ -599,12 +631,12 @@ def run_one(
                 )
                 ctx.log(str(exc), event="stage_failure", level="WARNING")
             else:
-                restore_error = _restore_script_state_after_terminal_failure(
+                restore_error = _restore_workflow_after_terminal_failure(
                     repository, job
                 )
                 if restore_error:
                     ctx.log(
-                        "Could not restore the prior script workflow state: "
+                        "Could not restore the prior revision workflow state: "
                         + restore_error,
                         event="workflow_restore_failed",
                         level="WARNING",

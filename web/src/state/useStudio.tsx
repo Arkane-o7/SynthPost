@@ -189,10 +189,22 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           const candidates = await api.listCandidates({
             episodeId: selectedEpisodeId || undefined,
           });
+          const selectedStoryId =
+            candidates.find(
+              (candidate) => candidate.selection_status === "selected",
+            )?.story_id || "";
           if (selectedEpisodeId) {
             localStorage.setItem("synthpost.episode", selectedEpisodeId);
           }
-          patch({ episodes, candidates, selectedEpisodeId });
+          if (selectedStoryId) {
+            localStorage.setItem("synthpost.story", selectedStoryId);
+          }
+          patch({
+            episodes,
+            candidates,
+            selectedEpisodeId,
+            selectedStoryId,
+          });
         } catch (error) {
           patch({
             error: errorMessage(error),
@@ -209,7 +221,14 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           const candidates = await api.listCandidates({
             episodeId: selectedEpisodeId || undefined,
           });
-          patch({ candidates });
+          const selectedStoryId =
+            candidates.find(
+              (candidate) => candidate.selection_status === "selected",
+            )?.story_id || "";
+          if (selectedStoryId) {
+            localStorage.setItem("synthpost.story", selectedStoryId);
+          }
+          patch({ candidates, selectedStoryId });
         } catch (error) {
           patch({
             error: errorMessage(error),

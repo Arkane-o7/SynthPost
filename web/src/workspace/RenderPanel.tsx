@@ -34,6 +34,12 @@ export const RenderPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       job.status === "completed" &&
       job.render_profile === "preview",
   );
+  const latestProductionCompletedAt = storyJobs.find(
+    (job) =>
+      job.job_type === "render_story" &&
+      job.status === "completed" &&
+      job.render_profile === "production",
+  )?.completed_at;
 
   const activeJob = (jobType: string, profile: string) =>
     storyJobs.find(
@@ -116,7 +122,7 @@ export const RenderPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             </div>
             <video
               controls
-              src={artifactUrl(storyOutputPath)}
+              src={artifactUrl(storyOutputPath, latestProductionCompletedAt)}
               style={{ width: "100%", borderRadius: "var(--radius-md)" }}
             />
           </div>

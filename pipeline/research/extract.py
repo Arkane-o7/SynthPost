@@ -16,6 +16,23 @@ from pipeline.models import (
 )
 from pipeline.news.discovery import diversified_articles, discover_news
 from pipeline.editorial.charter import CHARTER_VERSION, load_editorial_charter
+from pipeline.revisions import move_story_for_revision
+
+
+def begin_research_revision(repository, story_id: str) -> StoryWorkflowState:
+    """Invalidate downstream production before queuing refreshed research."""
+
+    restore_state = (
+        StoryWorkflowState.research_ready
+        if repository.latest_research_pack(story_id)
+        else StoryWorkflowState.selected
+    )
+    move_story_for_revision(
+        repository,
+        story_id,
+        StoryWorkflowState.researching,
+    )
+    return restore_state
 
 
 class ReadableHTMLParser(HTMLParser):

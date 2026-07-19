@@ -92,7 +92,13 @@ export const PreviewPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
       <div className="card">
         <div className="preview-frame">
           {composition?.preview_path ? (
-            <img src={artifactUrl(composition.preview_path)} alt="Preview" />
+            <img
+              src={artifactUrl(
+                composition.preview_path,
+                latestRenderCompletedAt,
+              )}
+              alt="Preview"
+            />
           ) : (
             <span className="text-muted" style={{ fontSize: 14 }}>
               Build manifest and render to see a preview frame

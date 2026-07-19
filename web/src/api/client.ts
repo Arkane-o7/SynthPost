@@ -302,9 +302,10 @@ export const api = {
       `/api/stories/${storyId}/timeline/validate`,
       { method: "POST", body: JSON.stringify(timeline ?? null) },
     ),
-  approveTimeline: (storyId: string) =>
+  approveTimeline: (storyId: string, timeline?: TimelinePlan) =>
     request<TimelinePlan>(`/api/stories/${storyId}/timeline/approve`, {
       method: "POST",
+      body: timeline ? JSON.stringify(timeline) : undefined,
     }),
 
   buildManifest: (
@@ -388,5 +389,11 @@ export const api = {
   jobLogs: (jobId: string) => request<string>(`/api/jobs/${jobId}/logs`),
 };
 
-export const artifactUrl = (path?: string | null): string =>
-  path ? `/api/artifacts/${path}` : "";
+export const artifactUrl = (
+  path?: string | null,
+  revision?: string | null,
+): string => {
+  if (!path) return "";
+  const url = `/api/artifacts/${path}`;
+  return revision ? `${url}?v=${encodeURIComponent(revision)}` : url;
+};

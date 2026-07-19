@@ -93,7 +93,7 @@ export const CommandCenter: React.FC<{
         (stage) => stage.key === currentStage,
       );
       const nextIndex = STAGES.findIndex((stage) => stage.key === nextStage);
-      return nextIndex > currentIndex ? nextStage : currentStage;
+      return nextIndex !== currentIndex ? nextStage : currentStage;
     });
   }, [hasActiveScriptJob, story?.workflow_state]);
 

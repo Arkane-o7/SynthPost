@@ -10,6 +10,7 @@ from pipeline.models import (
     AudioPlan,
     AudioRegion,
     ContentRole,
+    EpisodeStatus,
     MediaType,
     NarrationArtifact,
     ReviewStatus,
@@ -28,10 +29,11 @@ from pipeline.models import (
     timed_section_headline_cues,
 )
 from pipeline.narration.service import load_narration_artifact
-from pipeline.provenance import ffprobe_summary
+from pipeline.provenance import ffprobe_summary, now_iso
 from pipeline.storage import resolve_project_path
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import broadcast_media_fit
+from pipeline.workflow import can_transition
 
 
 @dataclass(frozen=True)
@@ -864,6 +866,17 @@ def approve_timeline(repository, story_id: str) -> TimelinePlan:
     plan = repository.latest_timeline(story_id)
     if not plan:
         raise ValueError(f"No timeline exists for story: {story_id}")
+    current = repository.candidate_for_story(story_id).workflow_state
+    if (
+        plan.status == TimelineStatus.approved
+        and current
+        not in {
+            StoryWorkflowState.timeline_draft,
+            StoryWorkflowState.timeline_review,
+        }
+    ):
+        return plan
+    _move_story_to_timeline_review(repository, story_id)
     errors, warnings = validate_timeline(plan, check_media_exists=True)
     narration = load_narration_artifact(repository, story_id, require_current=True)
     assert narration is not None
@@ -889,4 +902,54 @@ def approve_timeline(repository, story_id: str) -> TimelinePlan:
     elif current == StoryWorkflowState.timeline_draft:
         repository.transition_story(story_id, StoryWorkflowState.timeline_review)
         repository.transition_story(story_id, StoryWorkflowState.timeline_approved)
+    return saved
+
+
+def _reopen_episode_for_timeline_revision(repository, story_id: str) -> None:
+    """Reopen production while retaining the previous assembled output for review."""
+
+    episode = repository.episode_for_story(story_id)
+    if episode.status not in {EpisodeStatus.completed, EpisodeStatus.failed}:
+        return
+    episode.status = EpisodeStatus.in_progress
+    episode.updated_at = now_iso()
+    repository.upsert_episode(episode)
+
+
+def _assert_story_can_enter_timeline_review(repository, story_id: str) -> None:
+    current = repository.candidate_for_story(story_id).workflow_state
+    if current == StoryWorkflowState.timeline_review:
+        return
+    if not can_transition(current, StoryWorkflowState.timeline_review):
+        raise ValueError(
+            f"Story cannot enter timeline review from workflow state {current.value}"
+        )
+
+
+def _move_story_to_timeline_review(repository, story_id: str) -> None:
+    """Invalidate render and assembly state after a timeline revision."""
+
+    _assert_story_can_enter_timeline_review(repository, story_id)
+    current = repository.candidate_for_story(story_id).workflow_state
+    if current != StoryWorkflowState.timeline_review:
+        repository.transition_story(story_id, StoryWorkflowState.timeline_review)
+    _reopen_episode_for_timeline_revision(repository, story_id)
+
+
+def save_timeline_draft(
+    repository, story_id: str, plan: TimelinePlan
+) -> TimelinePlan:
+    """Persist an editor revision and reopen every downstream production stage."""
+
+    plan = plan.model_copy(deep=True)
+    plan.story_id = story_id
+    plan.status = TimelineStatus.review
+    for segment in plan.segments:
+        segment.status = ApprovalStatus.review
+    _assert_story_can_enter_timeline_review(repository, story_id)
+    errors, warnings = validate_timeline(plan)
+    plan.validation_errors = errors
+    plan.validation_warnings = warnings
+    saved = repository.save_timeline(plan)
+    _move_story_to_timeline_review(repository, story_id)
     return saved

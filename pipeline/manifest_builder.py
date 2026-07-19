@@ -16,6 +16,7 @@ from pipeline.models import (
     MediaType,
     ReviewStatus,
     ScriptStatus,
+    StoryWorkflowState,
     TimelinePlan,
     TimelineStatus,
 )
@@ -273,6 +274,18 @@ def build_story_manifest(
         raise ValueError(
             "The approved timeline was invalidated by a newer production revision; "
             "generate and approve the current timeline before rendering"
+        )
+    renderable_states = {
+        StoryWorkflowState.timeline_approved,
+        StoryWorkflowState.rendering_avatar,
+        StoryWorkflowState.rendering_composition,
+        StoryWorkflowState.assembling,
+        StoryWorkflowState.completed,
+    }
+    if candidate.workflow_state not in renderable_states:
+        raise ValueError(
+            "The story has upstream revisions that must be approved through "
+            "Timeline before rendering"
         )
     visuals = repository.list_visuals(story_id)
     narration = load_narration_artifact(repository, story_id, require_current=True)
