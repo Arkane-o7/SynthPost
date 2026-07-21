@@ -39,6 +39,7 @@ class LLMSettings(SettingsModel):
         "codex",
         "groq",
         "gemini",
+        "sarvam",
         "hosted_fallback",
         "groq_then_gemini",
         "mock",
@@ -58,6 +59,10 @@ class LLMSettings(SettingsModel):
     groq_model: str = "openai/gpt-oss-120b"
     groq_temperature: float = Field(default=0.2, ge=0, le=2)
     groq_max_completion_tokens: int = Field(default=2300, ge=128)
+    sarvam_api_key: str | None = None
+    sarvam_model: str = "sarvam-105b"
+    sarvam_temperature: float = Field(default=0.2, ge=0, le=2)
+    sarvam_max_completion_tokens: int = Field(default=2300, ge=128)
 
     def provider_problem(self) -> str | None:
         if self.provider == "codex":
@@ -75,6 +80,8 @@ class LLMSettings(SettingsModel):
             return "GEMINI_API_KEY is required when SYNTHPOST_LLM_PROVIDER=gemini"
         if self.provider == "groq" and not self.groq_api_key:
             return "GROQ_API_KEY is required when SYNTHPOST_LLM_PROVIDER=groq"
+        if self.provider == "sarvam" and not self.sarvam_api_key:
+            return "SARVAM_API_KEY is required when SYNTHPOST_LLM_PROVIDER=sarvam"
         if self.provider in {"hosted_fallback", "groq_then_gemini"}:
             missing = [
                 name
@@ -100,6 +107,12 @@ class SearchSettings(SettingsModel):
     news_time_range: str = "month"
     research_max_documents: int = Field(default=6, ge=1)
     research_claims_per_document: int = Field(default=8, ge=1)
+
+
+class DiscoverySettings(SettingsModel):
+    """Controls for the actively curated story inbox."""
+
+    max_candidate_age_hours: float = Field(default=24.0, gt=0)
 
 
 class VisualSettings(SettingsModel):
@@ -192,6 +205,7 @@ class SynthPostSettings(SettingsModel):
     storage: StorageSettings
     llm: LLMSettings
     search: SearchSettings
+    discovery: DiscoverySettings
     visuals: VisualSettings
     avatar: AvatarSettings
     render: RenderSettings
@@ -302,6 +316,12 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 groq_max_completion_tokens=r.integer(
                     "SYNTHPOST_GROQ_MAX_COMPLETION_TOKENS", 2300
                 ),
+                sarvam_api_key=r.text("SARVAM_API_KEY"),
+                sarvam_model=r.text("SYNTHPOST_SARVAM_MODEL", "sarvam-105b"),
+                sarvam_temperature=r.number("SYNTHPOST_SARVAM_TEMPERATURE", 0.2),
+                sarvam_max_completion_tokens=r.integer(
+                    "SYNTHPOST_SARVAM_MAX_COMPLETION_TOKENS", 2300
+                ),
             ),
             search=SearchSettings(
                 searxng_url=r.text("SYNTHPOST_SEARXNG_URL"),
@@ -317,6 +337,11 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
                 research_claims_per_document=r.integer(
                     "SYNTHPOST_RESEARCH_CLAIMS_PER_DOCUMENT", 8
+                ),
+            ),
+            discovery=DiscoverySettings(
+                max_candidate_age_hours=r.number(
+                    "SYNTHPOST_DISCOVERY_MAX_AGE_HOURS", 24.0
                 ),
             ),
             visuals=VisualSettings(

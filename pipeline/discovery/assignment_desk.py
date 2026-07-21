@@ -326,7 +326,7 @@ def apply_assignment_desk(
             + priority * 0.03
         )
         age = age_hours(leader)
-        if age > config.env_float("SYNTHPOST_DISCOVERY_MAX_AGE_HOURS", 240.0):
+        if age > config.get_settings().discovery.max_candidate_age_hours:
             leader.assignment_lane = "expired"
             if leader.selection_status == StorySelectionStatus.suggested:
                 leader.selection_status = StorySelectionStatus.expired

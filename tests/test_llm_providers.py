@@ -16,10 +16,12 @@ from pipeline.llm.providers import (
     HostedFallbackProvider,
     ProviderConfigurationError,
     ProviderRateLimitError,
+    SarvamProvider,
     _codex_environment,
     _run_codex_command,
     configured_provider,
     groq_strict_schema,
+    provider_availability,
     structured_generate,
 )
 
@@ -59,6 +61,7 @@ class LLMProviderTests(unittest.TestCase):
         self.assertIsInstance(configured_provider("codex"), CodexProvider)
         self.assertIsInstance(configured_provider("groq"), GroqProvider)
         self.assertIsInstance(configured_provider("gemini"), GeminiProvider)
+        self.assertIsInstance(configured_provider("sarvam"), SarvamProvider)
         self.assertIsInstance(
             configured_provider("hosted_fallback"), HostedFallbackProvider
         )
@@ -311,6 +314,61 @@ class LLMProviderTests(unittest.TestCase):
             ValueError, "Primary groq failed: groq limit; fallback gemini failed"
         ):
             provider.generate_json("prompt", {"type": "object"})
+
+    def test_sarvam_provider_availability(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            avail = provider_availability("sarvam")
+            self.assertFalse(avail.available)
+            self.assertEqual(avail.reason, "SARVAM_API_KEY is missing")
+
+        with patch.dict("os.environ", {"SARVAM_API_KEY": "sk_test_key"}):
+            avail = provider_availability("sarvam")
+            self.assertTrue(avail.available)
+            self.assertEqual(avail.reason, "configured")
+
+    def test_sarvam_provider_requires_api_key(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(ValueError, "SARVAM_API_KEY environment variable is missing"):
+                SarvamProvider().generate_json("hello", {"type": "object"})
+
+    def test_sarvam_provider_generates_json_via_client(self) -> None:
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = '{"answer": "New Delhi"}'
+
+        mock_client_cls = MagicMock()
+        mock_client_instance = MagicMock()
+        mock_client_cls.return_value = mock_client_instance
+        mock_client_instance.chat.completions.return_value = mock_response
+
+        with patch.dict("os.environ", {"SARVAM_API_KEY": "sk_test_key"}), patch(
+            "pipeline.llm.providers.SarvamAI", mock_client_cls
+        ):
+            res = SarvamProvider(model="sarvam-105b").generate_json(
+                "What is the capital of India?", {"type": "object"}
+            )
+            self.assertEqual(res, {"answer": "New Delhi"})
+
+            mock_client_cls.assert_called_once_with(
+                api_subscription_key="sk_test_key",
+                timeout=45.0,
+            )
+            mock_client_instance.chat.completions.assert_called_once()
+            call_kwargs = mock_client_instance.chat.completions.call_args.kwargs
+            self.assertEqual(call_kwargs["model"], "sarvam-105b")
+            self.assertEqual(len(call_kwargs["messages"]), 2)
+
+    def test_sarvam_provider_handles_rate_limit(self) -> None:
+        mock_client_cls = MagicMock()
+        mock_client_instance = MagicMock()
+        mock_client_cls.return_value = mock_client_instance
+        mock_client_instance.chat.completions.side_effect = RuntimeError("429 Too Many Requests")
+
+        with patch.dict("os.environ", {"SARVAM_API_KEY": "sk_test_key"}), patch(
+            "pipeline.llm.providers.SarvamAI", mock_client_cls
+        ):
+            with self.assertRaises(ProviderRateLimitError):
+                SarvamProvider().generate_json("prompt", {"type": "object"})
 
 
 if __name__ == "__main__":

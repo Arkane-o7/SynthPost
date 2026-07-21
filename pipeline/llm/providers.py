@@ -24,6 +24,11 @@ except ImportError:
     genai = None
     types = None
 
+try:
+    from sarvamai import SarvamAI
+except ImportError:
+    SarvamAI = None
+
 
 _CODEX_DISABLED_FEATURES = (
     "plugins",
@@ -129,6 +134,14 @@ def provider_availability(provider_name: str | None = None) -> ProviderAvailabil
             name,
             bool(settings.groq_api_key),
             "configured" if settings.groq_api_key else "GROQ_API_KEY is missing",
+        )
+    if name == "sarvam":
+        if SarvamAI is None:
+            return ProviderAvailability(name, False, "sarvamai is not installed")
+        return ProviderAvailability(
+            name,
+            bool(settings.sarvam_api_key),
+            "configured" if settings.sarvam_api_key else "SARVAM_API_KEY is missing",
         )
     if name in {"hosted_fallback", "groq_then_gemini"}:
         problem = settings.provider_problem()
@@ -536,6 +549,72 @@ class GroqProvider:
             raise ValueError(f"Groq HTTP {exc.code}: {body or exc.reason}") from exc
 
         content = result["choices"][0]["message"]["content"]
+        return parse_json_object(content)
+
+
+@dataclass
+class SarvamProvider:
+    model: str = field(
+        default_factory=lambda: app_config.get_settings().llm.sarvam_model
+    )
+    temperature: float = field(
+        default_factory=lambda: app_config.get_settings().llm.sarvam_temperature
+    )
+    name: str = "sarvam"
+    last_model: str | None = None
+    timeout_seconds: float = field(
+        default_factory=lambda: app_config.get_settings().llm.request_timeout_seconds
+    )
+    max_completion_tokens: int = field(
+        default_factory=lambda: app_config.get_settings().llm.sarvam_max_completion_tokens
+    )
+
+    def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
+    ) -> dict[str, Any]:
+        if SarvamAI is None:
+            raise ImportError("sarvamai package is required to use SarvamProvider")
+
+        api_key = app_config.get_settings().llm.sarvam_api_key
+        if not api_key:
+            raise ValueError("SARVAM_API_KEY environment variable is missing")
+
+        client = SarvamAI(
+            api_subscription_key=api_key,
+            timeout=self.timeout_seconds,
+        )
+
+        self.last_model = self.model
+        temp = self.temperature if temperature is None else temperature
+
+        system_prompt = (
+            "You are a helpful assistant. Output only valid JSON matching the provided response schema."
+        )
+        full_prompt = (
+            f"{prompt}\n\nRespond with a valid JSON object strictly matching this schema:\n"
+            f"{json.dumps(schema, indent=2)}"
+        )
+
+        try:
+            response = client.chat.completions(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": full_prompt},
+                ],
+                temperature=temp,
+                max_tokens=self.max_completion_tokens,
+            )
+        except Exception as exc:
+            err_msg = str(exc)
+            if "429" in err_msg or "rate limit" in err_msg.lower():
+                raise ProviderRateLimitError(
+                    f"Sarvam rate limit exceeded: {err_msg}",
+                    retry_after_seconds=60.0,
+                ) from exc
+            raise ValueError(f"Sarvam API request failed: {err_msg}") from exc
+
+        content = response.choices[0].message.content
         return parse_json_object(content)
 
 
@@ -1084,11 +1163,13 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
         return GeminiProvider()
     if provider == "groq":
         return GroqProvider()
+    if provider == "sarvam":
+        return SarvamProvider()
     if provider in {"hosted_fallback", "groq_then_gemini"}:
         return HostedFallbackProvider(GroqProvider(), GeminiProvider())
     raise ValueError(
         f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}. "
-        "Use codex, groq, gemini, or the explicit hosted_fallback option."
+        "Use codex, groq, gemini, sarvam, or the explicit hosted_fallback option."
     )
 
 

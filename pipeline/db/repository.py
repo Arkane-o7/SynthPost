@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from pipeline import config
 from pipeline.db.sqlite import connect, dumps, init_db, loads, row_data, rows_data
 from pipeline.models import (
     Episode,
@@ -32,6 +34,13 @@ from pipeline.workflow import assert_transition
 
 class NotFoundError(KeyError):
     pass
+
+
+_EDITOR_ADDED_CANDIDATE_SOURCE_IDS = (
+    "src_manual_topic",
+    "src_manual_story",
+    "src_custom_url",
+)
 
 
 class Repository:
@@ -359,6 +368,33 @@ class Repository:
                 clauses.append("selection_status != 'duplicate'")
             if not include_expired:
                 clauses.append("selection_status != 'expired'")
+        if not include_expired:
+            # The inbox is a live assignment queue, not a permanent archive.
+            # Filter at read time as well as during assignment-desk ranking so
+            # lowering the configured window clears legacy rows immediately.
+            # Keep an in-production story and anything an editor deliberately
+            # created available regardless of the news freshness window.
+            cutoff = (
+                datetime.now(timezone.utc)
+                - timedelta(
+                    hours=config.get_settings().discovery.max_candidate_age_hours
+                )
+            ).isoformat().replace("+00:00", "Z")
+            placeholders = ", ".join("?" for _ in _EDITOR_ADDED_CANDIDATE_SOURCE_IDS)
+            if episode_id:
+                clauses.append(
+                    "(selection_status = 'selected' "
+                    f"OR source_id IN ({placeholders}) "
+                    "OR julianday(COALESCE(NULLIF(published_at, ''), discovered_at)) "
+                    ">= julianday(?))"
+                )
+            else:
+                clauses.append(
+                    f"(source_id IN ({placeholders}) "
+                    "OR julianday(COALESCE(NULLIF(published_at, ''), discovered_at)) "
+                    ">= julianday(?))"
+                )
+            params.extend([*_EDITOR_ADDED_CANDIDATE_SOURCE_IDS, cutoff])
         if category:
             clauses.append("category = ?")
             params.append(category)

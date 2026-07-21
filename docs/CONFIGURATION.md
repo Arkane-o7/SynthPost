@@ -20,7 +20,7 @@ Required means required for the named feature, not for opening the local Studio.
 
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
-| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `codex` | `codex`, `groq`, `gemini`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. |
+| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `codex` | `codex`, `groq`, `gemini`, `sarvam`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. |
 | `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` | `45` | no | `60` | Positive request timeout. |
 | `SYNTHPOST_LLM_MAX_RETRIES` | `2` | no | `1` | Maximum retry cap for structured-output validation, 0–10. The Codex starter config uses one retry to bound plan usage and job duration. |
 | `SYNTHPOST_SAVE_LLM_DEBUG` | `0` | no | `0` | Debug output can contain provider text; keep disabled and never commit it. |
@@ -36,6 +36,10 @@ Required means required for the named feature, not for opening the local Studio.
 | `GEMINI_API_KEY` | empty | Gemini/fallback | `AIza…` | Secret. Never include in logs/docs/commits. |
 | `SYNTHPOST_GEMINI_MODEL` | `gemini-3.5-flash` | no | `gemini-3.5-flash` | Hosted Gemini model ID. |
 | `SYNTHPOST_GEMINI_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
+| `SARVAM_API_KEY` | empty | Sarvam | `sk_…` | Secret. Never include in logs/docs/commits. |
+| `SYNTHPOST_SARVAM_MODEL` | `sarvam-105b` | no | `sarvam-105b` | Hosted Sarvam AI model ID (`sarvam-105b`, `sarvam-30b`, etc.). |
+| `SYNTHPOST_SARVAM_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
+| `SYNTHPOST_SARVAM_MAX_COMPLETION_TOKENS` | `2300` | no | `4000` | Minimum 128. |
 
 ### Codex with a ChatGPT account
 
@@ -75,7 +79,7 @@ service operation matter.
 |---|---:|---|---|---|
 | `SYNTHPOST_AI_ASSIGNMENT_DESK` | `1` | no | `0` | Disable for deterministic-only ranking. |
 | `SYNTHPOST_ASSIGNMENT_DESK_AI_LIMIT` | `12` | no | `12` | Maximum leaders sent for AI assessment. |
-| `SYNTHPOST_DISCOVERY_MAX_AGE_HOURS` | `240` | no | `72` | Older candidates expire from active ranking. |
+| `SYNTHPOST_DISCOVERY_MAX_AGE_HOURS` | `24` | no | `72` | Active Story Inbox window. Older discovered news is archived from the default inbox; selected and editor-added stories remain available. |
 | `SYNTHPOST_DISCOVERY_WORKERS` | `6` | no | `4` | Concurrent source fetch workers. |
 | `SYNTHPOST_RESEARCH_MAX_DOCUMENTS` | `6` | no | `8` | Lead plus related documents. |
 | `SYNTHPOST_RESEARCH_CLAIMS_PER_DOCUMENT` | `8` | no | `6` | Extraction bound. |
