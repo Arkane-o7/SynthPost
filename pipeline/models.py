@@ -388,9 +388,8 @@ class SourceClipCue(StrictModel):
 
 
 class NarrativeArcItem(StrictModel):
-    """One editorial job in a narrative brief, before prose is written."""
+    """One free-form narrative move in a story brief, before prose is written."""
 
-    section_type: SectionType
     purpose: str = Field(min_length=4, max_length=320)
     claim_ids: list[str] = Field(default_factory=list)
     must_not_repeat: list[str] = Field(default_factory=list)

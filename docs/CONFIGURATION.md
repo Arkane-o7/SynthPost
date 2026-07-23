@@ -190,7 +190,7 @@ service operation matter.
 | `SYNTHPOST_JOB_RETRY_MAX_SECONDS` | `900` | no | `900` | Must be at least the base. |
 | `SYNTHPOST_JOB_HEARTBEAT_SECONDS` | `5` | no | `5` | Minimum 1 second. |
 
-`make workers` launches exactly the configured capacity under one supervisor. Increasing a count requires restarting the supervisor. Jobs targeting the same story are serialized, and assembly is exclusive with other work for its episode; separate projects and episodes can use every available slot. Start with the `3/3/3` defaults, observe memory and provider quotas, then increase worker counts or per-render Remotion concurrency separately.
+`make workers` launches exactly the configured capacity under one supervisor. Increasing a count requires restarting the supervisor. Conflicting jobs targeting the same story are serialized, except narration generation and visual search, which run together on their independent editorial and media lanes. Assembly is exclusive with other work for its episode; separate projects and episodes can use every available slot. Start with the `3/3/3` defaults, observe memory and provider quotas, then increase worker counts or per-render Remotion concurrency separately.
 
 ## Security notes
 

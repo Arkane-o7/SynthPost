@@ -8,6 +8,7 @@ import { TimelineTemplatePreview } from "./TimelineTemplatePreview";
 import { applyTimelineTemplate } from "./timelineVisualSelection";
 import type {
   NarrationArtifact,
+  NarrationBeatTiming,
   TimelinePlan,
   TimelineSegment,
   VisualCandidate,
@@ -26,6 +27,19 @@ function reorder<T>(items: T[], from: number, to: number): T[] {
   const [item] = copy.splice(from, 1);
   copy.splice(to, 0, item);
   return copy;
+}
+
+function narrationBeatsForSegment(
+  segment: TimelineSegment,
+  narration: NarrationArtifact,
+): NarrationBeatTiming[] {
+  const beatId = segment.overlays.data?.narration_beat_id;
+  if (typeof beatId === "string" && beatId) {
+    return narration.beats.filter((beat) => beat.beat_id === beatId);
+  }
+  return narration.beats.filter(
+    (beat) => beat.section_id === segment.section_id,
+  );
 }
 
 export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
@@ -95,16 +109,6 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
   const visualsById = React.useMemo(
     () => new Map(visuals.map((visual) => [visual.asset_id, visual])),
     [visuals],
-  );
-  const narrationSectionStarts = React.useMemo(
-    () =>
-      new Map(
-        (narration?.sections ?? []).map((section) => [
-          section.section_id,
-          section.start_time,
-        ]),
-      ),
-    [narration],
   );
   const narrationJob = studio.jobs.find(
     (job) =>
@@ -373,25 +377,25 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                   <div className="timeline-beat-clock-title">
                     Spoken beats · exact Kokoro clock
                   </div>
-                  {narration.beats
-                    .filter((beat) => beat.section_id === seg.section_id)
-                    .map((beat) => (
+                  {narrationBeatsForSegment(seg, narration).map(
+                    (beat, beatIndex, segmentBeats) => (
                       <div className="timeline-beat-clock-row" key={beat.beat_id}>
                         <span>
                           {(
-                            beat.start_time +
-                            seg.start_time -
-                            (narrationSectionStarts.get(seg.section_id) ?? 0)
+                            seg.start_time +
+                            beat.start_time -
+                            segmentBeats[0].start_time
                           ).toFixed(2)}–
                           {(
-                            beat.speech_end_time +
-                            seg.start_time -
-                            (narrationSectionStarts.get(seg.section_id) ?? 0)
+                            seg.start_time +
+                            beat.speech_end_time -
+                            segmentBeats[0].start_time
                           ).toFixed(2)}s
                         </span>
                         <p>{beat.text}</p>
                       </div>
-                    ))}
+                    ),
+                  )}
                 </div>
               )}
               <div className="segment-meta">

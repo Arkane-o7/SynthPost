@@ -1131,7 +1131,7 @@ INPUT JSON:
         audit_saver(GenerationAudit(
             story_id=story_id,
             stage="visual_query_planner",
-            prompt_version="synthpost.visual-query.v2",
+            prompt_version="synthpost.visual-query.v3",
             charter_version=CHARTER_VERSION,
             provider=str(latest_attempt.get("provider") or provider.name),
             model=latest_attempt.get("model"),

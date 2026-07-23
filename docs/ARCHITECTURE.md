@@ -66,7 +66,7 @@ flowchart TD
   F --> O[Final export]
 ```
 
-The Studio creates jobs through FastAPI. The supervisor starts the configured number of OS processes for each lane; every process leases a numbered capacity slot and claims jobs atomically. The repository excludes jobs that would mutate the same story concurrently and prevents assembly from overlapping work in its episode. Independent projects and episodes remain eligible across every slot. Workers validate output keys against `pipeline/stages.py`, update progress in SQLite, and write project-aware logs under `.synthpost/jobs/`.
+The Studio creates jobs through FastAPI. The supervisor starts the configured number of OS processes for each lane; every process leases a numbered capacity slot and claims jobs atomically. The repository excludes jobs that would conflict on the same story, while explicitly allowing narration generation and visual search to overlap because they consume the same approved script and write independent outputs. Assembly cannot overlap work in its episode. Independent projects and episodes remain eligible across every slot. Workers validate output keys against `pipeline/stages.py`, update progress in SQLite, and write project-aware logs under `.synthpost/jobs/`.
 
 Separate processes isolate renderer environment state and native subprocesses. Remotion staging, Avatar Engine media/render caches, story output, and FFmpeg assembly work are episode/story-scoped. Shared first-run brand and Avatar runtime generation uses filesystem locks.
 

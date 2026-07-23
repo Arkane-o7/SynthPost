@@ -583,7 +583,8 @@ def api_approve_script(story_id: str) -> dict[str, Any]:
             )
         script = approve_script(repository, story_id)
         # Narration and visual discovery both become eligible after approval.
-        # The queue's same-story serialization still prevents overlapping writes.
+        # They use independent lanes and artifacts, so the queue may run them
+        # together while retaining same-story serialization for later stages.
         episode = repository.episode_for_story(story_id)
         for job_type in ("narration_generate", "visual_search"):
             try:

@@ -15,6 +15,13 @@ EDITORIAL_JOB_TYPES = frozenset(
 MEDIA_JOB_TYPES = frozenset({"visual_search", "timeline_generate"})
 RENDER_JOB_TYPES = frozenset({"render_avatar", "render_story", "assemble_episode"})
 
+# These stages share an immutable approved-script input but write independent
+# artifacts and database records. Every other same-story combination remains
+# serialized by Repository.claim_next_job().
+SAME_STORY_PARALLEL_JOB_PAIRS: tuple[tuple[str, str], ...] = (
+    ("narration_generate", "visual_search"),
+)
+
 
 def queue_lane_for_job_type(job_type: str) -> str:
     if job_type in MEDIA_JOB_TYPES:

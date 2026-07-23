@@ -28,7 +28,10 @@ from pipeline.models import (
     now_iso,
     queue_lane_for_job_type,
 )
-from pipeline.jobs.policy import default_max_attempts
+from pipeline.jobs.policy import (
+    SAME_STORY_PARALLEL_JOB_PAIRS,
+    default_max_attempts,
+)
 from pipeline.workflow import assert_transition
 
 
@@ -390,7 +393,8 @@ class Repository:
                 )
             else:
                 clauses.append(
-                    f"(source_id IN ({placeholders}) "
+                    "(selection_status = 'selected' "
+                    f"OR source_id IN ({placeholders}) "
                     "OR julianday(COALESCE(NULLIF(published_at, ''), discovered_at)) "
                     ">= julianday(?))"
                 )
@@ -934,16 +938,28 @@ class Repository:
                 queue_lane.value if isinstance(queue_lane, JobQueueLane) else queue_lane
             )
             due_at = now_iso()
+            safe_pair_checks: list[str] = []
+            safe_pair_params: list[str] = []
+            for left, right in SAME_STORY_PARALLEL_JOB_PAIRS:
+                safe_pair_checks.extend(
+                    [
+                        "(candidate.job_type = ? AND running.job_type = ?)",
+                        "(candidate.job_type = ? AND running.job_type = ?)",
+                    ]
+                )
+                safe_pair_params.extend([left, right, right, left])
+            safe_pair_sql = " OR ".join(safe_pair_checks) or "0"
             clauses = [
                 "candidate.status = 'queued'",
                 "(candidate.available_at IS NULL OR candidate.available_at <= ?)",
-                """
+                f"""
                 NOT EXISTS (
                   SELECT 1 FROM render_jobs AS running
                   WHERE running.status = 'running'
                     AND (
                       (candidate.story_id IS NOT NULL
                        AND running.story_id = candidate.story_id)
+                       AND NOT ({safe_pair_sql})
                       OR
                       (candidate.episode_id IS NOT NULL
                        AND running.episode_id = candidate.episode_id
@@ -953,7 +969,7 @@ class Repository:
                 )
                 """,
             ]
-            params: list[Any] = [due_at]
+            params: list[Any] = [due_at, *safe_pair_params]
             if lane_value:
                 clauses.append("candidate.queue_lane = ?")
                 params.append(lane_value)

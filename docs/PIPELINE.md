@@ -40,7 +40,7 @@ Generating or manually saving a new script revision returns the story to `script
 
 ### Narration
 
-Script approval queues both local Kokoro narration and visual discovery. Same-story jobs remain serialized for safe artifact writes, while work for other projects and episodes continues across the configured worker pool. The narration worker synthesizes each stable production beat with one loaded Kokoro pipeline, writes a continuous 24 kHz mono WAV, and records beat and section boundaries from the number of PCM samples actually written. It does not infer timing from word counts. The versioned artifacts live at `episodes/<episode_id>/stories/<story_id>/narration/script_vNNN/{narration.wav,alignment.json}` and are reused only when the script, voice, speed, language, beat text, and pause settings still match.
+Script approval queues both local Kokoro narration and visual discovery. They run concurrently on the editorial and media lanes because both read the immutable approved script while writing separate narration and visual artifacts. Other conflicting same-story jobs remain serialized, while work for other projects and episodes continues across the configured worker pool. The narration worker synthesizes each stable production beat with one loaded Kokoro pipeline, writes a continuous 24 kHz mono WAV, and records beat and section boundaries from the number of PCM samples actually written. It does not infer timing from word counts. The versioned artifacts live at `episodes/<episode_id>/stories/<story_id>/narration/script_vNNN/{narration.wav,alignment.json}` and are reused only when the script, voice, speed, language, beat text, and pause settings still match.
 
 Changing the script creates a new version and makes the previous narration ineligible. Changing voice or timing configuration also makes it stale. Timeline generation waits for current narration, and the Studio exposes an explicit regeneration action if the automatic job failed. Normal continuous-anchor production uses this WAV as the single audio source for timeline, lip sync, avatar, and render. The opt-in experimental source-audio feature retains its compatibility path when an unavailable source clip introduces fallback words that were not present in the canonical WAV.
 
@@ -56,7 +56,7 @@ Non-downloadable results remain research leads until acquired. Image acquisition
 
 ### Timeline
 
-The planner maps script sections, Kokoro section windows, pinned or automatically selected eligible visuals, template capabilities, overlays, and audio policy into ordered `TimelineSegment` models. Headline cues carry their `beat_id` and exact sample-derived start/end times. Segment order and duration are locked to the approved narration; change the script and regenerate narration to alter the spoken clock. Validation checks clock integrity, timing, rights, file existence, template compatibility, automatic-selection warnings, and timeline approval. Timeline approval is required before manifest construction.
+The planner maps script sections, Kokoro beat windows, pinned or automatically selected eligible visuals, template capabilities, overlays, and audio policy into ordered `TimelineSegment` models. Each spoken beat becomes an editable shot, so normal narration changes composition roughly every sentence or clause instead of holding one section layout for 30–40 seconds. Eligible section visuals rotate in editorial rank order, visual-led shots alternate scale, and every third visual beat briefly returns to the presenter. Headline cues carry their `beat_id` and exact sample-derived start/end times. Segment order and duration are locked to the approved narration; change the script and regenerate narration to alter the spoken clock. Validation checks clock integrity, retention-pacing outliers, timing, rights, file existence, template compatibility, automatic-selection warnings, and timeline approval. Timeline approval is required before manifest construction.
 
 ### Avatar
 
@@ -76,7 +76,7 @@ FFmpeg normalizes story clips and joins them with brand intro/outro assets. Prod
 - Render jobs have a lower attempt budget because they are expensive and not assumed idempotent at arbitrary interruption points.
 - Worker heartbeats prevent healthy long jobs from being reclaimed. Stale running jobs are released or failed after job-type-specific limits.
 - Each lane has a configurable supervised process pool. SQLite claims are atomic, so independent projects can occupy multiple slots without claiming the same job twice.
-- Jobs for the same story are serialized. Episode assembly does not overlap any other running work for that episode, while unrelated projects and episodes remain parallel.
+- Conflicting jobs for the same story are serialized; narration generation and visual search are the explicit safe-overlap pair. Episode assembly does not overlap any other running work for that episode, while unrelated projects and episodes remain parallel.
 - Avatar, composition, and assembly use file freshness/provenance checks and support explicit force flags.
 - Cancellation is cooperative between progress callbacks and the SQLite job status.
 - Validation/configuration failures are terminal and retain exception context in the job record/log.

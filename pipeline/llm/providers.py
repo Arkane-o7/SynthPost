@@ -727,31 +727,26 @@ class MockProvider:
                 "closing_strategy": "End with the unresolved execution test viewers should watch next.",
                 "arc": [
                     {
-                        "section_type": "cold_open",
                         "purpose": "Establish the verified development and central question once.",
                         "claim_ids": primary_claim,
                         "must_not_repeat": [],
                     },
                     {
-                        "section_type": "context",
                         "purpose": "Explain the documented system and relevant background.",
                         "claim_ids": primary_claim,
                         "must_not_repeat": ["the opening scene"],
                     },
                     {
-                        "section_type": "key_developments",
                         "purpose": "Advance through evidence and implementation details.",
                         "claim_ids": primary_claim,
                         "must_not_repeat": ["the basic premise"],
                     },
                     {
-                        "section_type": "uncertainty",
                         "purpose": "Identify the documented constraint and what remains unproven.",
                         "claim_ids": primary_claim,
                         "must_not_repeat": ["background already established"],
                     },
                     {
-                        "section_type": "conclusion",
                         "purpose": "Synthesize the evidence and identify the next verifiable test.",
                         "claim_ids": primary_claim,
                         "must_not_repeat": ["the opening scene", "the full mechanism"],
@@ -990,34 +985,27 @@ class MockProvider:
                 for beat in payload.get("draft", {}).get("beats", [])
                 if beat.get("beat_id")
             ]
-            section_types = [
-                "cold_open",
-                "context",
-                "key_developments",
-                "uncertainty",
-                "conclusion",
-            ][: len(beat_ids)]
+            group_count = min(5, len(beat_ids))
             sections = []
             start = 0
-            for index, section_type in enumerate(section_types):
-                remaining_sections = len(section_types) - index
+            for index in range(group_count):
+                remaining_sections = group_count - index
                 remaining_beats = len(beat_ids) - start
                 take = max(1, round(remaining_beats / remaining_sections))
-                end = len(beat_ids) if index == len(section_types) - 1 else start + take
+                end = len(beat_ids) if index == group_count - 1 else start + take
                 assigned = beat_ids[start:end]
                 start = end
                 sections.append(
                     {
-                        "section_type": section_type,
                         "beat_ids": assigned,
                         "suggested_visual_types": ["image", "video"],
                         "suggested_search_queries": [
-                            f"India {section_type.replace('_', ' ')} editorial photo",
-                            f"India {section_type.replace('_', ' ')} official raw footage",
+                            f"India story group {index + 1} editorial photo",
+                            f"India story group {index + 1} official raw footage",
                         ],
                         "suggested_template_ids": ["split_anchor_visual"],
-                        "lower_third": section_type.replace("_", " ").title(),
-                        "chyron": f"{section_type.replace('_', ' ').title()} explained",
+                        "lower_third": f"Story development {index + 1}",
+                        "chyron": f"Story group {index + 1}",
                         "source_clip": None,
                     }
                 )

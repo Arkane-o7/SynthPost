@@ -314,6 +314,71 @@ def approved_visuals_by_section(
     return result
 
 
+def ranked_visuals_by_section(
+    visuals: list[VisualCandidate],
+) -> dict[str, list[VisualCandidate]]:
+    """Return every renderable candidate in editorial preference order.
+
+    The single-choice helper above remains useful for compatibility and for
+    editor pinning. Timeline generation uses the full ranked pool so a section
+    with several usable assets can cut between them instead of holding the
+    highest-ranked image for the entire narration block.
+    """
+
+    result: dict[str, list[VisualCandidate]] = {}
+    for visual in sorted(visuals, key=_visual_selection_key):
+        if not _is_renderable_visual(visual):
+            continue
+        for section_id in visual.section_ids:
+            result.setdefault(section_id, []).append(visual)
+    return result
+
+
+def retention_template_decision(
+    decision: TemplateDecision,
+    visual: VisualCandidate | None,
+    shot_index: int,
+    previous_template: str | None,
+) -> TemplateDecision:
+    """Vary composition at narration-beat cuts to avoid long static holds."""
+
+    if shot_index == 0 or visual is None:
+        return decision
+
+    fullscreen_eligible = (
+        visual.media_type in {MediaType.image, MediaType.video}
+        and visual.content_role
+        in {
+            ContentRole.primary_footage,
+            ContentRole.evidence,
+            ContentRole.context,
+            ContentRole.atmosphere,
+        }
+    )
+    anchor_templates = {"fullscreen_anchor", "fallback_anchor"}
+    if shot_index % 3 == 2 and previous_template not in anchor_templates:
+        selected = "fullscreen_anchor"
+        reason = "brief presenter reset after two visual-led shots"
+    elif previous_template == "split_anchor_visual":
+        if fullscreen_eligible:
+            selected = "fullscreen_news_visual"
+            reason = "change scale at the next narration beat"
+        else:
+            selected = "fullscreen_anchor"
+            reason = "reset to the presenter because this asset cannot fill the frame"
+    else:
+        selected = "split_anchor_visual"
+        reason = "bring the presenter back beside the next visual beat"
+
+    scores = dict(decision.scores)
+    scores[selected] = max(scores.get(selected, 0.0), max(scores.values()) + 1.0)
+    return TemplateDecision(
+        selected,
+        scores,
+        [reason, *decision.reasons],
+    )
+
+
 def source_audio_visuals_by_section(
     visuals: list[VisualCandidate],
 ) -> dict[str, VisualCandidate]:
@@ -498,41 +563,61 @@ def _estimated_narration_duration(text: str) -> float:
     return round(max(3.0, words / config.words_per_minute() * 60.0), 2)
 
 
-def _exact_headline_cues(
-    narration: NarrationArtifact,
-    section_id: str,
-    headline_cues: list[str],
-) -> list[dict[str, object]]:
-    section_timing = next(
-        item for item in narration.sections if item.section_id == section_id
-    )
-    beats = [
-        beat for beat in narration.beats if beat.section_id == section_id
-    ]
-    result: list[dict[str, object]] = []
-    for index, beat in enumerate(beats):
-        text = (
-            headline_cues[index]
-            if index < len(headline_cues)
-            else beat.text
-        )
-        result.append(
-            {
-                "text": text,
-                "start": round(beat.start_time - section_timing.start_time, 3),
-                "end": round(beat.end_time - section_timing.start_time, 3),
-                "beat_id": beat.beat_id,
-                "timing_source": "kokoro_exact_samples",
-            }
-        )
-    return result
-
-
 def _narration_clock_errors(
     plan: TimelinePlan, narration: NarrationArtifact
 ) -> list[str]:
     """Reject timeline edits that would desynchronize canonical audio."""
 
+    expected_beats = {beat.beat_id: beat for beat in narration.beats}
+    expected_beat_order = [beat.beat_id for beat in narration.beats]
+    paced_segments = [
+        segment
+        for segment in plan.segments
+        if segment.audio.mode != AudioMode.source
+        and isinstance(segment.overlays.data.get("narration_beat_id"), str)
+    ]
+    if paced_segments:
+        errors: list[str] = []
+        actual_beat_order: list[str] = []
+        cursor = 0.0
+        for segment in plan.segments:
+            if segment.audio.mode == AudioMode.source:
+                cursor += segment.duration
+                continue
+            beat_id = str(segment.overlays.data.get("narration_beat_id") or "")
+            expected = expected_beats.get(beat_id)
+            if expected is None:
+                errors.append(
+                    f"Segment {segment.segment_id} has no matching Kokoro narration beat"
+                )
+                cursor += segment.duration
+                continue
+            actual_beat_order.append(beat_id)
+            if abs(segment.start_time - cursor) > 0.02:
+                errors.append(
+                    f"Segment {segment.segment_id} start was edited away from the narration clock"
+                )
+            expected_duration = expected.end_time - expected.start_time
+            if abs(segment.duration - expected_duration) > 0.02:
+                errors.append(
+                    f"Segment {segment.segment_id} duration must remain "
+                    f"{expected_duration:.3f}s to match Kokoro audio beat {beat_id}"
+                )
+            if " ".join(segment.script_text.split()) != " ".join(
+                expected.text.split()
+            ):
+                errors.append(
+                    f"Segment {segment.segment_id} text differs from Kokoro beat {beat_id}"
+                )
+            cursor += segment.duration
+        if actual_beat_order != expected_beat_order:
+            errors.append(
+                "Narrated shot order must match the approved Kokoro beat order; "
+                "change templates or visuals without reordering the spoken beats"
+            )
+        return errors
+
+    # Compatibility validation for timelines generated before beat-paced shots.
     expected_by_section = {
         item.section_id: item for item in narration.sections
     }
@@ -593,134 +678,187 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
     }
     visuals = repository.list_visuals(story_id)
     by_section = approved_visuals_by_section(visuals)
+    visual_pools = ranked_visuals_by_section(visuals)
     source_audio_by_section = source_audio_visuals_by_section(visuals)
     # Auto-distribute renderable visuals that were staged without explicit
     # section_id bindings (common for UI uploads and drop-folder scans).
     all_section_ids = [section.section_id for section in script.sections]
     by_section = distribute_unassigned_visuals(visuals, all_section_ids, by_section)
+    for section_id, selected in by_section.items():
+        pool = visual_pools.setdefault(section_id, [])
+        visual_pools[section_id] = [
+            selected,
+            *(visual for visual in pool if visual.asset_id != selected.asset_id),
+        ]
     start = 0.0
     segments: list[TimelineSegment] = []
     source_audio_enabled = config.source_audio_inserts_enabled()
     for index, section in enumerate(script.sections):
         authored_source_clip = section.source_clip
         source_clip = authored_source_clip if source_audio_enabled else None
-        narration_text = section.text
-        if authored_source_clip is not None and not source_audio_enabled:
-            narration_text = " ".join(
-                value.strip()
-                for value in (
-                    section.text,
-                    authored_source_clip.fallback_narration,
-                )
-                if value.strip()
-            )
         source_visual = (
             source_audio_by_section.get(section.section_id) if source_clip else None
         )
         try:
-            duration = section_timings[section.section_id].duration_seconds
+            section_timing = section_timings[section.section_id]
         except KeyError as exc:
             raise ValueError(
                 f"Kokoro alignment is missing section {section.section_id}"
             ) from exc
-        visual = by_section.get(section.section_id)
-        if (
-            source_visual is not None
-            and visual is not None
-            and visual.asset_id == source_visual.asset_id
-        ):
-            # Let the anchor set up an authored insert instead of showing the
-            # same clip muted and then immediately replaying it with sound.
-            visual = None
-        decision = select_template(
-            section.section_type,
-            visual,
-            index,
-            total_sections=len(script.sections),
-            previous_templates=[item.template.template_id for item in segments],
-            script_text=narration_text,
+        section_beats = [
+            beat
+            for beat in narration.beats
+            if beat.beat_id in section_timing.beat_ids
+        ]
+        if not section_beats:
+            raise ValueError(
+                f"Kokoro alignment has no beats for section {section.section_id}"
+            )
+        section_visuals = visual_pools.get(section.section_id, [])
+        has_timed_source_fallback = any(
+            beat.kind == "source_fallback" for beat in section_beats
         )
-        template_id = decision.template_id
-        render_visual = (
-            visual
-            if template_id in {"split_anchor_visual", "fullscreen_news_visual"}
-            else None
-        )
-        audio_mode = choose_audio_mode(template_id, render_visual)
-        anchor = SegmentAnchor(
-            visible=template_id != "fullscreen_news_visual",
-            # Narration can continue while the anchor is off screen. Only an
-            # audible fullscreen source clip replaces the anchor voice.
-            speaking=audio_mode != AudioMode.source,
-            camera="front_close"
-            if template_id != "fullscreen_anchor"
-            else "landscape_intro",
-        )
-        source_volume = 1.0 if audio_mode == AudioMode.source else 0.0
-        segment_visual = segment_visual_from_candidate(render_visual)
-        if audio_mode == AudioMode.source:
-            segment_visual.audio_mode = "original"
-        elif audio_mode == AudioMode.mixed:
-            segment_visual.audio_mode = "mixed"
-        segment = TimelineSegment(
-            segment_id=f"seg_{len(segments) + 1:03d}",
-            section_id=section.section_id,
-            start_time=round(start, 3),
-            end_time=round(start + duration, 3),
-            duration=round(duration, 3),
-            script_text=narration_text,
-            claim_ids=section.claim_ids,
-            anchor=anchor,
-            visual=segment_visual,
-            template=SegmentTemplate(template_id=template_id),
-            audio=SegmentAudio(
-                mode=audio_mode,
-                narration_volume=1.0 if audio_mode != AudioMode.source else 0.0,
-                source_volume=source_volume,
-                ducking=False,
-            ),
-            overlays=SegmentOverlays(
-                lower_third=section.lower_third,
-                chyron=section.chyron,
-                attribution=render_visual.attribution_text if render_visual else "",
-                quote_text="",
-                document_source=render_visual.attribution_text
-                if render_visual
-                and render_visual.content_role == ContentRole.document
-                else "",
-                data={
-                    "playback_mode": "narration",
-                    "title": section.section_type.replace("_", " ").title(),
-                    # Anchor-only layouts intentionally omit media from the
-                    # render contract, but the editor still needs to know
-                    # which candidate to restore when the template is changed
-                    # to a visual-capable layout.
-                    "preferred_visual_asset_id": (
-                        visual.asset_id if visual is not None else None
+
+        for shot_index, beat in enumerate(section_beats):
+            duration = beat.end_time - beat.start_time
+            beat_text = beat.text
+            if (
+                authored_source_clip is not None
+                and not source_audio_enabled
+                and not has_timed_source_fallback
+                and shot_index == len(section_beats) - 1
+            ):
+                # Compatibility for pre-source-fallback narration artifacts.
+                beat_text = " ".join(
+                    value.strip()
+                    for value in (
+                        beat.text,
+                        authored_source_clip.fallback_narration,
+                    )
+                    if value.strip()
+                )
+            visual = (
+                section_visuals[shot_index % len(section_visuals)]
+                if section_visuals
+                else None
+            )
+            if (
+                source_visual is not None
+                and visual is not None
+                and visual.asset_id == source_visual.asset_id
+            ):
+                # Let the anchor set up an authored insert instead of showing
+                # the same clip muted and immediately replaying it with sound.
+                visual = None
+            decision = select_template(
+                section.section_type,
+                visual,
+                index,
+                total_sections=len(script.sections),
+                previous_templates=[item.template.template_id for item in segments],
+                script_text=beat_text,
+            )
+            decision = retention_template_decision(
+                decision,
+                visual,
+                shot_index,
+                segments[-1].template.template_id if segments else None,
+            )
+            template_id = decision.template_id
+            render_visual = (
+                visual
+                if template_id
+                in {"split_anchor_visual", "fullscreen_news_visual"}
+                else None
+            )
+            audio_mode = choose_audio_mode(template_id, render_visual)
+            anchor = SegmentAnchor(
+                visible=template_id != "fullscreen_news_visual",
+                # Narration can continue while the anchor is off screen. Only
+                # an audible fullscreen source clip replaces the anchor voice.
+                speaking=audio_mode != AudioMode.source,
+                camera="front_close"
+                if template_id != "fullscreen_anchor"
+                else "landscape_intro",
+            )
+            source_volume = 1.0 if audio_mode == AudioMode.source else 0.0
+            segment_visual = segment_visual_from_candidate(render_visual)
+            if audio_mode == AudioMode.source:
+                segment_visual.audio_mode = "original"
+            elif audio_mode == AudioMode.mixed:
+                segment_visual.audio_mode = "mixed"
+            headline = (
+                section.headline_cues[shot_index]
+                if shot_index < len(section.headline_cues)
+                else beat.text
+            )
+            segment = TimelineSegment(
+                segment_id=f"seg_{len(segments) + 1:03d}",
+                section_id=section.section_id,
+                start_time=round(start, 3),
+                end_time=round(start + duration, 3),
+                duration=round(duration, 3),
+                script_text=beat_text,
+                claim_ids=section.claim_ids,
+                anchor=anchor,
+                visual=segment_visual,
+                template=SegmentTemplate(template_id=template_id),
+                audio=SegmentAudio(
+                    mode=audio_mode,
+                    narration_volume=1.0 if audio_mode != AudioMode.source else 0.0,
+                    source_volume=source_volume,
+                    ducking=False,
+                ),
+                overlays=SegmentOverlays(
+                    lower_third=section.lower_third,
+                    chyron=section.chyron,
+                    attribution=(
+                        render_visual.attribution_text if render_visual else ""
                     ),
-                    "headline_cues": _exact_headline_cues(
-                        narration,
-                        section.section_id,
-                        section.headline_cues,
-                    ),
-                    "timing_source": "kokoro_exact_samples",
-                    "narration_audio_path": narration.audio_path,
-                    "bullets": [narration_text[:120]],
-                    "values": [],
-                    "locations": [],
-                    "events": [],
-                    "template_selection": {
-                        "policy": "editorial_v1",
-                        "selected": template_id,
-                        "scores": decision.scores,
-                        "reasons": decision.reasons,
+                    quote_text="",
+                    document_source=render_visual.attribution_text
+                    if render_visual
+                    and render_visual.content_role == ContentRole.document
+                    else "",
+                    data={
+                        "playback_mode": "narration",
+                        "title": section.section_type.replace("_", " ").title(),
+                        # Anchor-only shots retain the candidate so an editor
+                        # can switch back to a visual layout without searching.
+                        "preferred_visual_asset_id": (
+                            visual.asset_id if visual is not None else None
+                        ),
+                        "headline_cues": [
+                            {
+                                "text": headline,
+                                "start": 0.0,
+                                "end": round(duration, 3),
+                                "beat_id": beat.beat_id,
+                                "timing_source": "kokoro_exact_samples",
+                            }
+                        ],
+                        "timing_source": "kokoro_exact_samples",
+                        "narration_audio_path": narration.audio_path,
+                        "narration_beat_id": beat.beat_id,
+                        "narration_beat_kind": beat.kind,
+                        "retention_shot_index": shot_index,
+                        "retention_shot_count": len(section_beats),
+                        "bullets": [beat_text[:120]],
+                        "values": [],
+                        "locations": [],
+                        "events": [],
+                        "template_selection": {
+                            "policy": "editorial_retention_v2",
+                            "selected": template_id,
+                            "scores": decision.scores,
+                            "reasons": decision.reasons,
+                        },
                     },
-                },
-            ),
-            status=ApprovalStatus.review,
-        )
-        segments.append(segment)
-        start += duration
+                ),
+                status=ApprovalStatus.review,
+            )
+            segments.append(segment)
+            start += duration
 
         if source_clip is None:
             continue
