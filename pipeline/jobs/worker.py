@@ -33,7 +33,7 @@ from pipeline.models import (
 from pipeline.observability import LogContext, safe_text, write_event
 from pipeline.jobs.policy import classify_failure, retry_time
 from pipeline.research.extract import build_research_pack
-from pipeline.scripts.generation import generate_script
+from pipeline.scripts.generation import begin_script_generation, generate_script
 from pipeline.storage import PROJECT_ROOT, project_relative, story_manifest_path
 from pipeline.timeline.planner import generate_timeline
 from pipeline.visuals.providers import search_visuals
@@ -149,17 +149,29 @@ class JobContext:
 
 def handle_discovery(ctx: JobContext) -> dict[str, str]:
     payload = ctx.job.payload
+    stats: dict[str, int] = {}
     ctx.progress(5, "loading sources")
     candidates = discover(
         ctx.repository,
         episode_id=payload.get("episode_id"),
         category=payload.get("category"),
+        stats=stats,
         progress_callback=lambda fraction, stage: ctx.progress(
             8 + fraction * 80, stage
         ),
     )
-    ctx.progress(100, f"discovered {len(candidates)} candidates")
-    return {"candidate_count": str(len(candidates))}
+    ctx.progress(
+        100,
+        f"discovery complete · {stats.get('new_entry_count', 0)} new · "
+        f"{stats.get('seen_entry_count', 0)} seen before · "
+        f"{len(candidates)} ranked stories",
+    )
+    return {
+        "candidate_count": str(len(candidates)),
+        "feed_entry_count": str(stats.get("feed_entry_count", 0)),
+        "new_entry_count": str(stats.get("new_entry_count", 0)),
+        "seen_entry_count": str(stats.get("seen_entry_count", 0)),
+    }
 
 
 def handle_research(ctx: JobContext) -> dict[str, str]:
@@ -171,9 +183,42 @@ def handle_research(ctx: JobContext) -> dict[str, str]:
         document.publisher for document in pack.documents if document.publisher
     }
     ctx.progress(
-        100,
+        90,
         f"research pack ready: {len(pack.documents)} articles from "
         f"{len(publishers)} publishers",
+    )
+    if ctx.job.payload.get("_continue_to_script"):
+        ctx.progress(96, "queuing script draft from the completed research")
+        restore_state = begin_script_generation(ctx.repository, ctx.job.story_id)
+        script_payload = {
+            "provider": ctx.job.payload.get("provider"),
+            "target_duration_seconds": int(
+                ctx.job.payload.get("target_duration_seconds") or 600
+            ),
+            "narration_mode": str(
+                ctx.job.payload.get("narration_mode") or "explained"
+            ),
+            "_previous_workflow_state": restore_state.value,
+        }
+        try:
+            ctx.repository.create_job(
+                "script_generate",
+                episode_id=ctx.job.episode_id,
+                story_id=ctx.job.story_id,
+                payload=script_payload,
+            )
+        except Exception:
+            candidate = ctx.repository.candidate_for_story(ctx.job.story_id)
+            if candidate.workflow_state == StoryWorkflowState.script_generating:
+                ctx.repository.transition_story(ctx.job.story_id, restore_state)
+            raise
+    ctx.progress(
+        100,
+        (
+            "research complete; script drafting queued"
+            if ctx.job.payload.get("_continue_to_script")
+            else "research complete"
+        ),
     )
     return {
         "research_pack_id": pack.research_pack_id,
@@ -334,6 +379,41 @@ def handle_render_story(ctx: JobContext) -> dict[str, str]:
         if candidate.workflow_state == StoryWorkflowState.rendering_composition:
             ctx.repository.transition_story(
                 ctx.job.story_id, StoryWorkflowState.assembling
+            )
+        episode = ctx.repository.episode_for_story(ctx.job.story_id)
+        story_states = []
+        for episode_story_id in episode.story_ids:
+            try:
+                story_states.append(
+                    ctx.repository.candidate_for_story(
+                        episode_story_id
+                    ).workflow_state
+                )
+            except Exception:
+                story_states.append(None)
+        ready_to_assemble = bool(story_states) and all(
+            state
+            in {
+                StoryWorkflowState.assembling,
+                StoryWorkflowState.completed,
+            }
+            for state in story_states
+        )
+        if ready_to_assemble and not ctx.repository.active_job(
+            "assemble_episode",
+            episode_id=episode.episode_id,
+            render_profile="production",
+        ):
+            ctx.progress(96, "queuing final episode assembly and brand outro")
+            ctx.repository.create_job(
+                "assemble_episode",
+                episode_id=episode.episode_id,
+                render_profile="production",
+                payload={
+                    "render_profile": "production",
+                    "test_mode": False,
+                    "force": False,
+                },
             )
     ctx.progress(100, "story render completed")
     return {"story_manifest": project_relative(manifest_path)}

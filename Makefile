@@ -49,7 +49,7 @@ searxng-down:
 	$(DOCKER) $(DOCKER_CONTEXT_ARG) compose -f docker-compose.searxng.yml down
 
 dev:
-	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 & \
+	$(PYTHON) -m uvicorn pipeline.api.main:app --host 127.0.0.1 --port 8765 --reload --reload-dir pipeline & \
 	$(PYTHON) -m pipeline.jobs.supervisor & \
 	npm --prefix web run dev -- --host 127.0.0.1 --port 5173
 

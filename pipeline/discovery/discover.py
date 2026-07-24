@@ -403,6 +403,7 @@ def discover(
     category: str | None = None,
     limit_per_source: int = 20,
     progress_callback: Callable[[float, str], None] | None = None,
+    stats: dict[str, int] | None = None,
 ) -> list[StoryCandidate]:
     candidates: list[StoryCandidate] = []
     sources = repository.list_sources(enabled=True, category=category)
@@ -444,11 +445,34 @@ def discover(
             if progress_callback:
                 progress_callback(
                     completed / len(sources),
-                    f"checked {completed}/{len(sources)} sources · {len(candidates)} articles",
+                    f"checked {completed}/{len(sources)} sources · "
+                    f"{len(candidates)} feed entries scanned",
                 )
+
+    existing_ids = repository.existing_candidate_ids(
+        candidate.candidate_id for candidate in candidates
+    )
+    seen_before_count = sum(
+        candidate.candidate_id in existing_ids for candidate in candidates
+    )
+    new_count = len(candidates) - seen_before_count
+    if stats is not None:
+        stats.update(
+            feed_entry_count=len(candidates),
+            new_entry_count=new_count,
+            seen_entry_count=seen_before_count,
+        )
     if progress_callback:
-        progress_callback(1.0, f"clustering and ranking {len(candidates)} articles")
-    return apply_assignment_desk(repository, candidates, use_ai=True)
+        progress_callback(
+            1.0,
+            f"scanned {len(candidates)} feed entries · "
+            f"{new_count} new to SynthPost · {seen_before_count} seen before · "
+            "clustering and ranking",
+        )
+    ranked = apply_assignment_desk(repository, candidates, use_ai=True)
+    if stats is not None:
+        stats["ranked_story_count"] = len(ranked)
+    return ranked
 
 
 def rescore_existing_candidates(repository) -> int:

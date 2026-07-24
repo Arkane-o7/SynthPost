@@ -9,10 +9,8 @@ export const EpisodesPage: React.FC<{ onOpenStudio: () => void }> = ({
 }) => {
   const studio = useStudio();
   const [title, setTitle] = React.useState("");
-  const [profile, setProfile] = React.useState("preview");
   const [editingId, setEditingId] = React.useState("");
   const [editTitle, setEditTitle] = React.useState("");
-  const [editProfile, setEditProfile] = React.useState("preview");
   const [busy, setBusy] = React.useState(false);
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -59,30 +57,22 @@ export const EpisodesPage: React.FC<{ onOpenStudio: () => void }> = ({
         </div>
         <div className="episode-create-fields">
           <label>
-            Episode title
+            Episode title <span className="text-faint">(optional)</span>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Morning world briefing"
+              placeholder={`Auto: Episode ${studio.episodes.length + 1} · today`}
             />
-          </label>
-          <label>
-            Default render
-            <select value={profile} onChange={(event) => setProfile(event.target.value)}>
-              <option value="preview">Preview</option>
-              <option value="production">Production</option>
-            </select>
           </label>
           <button
             type="button"
             className="btn-primary btn-lg"
-            disabled={busy || !title.trim()}
+            disabled={busy}
             onClick={() =>
               void act(async () => {
                 const episode = await api.createEpisode(
                   studio.selectedProjectId,
-                  title.trim(),
-                  profile,
+                  title,
                 );
                 studio.setSelectedEpisodeId(episode.episode_id);
                 setTitle("");
@@ -144,13 +134,6 @@ export const EpisodesPage: React.FC<{ onOpenStudio: () => void }> = ({
                       Title
                       <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} />
                     </label>
-                    <label>
-                      Render profile
-                      <select value={editProfile} onChange={(event) => setEditProfile(event.target.value)}>
-                        <option value="preview">Preview</option>
-                        <option value="production">Production</option>
-                      </select>
-                    </label>
                     <div className="row-tight">
                       <button
                         type="button"
@@ -160,7 +143,6 @@ export const EpisodesPage: React.FC<{ onOpenStudio: () => void }> = ({
                           void act(async () => {
                             await api.updateEpisode(episode.episode_id, {
                               title: editTitle.trim(),
-                              render_profile: editProfile,
                             });
                             setEditingId("");
                           })
@@ -205,7 +187,6 @@ export const EpisodesPage: React.FC<{ onOpenStudio: () => void }> = ({
                     onClick={() => {
                       setEditingId(episode.episode_id);
                       setEditTitle(episode.title);
-                      setEditProfile(episode.render_profile);
                     }}
                   >
                     Edit

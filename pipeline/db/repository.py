@@ -72,13 +72,18 @@ class Repository:
     # Projects / episodes -------------------------------------------------
     def create_project(
         self,
-        title: str,
+        title: str | None = None,
         *,
         default_category: str = "general",
-        default_render_profile: str = "preview",
+        default_render_profile: str = "production",
     ) -> Project:
+        normalized_title = (title or "").strip()
+        if not normalized_title:
+            project_number = len(self.list_projects()) + 1
+            date_label = datetime.now().strftime("%d %b %Y")
+            normalized_title = f"Project {project_number} · {date_label}"
         project = Project(
-            title=title,
+            title=normalized_title,
             default_category=default_category,
             default_render_profile=default_render_profile,
         )
@@ -109,12 +114,17 @@ class Repository:
             )
 
     def list_projects(self) -> list[Project]:
-        return [
+        projects = [
             Project.model_validate(data)
             for data in rows_data(
                 self._many("SELECT data FROM projects ORDER BY updated_at DESC")
             )
         ]
+        return sorted(
+            projects,
+            key=lambda project: (project.pinned, project.updated_at),
+            reverse=True,
+        )
 
     def get_project(self, project_id: str) -> Project:
         return Project.model_validate(
@@ -130,13 +140,22 @@ class Repository:
         return project
 
     def create_episode(
-        self, project_id: str, title: str, *, render_profile: str | None = None
+        self,
+        project_id: str,
+        title: str | None = None,
+        *,
+        render_profile: str | None = None,
     ) -> Episode:
         project = self.get_project(project_id)
+        normalized_title = (title or "").strip()
+        if not normalized_title:
+            episode_number = len(self.list_episodes(project_id)) + 1
+            date_label = datetime.now().strftime("%d %b %Y")
+            normalized_title = f"Episode {episode_number} · {date_label}"
         episode = Episode(
             project_id=project_id,
-            title=title,
-            render_profile=render_profile or project.default_render_profile,
+            title=normalized_title,
+            render_profile=render_profile or "production",
         )
         self.upsert_episode(episode)
         return episode
@@ -175,7 +194,12 @@ class Repository:
             )
         else:
             rows = self._many("SELECT data FROM episodes ORDER BY updated_at DESC")
-        return [Episode.model_validate(data) for data in rows_data(rows)]
+        episodes = [Episode.model_validate(data) for data in rows_data(rows)]
+        return sorted(
+            episodes,
+            key=lambda episode: (episode.pinned, episode.updated_at),
+            reverse=True,
+        )
 
     def get_episode(self, episode_id: str) -> Episode:
         return Episode.model_validate(
@@ -189,6 +213,105 @@ class Repository:
         episode = Episode.model_validate(data)
         self.upsert_episode(episode)
         return episode
+
+    def _episode_story_ids(self, episode: Episode) -> set[str]:
+        candidate_rows = self._many(
+            """
+            SELECT story_id
+            FROM story_candidates
+            WHERE episode_id = ? AND story_id IS NOT NULL
+            """,
+            (episode.episode_id,),
+        )
+        return set(episode.story_ids) | {
+            str(row["story_id"]) for row in candidate_rows if row["story_id"]
+        }
+
+    def _ensure_episode_deletable(self, episode: Episode) -> None:
+        story_ids = sorted(self._episode_story_ids(episode))
+        params: list[Any] = [episode.episode_id]
+        story_clause = ""
+        if story_ids:
+            placeholders = ", ".join("?" for _ in story_ids)
+            story_clause = f" OR story_id IN ({placeholders})"
+            params.extend(story_ids)
+        row = self._one(
+            f"""
+            SELECT COUNT(*) AS count
+            FROM render_jobs
+            WHERE status IN ('queued', 'paused', 'running')
+              AND (episode_id = ?{story_clause})
+            """,
+            params,
+        )
+        if row and int(row["count"]) > 0:
+            raise ValueError(
+                f"Cannot delete '{episode.title}' while it has active jobs."
+            )
+
+    def _delete_episode_records(self, episode: Episode) -> None:
+        story_ids = self._episode_story_ids(episode)
+        other_story_ids: set[str] = set()
+        for other in self.list_episodes():
+            if other.episode_id != episode.episode_id:
+                other_story_ids.update(self._episode_story_ids(other))
+        orphan_story_ids = story_ids - other_story_ids
+
+        for story_id in orphan_story_ids:
+            for table in (
+                "generation_audits",
+                "source_documents",
+                "research_packs",
+                "script_revisions",
+                "visual_candidates",
+                "timeline_revisions",
+            ):
+                self.connection.execute(
+                    f"DELETE FROM {table} WHERE story_id = ?", (story_id,)
+                )
+            self.connection.execute(
+                "DELETE FROM artifacts WHERE story_id = ?", (story_id,)
+            )
+            self.connection.execute(
+                "DELETE FROM render_jobs WHERE story_id = ?", (story_id,)
+            )
+            self.connection.execute(
+                "DELETE FROM story_candidates WHERE story_id = ?", (story_id,)
+            )
+
+        self.connection.execute(
+            "DELETE FROM artifacts WHERE episode_id = ?", (episode.episode_id,)
+        )
+        self.connection.execute(
+            "DELETE FROM render_jobs WHERE episode_id = ?", (episode.episode_id,)
+        )
+        self.connection.execute(
+            "DELETE FROM story_candidates WHERE episode_id = ?",
+            (episode.episode_id,),
+        )
+        self.connection.execute(
+            "DELETE FROM episodes WHERE episode_id = ?", (episode.episode_id,)
+        )
+
+    def delete_episode(self, episode_id: str) -> Episode:
+        episode = self.get_episode(episode_id)
+        self._ensure_episode_deletable(episode)
+        with self.connection:
+            self._delete_episode_records(episode)
+        return episode
+
+    def delete_project(self, project_id: str) -> Project:
+        project = self.get_project(project_id)
+        episodes = self.list_episodes(project_id)
+        for episode in episodes:
+            self._ensure_episode_deletable(episode)
+        with self.connection:
+            for episode in episodes:
+                self._delete_episode_records(episode)
+            self.connection.execute(
+                "DELETE FROM projects WHERE project_id = ?", (project_id,)
+            )
+        return project
 
     def add_story_to_episode(self, episode_id: str, story_id: str) -> Episode:
         episode = self.get_episode(episode_id)
@@ -268,6 +391,25 @@ class Repository:
         return source
 
     # Candidates / selected stories --------------------------------------
+    def existing_candidate_ids(self, candidate_ids: Iterable[str]) -> set[str]:
+        """Return candidate IDs already persisted before the current discovery."""
+
+        values = list(dict.fromkeys(candidate_ids))
+        existing: set[str] = set()
+        # Keep comfortably below SQLite's bound-parameter limit.
+        for start in range(0, len(values), 500):
+            chunk = values[start : start + 500]
+            if not chunk:
+                continue
+            placeholders = ", ".join("?" for _ in chunk)
+            rows = self._many(
+                f"SELECT candidate_id FROM story_candidates "
+                f"WHERE candidate_id IN ({placeholders})",
+                chunk,
+            )
+            existing.update(str(row["candidate_id"]) for row in rows)
+        return existing
+
     def upsert_candidate(self, candidate: StoryCandidate) -> None:
         existing_row = self._one(
             "SELECT data FROM story_candidates WHERE candidate_id = ?",

@@ -1,92 +1,668 @@
-import React from 'react';
-import { useStudio } from '../state/useStudio';
+import React from "react";
+import { createPortal } from "react-dom";
+import { api } from "../api/client";
+import type { Episode } from "../contracts";
+import { useStudio } from "../state/useStudio";
 
-export type Page = 'command' | 'episodes' | 'sources' | 'inbox' | 'jobs' | 'settings';
+export type Page = "command" | "episodes" | "sources" | "jobs" | "settings";
 
-const NAV_ITEMS: { key: Page; label: string; icon: string }[] = [
-  { key: 'command', label: 'Command Center', icon: '◉' },
-  { key: 'episodes', label: 'Episodes', icon: '▤' },
-  { key: 'sources', label: 'Sources', icon: '📡' },
-  { key: 'inbox', label: 'Story Inbox', icon: '📨' },
-  { key: 'jobs', label: 'Jobs', icon: '⚡' },
-  { key: 'settings', label: 'Settings', icon: '⚙' },
+type RailIconName =
+  | "studio"
+  | "episodes"
+  | "sources"
+  | "jobs"
+  | "settings"
+  | "folder"
+  | "pin"
+  | "trash";
+
+const PRIMARY_NAV: {
+  key: Exclude<Page, "settings">;
+  label: string;
+  icon: RailIconName;
+}[] = [
+  { key: "command", label: "Command Center", icon: "studio" },
+  { key: "episodes", label: "Episodes", icon: "episodes" },
+  { key: "sources", label: "Sources", icon: "sources" },
+  { key: "jobs", label: "Jobs", icon: "jobs" },
 ];
+
+const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
+  const common = {
+    width: 19,
+    height: 19,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+
+  switch (name) {
+    case "studio":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+    case "episodes":
+      return (
+        <svg {...common}>
+          <rect x="4" y="4" width="16" height="16" rx="2.5" />
+          <path d="M8 8h8M8 12h8M8 16h5" />
+        </svg>
+      );
+    case "sources":
+      return (
+        <svg {...common}>
+          <path d="M5 17.5a1.5 1.5 0 1 0 0 .1" />
+          <path d="M5 12a6 6 0 0 1 6 6M5 6.5A11.5 11.5 0 0 1 16.5 18" />
+        </svg>
+      );
+    case "jobs":
+      return (
+        <svg {...common}>
+          <path d="m13.5 2.5-8 11H12l-1.5 8 8-11H12z" />
+        </svg>
+      );
+    case "settings":
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19 14.5v-5l-2.2-.7-.7-1.6 1-2-3.6-2-1.5 1.6-1.7.2-1.5-1.6-3.6 2 1 2-.7 1.6-2.2.7v5l2.2.7.7 1.6-1 2 3.6 2 1.5-1.6 1.7.2 1.5 1.6 3.6-2-1-2 .7-1.6z" />
+        </svg>
+      );
+    case "folder":
+      return (
+        <svg {...common}>
+          <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h4l2 2h6A2.5 2.5 0 0 1 20.5 9.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5z" />
+        </svg>
+      );
+    case "pin":
+      return (
+        <svg {...common}>
+          <path d="m9 4 6 0-.8 5 2.8 3H7l2.8-3zM12 12v8" />
+        </svg>
+      );
+    case "trash":
+      return (
+        <svg {...common}>
+          <path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+        </svg>
+      );
+  }
+};
+
+type DeleteTarget =
+  | { kind: "project"; id: string; title: string }
+  | { kind: "episode"; id: string; projectId: string; title: string };
 
 export const LeftRail: React.FC<{
   page: Page;
   setPage: (page: Page) => void;
 }> = ({ page, setPage }) => {
   const studio = useStudio();
+  const [creatingProject, setCreatingProject] = React.useState(false);
+  const [creatingEpisodeFor, setCreatingEpisodeFor] = React.useState("");
+  const [openingEpisodeId, setOpeningEpisodeId] = React.useState("");
+  const [mutatingItem, setMutatingItem] = React.useState("");
+  const [deleteTarget, setDeleteTarget] = React.useState<DeleteTarget | null>(
+    null,
+  );
+  const [expandedProjects, setExpandedProjects] = React.useState<Set<string>>(
+    () =>
+      new Set(
+        studio.selectedProjectId ? [studio.selectedProjectId] : [],
+      ),
+  );
+  const [episodesByProject, setEpisodesByProject] = React.useState<
+    Record<string, Episode[]>
+  >({});
+  const [loadingProjects, setLoadingProjects] = React.useState<Set<string>>(
+    new Set(),
+  );
 
-  const activeJobCount = studio.jobs.filter((j) =>
-    ['queued', 'running'].includes(j.status),
+  React.useEffect(() => {
+    if (!studio.selectedProjectId) return;
+    setExpandedProjects((current) =>
+      new Set(current).add(studio.selectedProjectId),
+    );
+  }, [studio.selectedProjectId]);
+
+  React.useEffect(() => {
+    if (!studio.selectedProjectId) return;
+    setEpisodesByProject((current) => ({
+      ...current,
+      [studio.selectedProjectId]: studio.episodes,
+    }));
+  }, [studio.episodes, studio.selectedProjectId]);
+
+  React.useEffect(() => {
+    if (!deleteTarget) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !mutatingItem) {
+        setDeleteTarget(null);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [deleteTarget, mutatingItem]);
+
+  const loadProjectEpisodes = React.useCallback(
+    async (projectId: string) => {
+      if (episodesByProject[projectId] || loadingProjects.has(projectId)) {
+        return;
+      }
+      setLoadingProjects((current) => new Set(current).add(projectId));
+      try {
+        const episodes = await api.listEpisodes(projectId);
+        setEpisodesByProject((current) => ({
+          ...current,
+          [projectId]: episodes,
+        }));
+      } catch (error) {
+        studio.setError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setLoadingProjects((current) => {
+          const next = new Set(current);
+          next.delete(projectId);
+          return next;
+        });
+      }
+    },
+    [episodesByProject, loadingProjects, studio],
+  );
+
+  const createProject = async () => {
+    try {
+      setCreatingProject(true);
+      studio.setError("");
+      const project = await api.createProject();
+      await studio.refreshAll();
+      setEpisodesByProject((current) => ({
+        ...current,
+        [project.project_id]: [],
+      }));
+      setExpandedProjects((current) =>
+        new Set(current).add(project.project_id),
+      );
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const createEpisode = async (projectId: string) => {
+    try {
+      setCreatingEpisodeFor(projectId);
+      studio.setError("");
+      const episode = await api.createEpisode(projectId);
+      setEpisodesByProject((current) => ({
+        ...current,
+        [projectId]: [...(current[projectId] ?? []), episode],
+      }));
+      await studio.openEpisode(projectId, episode.episode_id);
+      setPage("command");
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreatingEpisodeFor("");
+    }
+  };
+
+  const activeJobCount = studio.jobs.filter((job) =>
+    ["queued", "running"].includes(job.status),
   ).length;
 
-  const suggestedCount = studio.candidates.filter(
-    (c) => c.selection_status === 'suggested',
-  ).length;
+  const toggleProject = (projectId: string) => {
+    const willExpand = !expandedProjects.has(projectId);
+    setExpandedProjects((current) => {
+      const next = new Set(current);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+    if (willExpand) {
+      void loadProjectEpisodes(projectId);
+    }
+  };
+
+  const selectEpisode = async (projectId: string, episodeId: string) => {
+    if (
+      projectId === studio.selectedProjectId &&
+      episodeId === studio.selectedEpisodeId
+    ) {
+      setPage("command");
+      return;
+    }
+    try {
+      setOpeningEpisodeId(episodeId);
+      studio.setError("");
+      await studio.openEpisode(projectId, episodeId);
+      setPage("command");
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningEpisodeId("");
+    }
+  };
+
+  const toggleProjectPin = async (projectId: string, pinned: boolean) => {
+    try {
+      setMutatingItem(`project:${projectId}`);
+      studio.setError("");
+      await api.updateProject(projectId, { pinned: !pinned });
+      await studio.refreshAll();
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMutatingItem("");
+    }
+  };
+
+  const toggleEpisodePin = async (
+    projectId: string,
+    episode: Episode,
+  ) => {
+    try {
+      setMutatingItem(`episode:${episode.episode_id}`);
+      studio.setError("");
+      const updated = await api.updateEpisode(episode.episode_id, {
+        pinned: !episode.pinned,
+      });
+      setEpisodesByProject((current) => ({
+        ...current,
+        [projectId]: (current[projectId] ?? [])
+          .map((item) =>
+            item.episode_id === updated.episode_id ? updated : item,
+          )
+          .sort(
+            (left, right) =>
+              Number(right.pinned) - Number(left.pinned) ||
+              right.updated_at.localeCompare(left.updated_at),
+          ),
+      }));
+      if (projectId === studio.selectedProjectId) {
+        await studio.refreshAll();
+      }
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMutatingItem("");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    try {
+      setMutatingItem(`${target.kind}:${target.id}`);
+      studio.setError("");
+      if (target.kind === "project") {
+        await api.deleteProject(target.id);
+        setExpandedProjects((current) => {
+          const next = new Set(current);
+          next.delete(target.id);
+          return next;
+        });
+        setEpisodesByProject((current) => {
+          const next = { ...current };
+          delete next[target.id];
+          return next;
+        });
+      } else {
+        await api.deleteEpisode(target.id);
+        setEpisodesByProject((current) => ({
+          ...current,
+          [target.projectId]: (current[target.projectId] ?? []).filter(
+            (episode) => episode.episode_id !== target.id,
+          ),
+        }));
+      }
+      await studio.refreshAll();
+      setDeleteTarget(null);
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMutatingItem("");
+    }
+  };
 
   return (
     <aside className="left-rail">
-      {/* Logo */}
-      <div className="logo-mark">
-        Synth<span>Post</span>
-        <br />
-        Studio
+      <div className="rail-brand">
+        <div className="rail-brand-wordmark">
+          Synth<span>Post</span>
+        </div>
+        <span className="rail-brand-mode">Studio</span>
       </div>
-      <div className="logo-sub">local newsroom editor</div>
+      <div className="rail-brand-sub">Local newsroom editor</div>
 
-      {/* Navigation */}
-      <nav className="nav">
-        {NAV_ITEMS.map((item) => (
+      <nav className="nav" aria-label="Primary navigation">
+        {PRIMARY_NAV.map((item) => (
           <button
             key={item.key}
-            className={`nav-btn ${page === item.key ? 'active' : ''}`}
+            type="button"
+            className={`nav-btn ${page === item.key ? "active" : ""}`}
+            aria-current={page === item.key ? "page" : undefined}
             onClick={() => setPage(item.key)}
           >
-            <span className="nav-icon">{item.icon}</span>
-            {item.label}
-            {item.key === 'jobs' && activeJobCount > 0 && (
+            <span className="nav-icon">
+              <RailIcon name={item.icon} />
+            </span>
+            <span>{item.label}</span>
+            {item.key === "jobs" && activeJobCount > 0 && (
               <span className="nav-badge">{activeJobCount}</span>
-            )}
-            {item.key === 'inbox' && suggestedCount > 0 && (
-              <span className="nav-badge">{suggestedCount}</span>
             )}
           </button>
         ))}
       </nav>
 
-      {/* Context switchers */}
-      <div className="context-switchers">
-        <label className="context-label">
-          Project
-          <select
-            value={studio.selectedProjectId}
-            onChange={(e) => studio.setSelectedProjectId(e.target.value)}
+      <section className="rail-library" aria-label="Projects and episodes">
+        <div className="rail-section-heading">
+          <span>Projects</span>
+          <button
+            type="button"
+            className="rail-icon-button"
+            aria-label="Create new project"
+            title="New project"
+            disabled={creatingProject}
+            onClick={() => void createProject()}
           >
-            <option value="">No project</option>
-            {studio.projects.map((p) => (
-              <option key={p.project_id} value={p.project_id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="context-label">
-          Episode
-          <select
-            value={studio.selectedEpisodeId}
-            onChange={(e) => studio.setSelectedEpisodeId(e.target.value)}
-          >
-            <option value="">No episode</option>
-            {studio.episodes.map((ep) => (
-              <option key={ep.episode_id} value={ep.episode_id}>
-                {ep.title}
-              </option>
-            ))}
-          </select>
-        </label>
+            {creatingProject ? <span className="rail-spinner" /> : "＋"}
+          </button>
+        </div>
+
+        <div className="rail-project-list">
+          {studio.projects.length === 0 && (
+            <button
+              type="button"
+              className="rail-empty-project"
+              disabled={creatingProject}
+              onClick={() => void createProject()}
+            >
+              <span>＋</span>
+              Create your first project
+            </button>
+          )}
+
+          {studio.projects.map((project) => {
+            const isSelected =
+              project.project_id === studio.selectedProjectId;
+            const isExpanded = expandedProjects.has(project.project_id);
+            const isLoading = loadingProjects.has(project.project_id);
+            const projectEpisodes =
+              episodesByProject[project.project_id] ??
+              (isSelected ? studio.episodes : []);
+
+            return (
+              <div
+                key={project.project_id}
+                className={`rail-project-group ${isSelected ? "selected" : ""}`}
+              >
+                <div className="rail-project-row-shell">
+                  <button
+                    type="button"
+                    className="rail-project-row"
+                    aria-expanded={isExpanded}
+                    title={project.title}
+                    onClick={() => toggleProject(project.project_id)}
+                  >
+                    <span className="rail-project-icon">
+                      <RailIcon name="folder" />
+                    </span>
+                    <span className="rail-row-label">{project.title}</span>
+                    <span className="rail-project-caret" aria-hidden="true">
+                      {isExpanded ? "⌄" : "›"}
+                    </span>
+                  </button>
+                  <div className="rail-row-actions">
+                    <button
+                      type="button"
+                      className={`rail-row-action ${project.pinned ? "pinned" : ""}`}
+                      aria-label={`${project.pinned ? "Unpin" : "Pin"} project ${project.title}`}
+                      aria-pressed={project.pinned}
+                      title={project.pinned ? "Unpin project" : "Pin project"}
+                      disabled={Boolean(mutatingItem)}
+                      onClick={() =>
+                        void toggleProjectPin(
+                          project.project_id,
+                          project.pinned,
+                        )
+                      }
+                    >
+                      {mutatingItem === `project:${project.project_id}` ? (
+                        <span className="rail-spinner" />
+                      ) : (
+                        <RailIcon name="pin" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="rail-row-action danger"
+                      aria-label={`Delete project ${project.title}`}
+                      title="Delete project"
+                      disabled={Boolean(mutatingItem)}
+                      onClick={() =>
+                        setDeleteTarget({
+                          kind: "project",
+                          id: project.project_id,
+                          title: project.title,
+                        })
+                      }
+                    >
+                      <RailIcon name="trash" />
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="rail-episode-list">
+                    {projectEpisodes.map((episode) => {
+                      const isActive =
+                        isSelected &&
+                        episode.episode_id === studio.selectedEpisodeId;
+                      const isOpening =
+                        episode.episode_id === openingEpisodeId;
+                      return (
+                        <div
+                          key={episode.episode_id}
+                          className="rail-episode-row-shell"
+                        >
+                          <button
+                            type="button"
+                            className={`rail-episode-row ${isActive ? "active" : ""}`}
+                            aria-current={isActive ? "page" : undefined}
+                            title={episode.title}
+                            disabled={Boolean(openingEpisodeId)}
+                            onClick={() =>
+                              void selectEpisode(
+                                project.project_id,
+                                episode.episode_id,
+                              )
+                            }
+                          >
+                            {isOpening ? (
+                              <span className="rail-spinner" />
+                            ) : (
+                              <span
+                                className="rail-episode-status"
+                                aria-hidden="true"
+                              />
+                            )}
+                            <span className="rail-row-label">
+                              {episode.title}
+                            </span>
+                          </button>
+                          <div className="rail-row-actions">
+                            <button
+                              type="button"
+                              className={`rail-row-action ${episode.pinned ? "pinned" : ""}`}
+                              aria-label={`${episode.pinned ? "Unpin" : "Pin"} episode ${episode.title}`}
+                              aria-pressed={episode.pinned}
+                              title={
+                                episode.pinned
+                                  ? "Unpin episode"
+                                  : "Pin episode"
+                              }
+                              disabled={Boolean(mutatingItem)}
+                              onClick={() =>
+                                void toggleEpisodePin(
+                                  project.project_id,
+                                  episode,
+                                )
+                              }
+                            >
+                              {mutatingItem ===
+                              `episode:${episode.episode_id}` ? (
+                                <span className="rail-spinner" />
+                              ) : (
+                                <RailIcon name="pin" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className="rail-row-action danger"
+                              aria-label={`Delete episode ${episode.title}`}
+                              title="Delete episode"
+                              disabled={Boolean(mutatingItem)}
+                              onClick={() =>
+                                setDeleteTarget({
+                                  kind: "episode",
+                                  id: episode.episode_id,
+                                  projectId: project.project_id,
+                                  title: episode.title,
+                                })
+                              }
+                            >
+                              <RailIcon name="trash" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {isLoading && (
+                      <div className="rail-no-episodes rail-loading-episodes">
+                        <span className="rail-spinner" />
+                        Loading episodes…
+                      </div>
+                    )}
+
+                    {!isLoading && projectEpisodes.length === 0 && (
+                      <div className="rail-no-episodes">No episodes yet</div>
+                    )}
+
+                    <button
+                      type="button"
+                      className="rail-new-episode"
+                      disabled={Boolean(creatingEpisodeFor)}
+                      onClick={() => void createEpisode(project.project_id)}
+                    >
+                      {creatingEpisodeFor === project.project_id ? (
+                        <>
+                          <span className="rail-spinner" />
+                          Creating episode…
+                        </>
+                      ) : (
+                        <>
+                          <span>＋</span>
+                          New episode
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="rail-footer">
+        <button
+          type="button"
+          className={`nav-btn rail-settings ${page === "settings" ? "active" : ""}`}
+          aria-current={page === "settings" ? "page" : undefined}
+          onClick={() => setPage("settings")}
+        >
+          <span className="nav-icon">
+            <RailIcon name="settings" />
+          </span>
+          <span>Settings</span>
+        </button>
       </div>
+
+      {deleteTarget &&
+        createPortal(
+        <div
+          className="rail-confirm-scrim"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !mutatingItem) {
+              setDeleteTarget(null);
+            }
+          }}
+        >
+          <div
+            className="rail-confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="rail-delete-title"
+            aria-describedby="rail-delete-description"
+          >
+            <div className="rail-confirm-icon">
+              <RailIcon name="trash" />
+            </div>
+            <div>
+              <div className="topbar-kicker">Permanent action</div>
+              <h2 id="rail-delete-title">
+                Delete {deleteTarget.kind}?
+              </h2>
+            </div>
+            <p id="rail-delete-description">
+              {deleteTarget.kind === "project"
+                ? `“${deleteTarget.title}” and every episode inside it will be permanently removed, including their production files.`
+                : `“${deleteTarget.title}” and its story, research, script, visuals, timeline, and production files will be permanently removed.`}
+            </p>
+            <p className="rail-confirm-note">
+              Items with active jobs cannot be deleted.
+            </p>
+            <div className="rail-confirm-actions">
+              <button
+                type="button"
+                autoFocus
+                disabled={Boolean(mutatingItem)}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={Boolean(mutatingItem)}
+                onClick={() => void confirmDelete()}
+              >
+                {mutatingItem ? (
+                  <>
+                    <span className="rail-spinner" />
+                    Deleting…
+                  </>
+                ) : (
+                  "Delete permanently"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>,
+          document.body,
+        )}
     </aside>
   );
 };

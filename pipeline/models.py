@@ -184,6 +184,7 @@ def queue_lane_for_job_type(job_type: str) -> JobQueueLane:
 class Project(StrictModel):
     project_id: str = Field(default_factory=lambda: new_id("proj"))
     title: str
+    pinned: bool = False
     created_at: str = Field(default_factory=now_iso)
     updated_at: str = Field(default_factory=now_iso)
     default_category: str = "general"
@@ -195,6 +196,7 @@ class Episode(StrictModel):
     episode_id: str = Field(default_factory=lambda: new_id("ep"))
     project_id: str
     title: str
+    pinned: bool = False
     story_ids: list[str] = Field(default_factory=list)
     status: EpisodeStatus = EpisodeStatus.draft
     render_profile: str = "preview"

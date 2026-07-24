@@ -273,7 +273,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             disabled={busy || !hasExactClock}
             title={
               hasExactClock
-                ? "Approve this sample-timed timeline"
+                ? "Approve this timeline and start the final production render"
                 : "Regenerate the timeline with current Kokoro narration first"
             }
             onClick={() =>
@@ -283,7 +283,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               })
             }
           >
-            ✓ Approve Timeline
+            ✓ Approve & Generate Final Video
           </button>
         </div>
       </div>

@@ -4,17 +4,13 @@ import { useStudio } from "../state/useStudio";
 import { EpisodeHeader } from "../components/EpisodeHeader";
 import { WorkflowStepper } from "../components/WorkflowStepper";
 import { NextActionCard } from "../components/NextActionCard";
-import { EmptyState } from "../components/EmptyState";
 import { STAGES, getActiveStage, type StageKey } from "../lib/workflowUtils";
 
-import { StoryPanel } from "../workspace/StoryPanel";
-import { ResearchPanel } from "../workspace/ResearchPanel";
-import { ScriptPanel } from "../workspace/ScriptPanel";
+import { StorySelectionPanel } from "../workspace/StorySelectionPanel";
+import { ResearchScriptPanel } from "../workspace/ResearchScriptPanel";
 import { VisualsPanel } from "../workspace/VisualsPanel";
 import { TimelinePanel } from "../workspace/TimelinePanel";
-import { PreviewPanel } from "../workspace/PreviewPanel";
-import { RenderPanel } from "../workspace/RenderPanel";
-import { AssemblePanel } from "../workspace/AssemblePanel";
+import { FinalVideoPanel } from "../workspace/FinalVideoPanel";
 
 const WorkspacePanel: React.FC<{ stage: StageKey; storyId: string }> = ({
   stage,
@@ -22,29 +18,21 @@ const WorkspacePanel: React.FC<{ stage: StageKey; storyId: string }> = ({
 }) => {
   switch (stage) {
     case "story":
-      return <StoryPanel storyId={storyId} />;
-    case "research":
-      return <ResearchPanel storyId={storyId} />;
-    case "script":
-      return <ScriptPanel storyId={storyId} />;
+      return <StorySelectionPanel />;
+    case "draft":
+      return <ResearchScriptPanel storyId={storyId} />;
     case "visuals":
       return <VisualsPanel storyId={storyId} />;
     case "timeline":
       return <TimelinePanel storyId={storyId} />;
-    case "preview":
-      return <PreviewPanel storyId={storyId} />;
-    case "render":
-      return <RenderPanel storyId={storyId} />;
-    case "assemble":
-      return <AssemblePanel storyId={storyId} />;
+    case "final":
+      return <FinalVideoPanel storyId={storyId} />;
     default:
       return null;
   }
 };
 
-export const CommandCenter: React.FC<{
-  onNavigateToInbox: () => void;
-}> = ({ onNavigateToInbox }) => {
+export const CommandCenter: React.FC = () => {
   const studio = useStudio();
   const [projectTitle, setProjectTitle] = React.useState("");
   const [episodeTitle, setEpisodeTitle] = React.useState("");
@@ -84,7 +72,7 @@ export const CommandCenter: React.FC<{
   // Otherwise auto-advance as production moves forward.
   React.useEffect(() => {
     if (hasActiveScriptJob) {
-      setActiveStage("script");
+      setActiveStage("draft");
       return;
     }
     const nextStage = getActiveStage(story?.workflow_state);
@@ -122,19 +110,18 @@ export const CommandCenter: React.FC<{
             Create your first project to begin producing news video episodes.
           </p>
           <label style={{ textAlign: "left" }}>
-            Project name
+            Project name <span className="text-faint">(optional)</span>
             <input
               value={projectTitle}
               onChange={(e) => setProjectTitle(e.target.value)}
-              placeholder="e.g. Tech Daily Briefing"
+              placeholder="Auto: Project 1 · today"
             />
           </label>
           <button
             className="btn-primary btn-lg"
-            disabled={!projectTitle.trim()}
             onClick={() =>
               act(async () => {
-                const p = await api.createProject(projectTitle.trim());
+                const p = await api.createProject(projectTitle);
                 studio.setSelectedProjectId(p.project_id);
                 setProjectTitle("");
               })
@@ -171,21 +158,20 @@ export const CommandCenter: React.FC<{
             one or more stories.
           </p>
           <label>
-            Episode title
+            Episode title <span className="text-faint">(optional)</span>
             <input
               value={episodeTitle}
               onChange={(e) => setEpisodeTitle(e.target.value)}
-              placeholder="e.g. July 6 Briefing"
+              placeholder={`Auto: Episode ${studio.episodes.length + 1} · today`}
             />
           </label>
           <button
             className="btn-primary"
-            disabled={!episodeTitle.trim()}
             onClick={() =>
               act(async () => {
                 const ep = await api.createEpisode(
                   studio.selectedProjectId,
-                  episodeTitle.trim(),
+                  episodeTitle,
                 );
                 studio.setSelectedEpisodeId(ep.episode_id);
                 setEpisodeTitle("");
@@ -233,17 +219,7 @@ export const CommandCenter: React.FC<{
           activeStage="story"
           onStageClick={() => {}}
         />
-        <EmptyState
-          icon="📰"
-          title="Select a story to begin production"
-          description="Head to the Story Inbox to discover candidates from your RSS sources, or add a custom story."
-        >
-          <div className="row" style={{ justifyContent: "center" }}>
-            <button className="btn-primary btn-lg" onClick={onNavigateToInbox}>
-              Go to Story Inbox
-            </button>
-          </div>
-        </EmptyState>
+        <StorySelectionPanel />
       </div>
     );
   }
@@ -257,19 +233,23 @@ export const CommandCenter: React.FC<{
         activeStage={activeStage}
         onStageClick={setActiveStage}
       />
-      <NextActionCard
-        workflowState={story.workflow_state}
-        onNavigate={setActiveStage}
-        disabled={nextActionDisabled}
-        disabledReason={nextActionDisabledReason}
-        onApiAction={(action) => {
-          if (action === "startResearch") {
-            void act(() => api.startResearch(studio.selectedStoryId));
-          } else if (action === "generateScript") {
-            void act(() => api.generateScript(studio.selectedStoryId));
-          }
-        }}
-      />
+      {(activeStage !== "story" || story.workflow_state === "selected") && (
+        <NextActionCard
+          workflowState={story.workflow_state}
+          onNavigate={setActiveStage}
+          disabled={nextActionDisabled}
+          disabledReason={nextActionDisabledReason}
+          onApiAction={(action) => {
+            if (action === "researchAndScript") {
+              setActiveStage("draft");
+              void act(() => api.researchAndScript(studio.selectedStoryId));
+            } else if (action === "generateScript") {
+              setActiveStage("draft");
+              void act(() => api.generateScript(studio.selectedStoryId));
+            }
+          }}
+        />
+      )}
       <WorkspacePanel stage={activeStage} storyId={studio.selectedStoryId} />
     </div>
   );

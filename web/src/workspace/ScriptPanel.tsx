@@ -338,8 +338,7 @@ export const ScriptPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           {hasPreviousProductionOutput
             ? " The previous final video is retained for reference."
             : " Existing downstream work becomes stale."}{" "}
-          Timeline, Render, and Assembly must be completed again from the approved
-          revision.
+          Timeline and Final Video must be completed again from the approved revision.
         </div>
       )}
       {/* Section nav */}

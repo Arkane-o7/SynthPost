@@ -3132,6 +3132,15 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.upsert_source(healthy)
             repository.upsert_source(broken)
             progress: list[tuple[float, str]] = []
+            repository.upsert_candidate(
+                StoryCandidate(
+                    candidate_id="cand_health",
+                    title="Previously seen infrastructure story",
+                    source_id=healthy.source_id,
+                    source_name=healthy.name,
+                )
+            )
+            stats: dict[str, int] = {}
 
             def fake_fetch(source: SourceDefinition, *, seen_groups=None):
                 if source.source_id == broken.source_id:
@@ -3142,7 +3151,13 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                         title="India expands AI data-centre capacity",
                         source_id=source.source_id,
                         source_name=source.name,
-                    )
+                    ),
+                    StoryCandidate(
+                        candidate_id="cand_new",
+                        title="A genuinely new energy-grid story",
+                        source_id=source.source_id,
+                        source_name=source.name,
+                    ),
                 ]
 
             with patch(
@@ -3154,20 +3169,29 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             ):
                 rows = discover(
                     repository,
+                    stats=stats,
                     progress_callback=lambda fraction, stage: progress.append(
                         (fraction, stage)
                     ),
                 )
 
-            self.assertEqual([item.candidate_id for item in rows], ["cand_health"])
+            self.assertEqual(
+                [item.candidate_id for item in rows],
+                ["cand_health", "cand_new"],
+            )
             healthy_after = repository.get_source(healthy.source_id)
             broken_after = repository.get_source(broken.source_id)
-            self.assertEqual(healthy_after.last_item_count, 1)
+            self.assertEqual(healthy_after.last_item_count, 2)
             self.assertIsNotNone(healthy_after.last_success_at)
             self.assertIn("feed unavailable", broken_after.last_error or "")
             self.assertEqual(broken_after.consecutive_failures, 1)
             self.assertEqual(progress[-1][0], 1.0)
             self.assertIn("clustering and ranking", progress[-1][1])
+            self.assertEqual(stats["feed_entry_count"], 2)
+            self.assertEqual(stats["new_entry_count"], 1)
+            self.assertEqual(stats["seen_entry_count"], 1)
+            self.assertIn("1 new to SynthPost", progress[-1][1])
+            self.assertIn("1 seen before", progress[-1][1])
         finally:
             repository.close()
             temp.cleanup()

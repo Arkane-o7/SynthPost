@@ -8,15 +8,30 @@ import { scorePercent, relativeTime } from "../lib/formatters";
 type InboxTab = "candidates" | "custom";
 type DeskFilter = "recommended" | "global_watch" | "rejected" | "all";
 
-export const StoryInboxPage: React.FC<{
-  onStorySelected?: () => void;
-}> = ({ onStorySelected }) => {
+const assignmentLane = (candidate: {
+  assignment_lane?: string | null;
+  editorial_fit?: { eligible?: boolean } | null;
+}) =>
+  candidate.assignment_lane ||
+  (candidate.editorial_fit?.eligible ? "recommended" : "unassessed");
+
+export const StorySelectionPanel: React.FC = () => {
   const studio = useStudio();
+  const autoStartedEpisodes = React.useRef(new Set<string>());
   const [tab, setTab] = React.useState<InboxTab>("candidates");
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
   const [deskFilter, setDeskFilter] = React.useState<DeskFilter>("all");
   const [busy, setBusy] = React.useState(false);
+  const episodeDiscoveryJobs = studio.jobs.filter(
+    (job) =>
+      job.job_type === "discovery" &&
+      job.episode_id === studio.selectedEpisodeId,
+  );
+  const activeDiscovery = episodeDiscoveryJobs.find((job) =>
+    ["queued", "running"].includes(job.status),
+  );
+  const hasDiscoveryAttempt = episodeDiscoveryJobs.length > 0;
 
   // Custom story form state
   const [topic, setTopic] = React.useState("");
@@ -27,22 +42,22 @@ export const StoryInboxPage: React.FC<{
     if (search && !c.title.toLowerCase().includes(search.toLowerCase()))
       return false;
     if (statusFilter && c.selection_status !== statusFilter) return false;
-    const lane = c.assignment_lane || (c.editorial_fit?.eligible ? "recommended" : "rejected");
+    const lane = assignmentLane(c);
     if (deskFilter !== "all" && lane !== deskFilter) return false;
     return true;
   });
 
-  const suggestedCount = studio.candidates.filter(
-    (c) => c.selection_status === "suggested",
-  ).length;
   const recommendedCount = studio.candidates.filter(
-    (c) => c.assignment_lane === "recommended" || (!c.assignment_lane && c.editorial_fit?.eligible),
+    (c) => assignmentLane(c) === "recommended",
   ).length;
   const globalWatchCount = studio.candidates.filter(
-    (c) => c.assignment_lane === "global_watch",
+    (c) => assignmentLane(c) === "global_watch",
+  ).length;
+  const unassessedCount = studio.candidates.filter(
+    (c) => assignmentLane(c) === "unassessed",
   ).length;
   const filteredCount = studio.candidates.filter(
-    (c) => c.assignment_lane === "rejected",
+    (c) => assignmentLane(c) === "rejected",
   ).length;
 
   const act = async (fn: () => Promise<unknown>) => {
@@ -60,6 +75,26 @@ export const StoryInboxPage: React.FC<{
     }
   };
 
+  React.useEffect(() => {
+    const episodeId = studio.selectedEpisodeId;
+    if (
+      !episodeId ||
+      studio.candidates.length > 0 ||
+      activeDiscovery ||
+      hasDiscoveryAttempt ||
+      autoStartedEpisodes.current.has(episodeId)
+    ) {
+      return;
+    }
+    autoStartedEpisodes.current.add(episodeId);
+    void act(() => api.startDiscovery(episodeId));
+  }, [
+    studio.selectedEpisodeId,
+    studio.candidates.length,
+    activeDiscovery,
+    hasDiscoveryAttempt,
+  ]);
+
   const selectForEpisode = async (
     candidate: (typeof studio.candidates)[number],
   ) => {
@@ -73,26 +108,42 @@ export const StoryInboxPage: React.FC<{
             );
       studio.setSelectedStoryId(selected.story_id ?? "");
     });
-    if (ok) onStorySelected?.();
   };
 
   return (
-    <div>
-      <div className="topbar">
+    <div className="story-selection-stage">
+      <div className="story-selection-heading">
         <div>
-          <div className="topbar-kicker">SynthPost Studio</div>
-          <h1>Story Inbox</h1>
+          <div className="topbar-kicker">Stage 01 · Live assignment desk</div>
+          <h2>Select the story worth producing</h2>
+          <p>
+            Discovery runs automatically for a new episode. Choose a ranked
+            story below or add your own source.
+          </p>
         </div>
         <button
           className="btn-primary"
-          disabled={busy}
+          disabled={busy || Boolean(activeDiscovery)}
           onClick={() =>
-            act(() => api.startDiscovery(studio.selectedEpisodeId || undefined))
+            void act(() =>
+              api.startDiscovery(studio.selectedEpisodeId || undefined),
+            )
           }
         >
-          {busy ? "Refreshing…" : "Refresh Discovery"}
+          {activeDiscovery ? "Discovering…" : busy ? "Refreshing…" : "Refresh Stories"}
         </button>
       </div>
+
+      {activeDiscovery && (
+        <div className="story-discovery-live" role="status">
+          <span className="story-discovery-pulse" aria-hidden="true" />
+          <div>
+            <strong>Building this episode’s story list</strong>
+            <p>{activeDiscovery.stage}</p>
+          </div>
+          <b>{Math.round(activeDiscovery.progress)}%</b>
+        </div>
+      )}
 
       <section className="editorial-charter-strip">
         <div>
@@ -107,6 +158,7 @@ export const StoryInboxPage: React.FC<{
         <div className="editorial-charter-counts" aria-label="Editorial fit summary">
           <span><b>{recommendedCount}</b> recommended</span>
           <span><b>{globalWatchCount}</b> global watch</span>
+          <span><b>{unassessedCount}</b> desk review</span>
           <span><b>{filteredCount}</b> filtered out</span>
         </div>
       </section>
@@ -145,7 +197,7 @@ export const StoryInboxPage: React.FC<{
           className={`tab-btn ${tab === "candidates" ? "tab-active" : ""}`}
           onClick={() => setTab("candidates")}
         >
-          Candidates ({suggestedCount})
+          Candidates ({studio.candidates.length})
         </button>
         <button
           className={`tab-btn ${tab === "custom" ? "tab-active" : ""}`}
@@ -160,15 +212,19 @@ export const StoryInboxPage: React.FC<{
         <div className="stack">
           {candidates.length === 0 ? (
             <EmptyState
-              icon="📭"
-              title="No story candidates"
-              description="Refresh discovery to pull stories from your RSS sources, or switch to the 'Add Custom' tab to enter a story manually."
+              icon={activeDiscovery ? "⌁" : "📭"}
+              title={activeDiscovery ? "Finding current stories…" : "No story candidates"}
+              description={
+                activeDiscovery
+                  ? "SynthPost is scanning the enabled feeds, identifying genuinely new entries, and ranking the strongest candidates for this episode."
+                  : "Refresh discovery to pull stories from your RSS sources, or switch to the 'Add Custom' tab to enter a story manually."
+              }
             />
           ) : (
             candidates.map((c) => {
               const hasFit = Boolean(c.editorial_fit?.reasons?.length);
               const pct = scorePercent(c.final_score);
-              const lane = c.assignment_lane || (c.editorial_fit?.eligible ? "recommended" : "rejected");
+              const lane = assignmentLane(c);
               const isSelected = c.selection_status === "selected";
               const isActive =
                 isSelected && c.story_id === studio.selectedStoryId;
