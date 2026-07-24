@@ -20,10 +20,15 @@ Required means required for the named feature, not for opening the local Studio.
 
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
-| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `hosted_fallback` | `groq`, `gemini`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. |
+| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `codex` | `codex`, `groq`, `gemini`, `sarvam`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. |
 | `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` | `45` | no | `60` | Positive request timeout. |
-| `SYNTHPOST_LLM_MAX_RETRIES` | `2` | no | `2` | Structured-output validation attempts, 0–10. |
+| `SYNTHPOST_LLM_MAX_RETRIES` | `2` | no | `1` | Maximum retry cap for structured-output validation, 0–10. The Codex starter config uses one retry to bound plan usage and job duration. |
 | `SYNTHPOST_SAVE_LLM_DEBUG` | `0` | no | `0` | Debug output can contain provider text; keep disabled and never commit it. |
+| `SYNTHPOST_CODEX_BINARY` | `codex` | Codex | `/Applications/ChatGPT.app/Contents/Resources/codex` | Executable name or path. The CLI must already be authenticated with `codex login`. |
+| `SYNTHPOST_CODEX_SANDBOX_BINARY` | `/usr/bin/sandbox-exec` | Codex | `/usr/bin/sandbox-exec` | macOS process sandbox used to prevent the model from spawning tools or shell commands. The provider fails closed if unavailable. |
+| `SYNTHPOST_CODEX_MODEL` | `gpt-5.6-sol` | Codex | `gpt-5.6-sol` | Codex model available to the signed-in ChatGPT account. Model availability and limits follow that account. |
+| `SYNTHPOST_CODEX_REASONING_EFFORT` | `medium` | Codex | `high` | `low`, `medium`, `high`, or `xhigh`. Higher settings can increase latency and plan usage. |
+| `SYNTHPOST_CODEX_TIMEOUT_SECONDS` | `180` | Codex | `300` | Per-invocation subprocess timeout. This is intentionally separate from direct API timeouts and kept below the script job’s overall safety budget. |
 | `GROQ_API_KEY` | empty | Groq | `gsk_…` | Secret. Never include in logs/docs/commits. |
 | `SYNTHPOST_GROQ_MODEL` | `openai/gpt-oss-120b` | no | `openai/gpt-oss-120b` | Hosted Groq model ID. |
 | `SYNTHPOST_GROQ_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
@@ -31,6 +36,42 @@ Required means required for the named feature, not for opening the local Studio.
 | `GEMINI_API_KEY` | empty | Gemini/fallback | `AIza…` | Secret. Never include in logs/docs/commits. |
 | `SYNTHPOST_GEMINI_MODEL` | `gemini-3.5-flash` | no | `gemini-3.5-flash` | Hosted Gemini model ID. |
 | `SYNTHPOST_GEMINI_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
+| `SARVAM_API_KEY` | empty | Sarvam | `sk_…` | Secret. Never include in logs/docs/commits. |
+| `SYNTHPOST_SARVAM_MODEL` | `sarvam-105b` | no | `sarvam-105b` | Hosted Sarvam AI model ID (`sarvam-105b`, `sarvam-30b`, etc.). |
+| `SYNTHPOST_SARVAM_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
+| `SYNTHPOST_SARVAM_MAX_COMPLETION_TOKENS` | `2300` | no | `4000` | Minimum 128. |
+
+### Codex with a ChatGPT account
+
+`SYNTHPOST_LLM_PROVIDER=codex` routes every existing structured-generation
+call through a local non-interactive `codex exec`: assignment-desk assessment,
+narrative brief/draft/segmentation/headlines, visual-query planning, and visual
+cleanliness classification. SynthPost supplies the existing prompt and JSON
+Schema; the adapter returns the validated JSON object through the same
+`LLMProvider` contract used by Groq and Gemini.
+
+Set it up once:
+
+```bash
+codex login
+codex login status
+make doctor
+```
+
+Each invocation is ephemeral and runs in an empty temporary directory. Codex
+plugins, web/browser, shell/code execution, computer-use, image, app, and
+multi-agent features are disabled, and the agent thread/depth caps prevent
+delegation even if a client build still advertises a collaboration tool. A
+macOS `sandbox-exec` profile additionally denies child process
+execution/forking, so untrusted article text cannot turn the generation call
+into a local shell session. Provider API keys and `PYTHONPATH` are not
+inherited. The provider fails closed when that sandbox is unavailable.
+
+This is trusted local automation using the saved Codex login—not the OpenAI
+Platform API. ChatGPT plan model availability, usage limits, and credits apply,
+and each call has more startup/context overhead than a direct model API. Keep
+Groq or Gemini available when predictable API latency, quotas, or unattended
+service operation matter.
 
 ## Discovery, assignment, and research
 
@@ -38,7 +79,7 @@ Required means required for the named feature, not for opening the local Studio.
 |---|---:|---|---|---|
 | `SYNTHPOST_AI_ASSIGNMENT_DESK` | `1` | no | `0` | Disable for deterministic-only ranking. |
 | `SYNTHPOST_ASSIGNMENT_DESK_AI_LIMIT` | `12` | no | `12` | Maximum leaders sent for AI assessment. |
-| `SYNTHPOST_DISCOVERY_MAX_AGE_HOURS` | `240` | no | `72` | Older candidates expire from active ranking. |
+| `SYNTHPOST_DISCOVERY_MAX_AGE_HOURS` | `24` | no | `72` | Active Story Inbox window. Older discovered news is archived from the default inbox; selected and editor-added stories remain available. |
 | `SYNTHPOST_DISCOVERY_WORKERS` | `6` | no | `4` | Concurrent source fetch workers. |
 | `SYNTHPOST_RESEARCH_MAX_DOCUMENTS` | `6` | no | `8` | Lead plus related documents. |
 | `SYNTHPOST_RESEARCH_CLAIMS_PER_DOCUMENT` | `8` | no | `6` | Extraction bound. |
@@ -149,7 +190,7 @@ Required means required for the named feature, not for opening the local Studio.
 | `SYNTHPOST_JOB_RETRY_MAX_SECONDS` | `900` | no | `900` | Must be at least the base. |
 | `SYNTHPOST_JOB_HEARTBEAT_SECONDS` | `5` | no | `5` | Minimum 1 second. |
 
-`make workers` launches exactly the configured capacity under one supervisor. Increasing a count requires restarting the supervisor. Jobs targeting the same story are serialized, and assembly is exclusive with other work for its episode; separate projects and episodes can use every available slot. Start with the `3/3/3` defaults, observe memory and provider quotas, then increase worker counts or per-render Remotion concurrency separately.
+`make workers` launches exactly the configured capacity under one supervisor. Increasing a count requires restarting the supervisor. Conflicting jobs targeting the same story are serialized, except narration generation and visual search, which run together on their independent editorial and media lanes. Assembly is exclusive with other work for its episode; separate projects and episodes can use every available slot. Start with the `3/3/3` defaults, observe memory and provider quotas, then increase worker counts or per-render Remotion concurrency separately.
 
 ## Security notes
 

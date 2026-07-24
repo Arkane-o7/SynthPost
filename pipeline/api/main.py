@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,7 @@ from pipeline.api.schemas import (
     ManualStory,
     ProjectCreate,
     ProjectPatch,
+    ResearchAndScriptRequest,
     RenderRequest,
     SourceCreate,
     SourcePatch,
@@ -44,6 +46,7 @@ from pipeline.editorial.charter import load_editorial_charter
 from pipeline.manifest_builder import build_story_manifest
 from pipeline.narration.service import load_narration_artifact
 from pipeline.models import (
+    RenderJob,
     ReviewStatus,
     ScriptDocument,
     ScriptStatus,
@@ -54,6 +57,8 @@ from pipeline.models import (
     TimelineStatus,
 )
 from pipeline.observability import LogContext, format_event
+from pipeline.research.extract import begin_research_revision
+from pipeline.revisions import reopen_episode_for_revision
 from pipeline.scripts.generation import (
     approve_script,
     begin_script_generation,
@@ -62,17 +67,23 @@ from pipeline.scripts.generation import (
 )
 from pipeline.storage import (
     PROJECT_ROOT,
+    episode_dir,
     episode_media_inbox_dir,
     project_relative,
     resolve_project_path,
 )
-from pipeline.timeline.planner import approve_timeline, generate_timeline
+from pipeline.timeline.planner import (
+    approve_timeline,
+    generate_timeline,
+    save_timeline_draft,
+)
 from pipeline.timeline.templates import template_registry_json
 from pipeline.timeline.validation import validate_timeline
 from pipeline.visuals.providers import (
     SUPPORTED_VISUAL_EXTENSIONS,
     analyze_visual,
     approve_visual,
+    begin_visual_search_revision,
     download_visual,
     reject_visual,
     stage_local_visual,
@@ -93,6 +104,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(jobs_router)
+
+
+def _remove_managed_tree(path: Path, root: Path) -> None:
+    """Remove one known storage subtree without ever allowing a broad target."""
+
+    resolved_path = path.resolve()
+    resolved_root = root.resolve()
+    if (
+        resolved_path == resolved_root
+        or resolved_root not in resolved_path.parents
+        or not resolved_path.exists()
+    ):
+        return
+    shutil.rmtree(resolved_path, ignore_errors=True)
 
 
 async def _write_streamed_upload(
@@ -129,6 +154,97 @@ async def _write_streamed_upload(
 
 def repo() -> Repository:
     return get_repository()
+
+
+def _queue_final_video_job(repository: Repository, story_id: str) -> RenderJob:
+    """Queue the production render; the worker continues into assembly."""
+
+    episode = repository.episode_for_story(story_id)
+    active_render = repository.active_job(
+        "render_story",
+        story_id=story_id,
+        render_profile="production",
+    )
+    if active_render:
+        return active_render
+
+    candidate = repository.candidate_for_story(story_id)
+    if candidate.workflow_state == StoryWorkflowState.assembling:
+        unfinished_story_ids = []
+        for episode_story_id in episode.story_ids:
+            try:
+                state = repository.candidate_for_story(
+                    episode_story_id
+                ).workflow_state
+            except Exception:
+                unfinished_story_ids.append(episode_story_id)
+                continue
+            if state not in {
+                StoryWorkflowState.assembling,
+                StoryWorkflowState.completed,
+            }:
+                unfinished_story_ids.append(episode_story_id)
+        if unfinished_story_ids:
+            raise ValueError(
+                "Every story in the episode must finish its approved production "
+                "render before final assembly"
+            )
+        active_assembly = repository.active_job(
+            "assemble_episode",
+            episode_id=episode.episode_id,
+            render_profile="production",
+        )
+        if active_assembly:
+            return active_assembly
+        return repository.create_job(
+            "assemble_episode",
+            episode_id=episode.episode_id,
+            render_profile="production",
+            payload={
+                "render_profile": "production",
+                "test_mode": False,
+                "force": False,
+            },
+        )
+
+    if candidate.workflow_state not in {
+        StoryWorkflowState.timeline_approved,
+        StoryWorkflowState.rendering_avatar,
+        StoryWorkflowState.rendering_composition,
+        StoryWorkflowState.completed,
+    }:
+        raise ValueError(
+            "Approve the latest timeline before generating the final video"
+        )
+
+    previous_state = candidate.workflow_state
+    if previous_state != StoryWorkflowState.rendering_composition:
+        repository.transition_story(
+            story_id, StoryWorkflowState.rendering_composition
+        )
+    if previous_state == StoryWorkflowState.completed:
+        reopen_episode_for_revision(repository, story_id)
+    try:
+        return repository.create_job(
+            "render_story",
+            episode_id=episode.episode_id,
+            story_id=story_id,
+            render_profile="production",
+            payload={
+                "render_profile": "production",
+                "test_mode": False,
+                "force": False,
+                "skip_avatar_render": False,
+                "_continue_to_assembly": True,
+            },
+        )
+    except Exception:
+        current = repository.candidate_for_story(story_id).workflow_state
+        if current == StoryWorkflowState.rendering_composition:
+            repository.transition_story(
+                story_id, StoryWorkflowState.timeline_review
+            )
+        raise
 
 
 @app.on_event("startup")
@@ -240,6 +356,26 @@ def update_project(project_id: str, patch: ProjectPatch) -> dict[str, Any]:
         repository.close()
 
 
+@app.delete("/api/projects/{project_id}")
+def delete_project(project_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        episodes = repository.list_episodes(project_id)
+        repository.delete_project(project_id)
+        for episode in episodes:
+            _remove_managed_tree(
+                episode_dir(episode.episode_id),
+                PROJECT_ROOT / "episodes",
+            )
+        _remove_managed_tree(
+            PROJECT_ROOT / "projects" / project_id,
+            PROJECT_ROOT / "projects",
+        )
+        return {"deleted": True, "project_id": project_id}
+    finally:
+        repository.close()
+
+
 @app.get("/api/episodes")
 def list_episodes(project_id: str | None = None) -> list[dict[str, Any]]:
     repository = repo()
@@ -279,6 +415,28 @@ def update_episode(episode_id: str, patch: EpisodePatch) -> dict[str, Any]:
         return repository.update_episode(
             episode_id, patch.model_dump(exclude_none=True)
         ).model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.delete("/api/episodes/{episode_id}")
+def delete_episode(episode_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        episode = repository.delete_episode(episode_id)
+        _remove_managed_tree(
+            episode_dir(episode.episode_id),
+            PROJECT_ROOT / "episodes",
+        )
+        _remove_managed_tree(
+            PROJECT_ROOT
+            / "projects"
+            / episode.project_id
+            / "episodes"
+            / episode.episode_id,
+            PROJECT_ROOT / "projects",
+        )
+        return {"deleted": True, "episode_id": episode_id}
     finally:
         repository.close()
 
@@ -461,9 +619,62 @@ def start_research(story_id: str) -> dict[str, Any]:
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        job = repository.create_job(
-            "research", episode_id=episode.episode_id, story_id=story_id
-        )
+        active_job = repository.active_job("research", story_id=story_id)
+        if active_job:
+            return active_job.model_dump(mode="json")
+        restore_state = begin_research_revision(repository, story_id)
+        try:
+            job = repository.create_job(
+                "research",
+                episode_id=episode.episode_id,
+                story_id=story_id,
+                payload={"_restore_workflow_state": restore_state.value},
+            )
+        except Exception:
+            candidate = repository.candidate_for_story(story_id)
+            if candidate.workflow_state == StoryWorkflowState.researching:
+                repository.transition_story(story_id, restore_state)
+            raise
+        return job.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.post("/api/stories/{story_id}/research-and-script")
+def start_research_and_script(
+    story_id: str, payload: ResearchAndScriptRequest
+) -> dict[str, Any]:
+    """Queue research and automatically continue into a script draft."""
+
+    repository = repo()
+    try:
+        episode = repository.episode_for_story(story_id)
+        active_script = repository.active_job("script_generate", story_id=story_id)
+        if active_script:
+            return active_script.model_dump(mode="json")
+        active_research = repository.active_job("research", story_id=story_id)
+        if active_research:
+            return active_research.model_dump(mode="json")
+        restore_state = begin_research_revision(repository, story_id)
+        job_payload = {
+            "_restore_workflow_state": restore_state.value,
+            "_continue_to_script": True,
+            "provider": payload.provider,
+            "target_duration_seconds": payload.target_duration_seconds,
+            "narration_mode": payload.narration_mode.value,
+        }
+        try:
+            job = repository.create_job(
+                "research",
+                episode_id=episode.episode_id,
+                story_id=story_id,
+                payload=job_payload,
+            )
+        except Exception:
+            candidate = repository.candidate_for_story(story_id)
+            if candidate.workflow_state == StoryWorkflowState.researching:
+                repository.transition_story(story_id, restore_state)
+            raise
         return job.model_dump(mode="json")
     finally:
         repository.close()
@@ -563,7 +774,8 @@ def api_approve_script(story_id: str) -> dict[str, Any]:
             )
         script = approve_script(repository, story_id)
         # Narration and visual discovery both become eligible after approval.
-        # The queue's same-story serialization still prevents overlapping writes.
+        # They use independent lanes and artifacts, so the queue may run them
+        # together while retaining same-story serialization for later stages.
         episode = repository.episode_for_story(story_id)
         for job_type in ("narration_generate", "visual_search"):
             try:
@@ -628,11 +840,30 @@ def search_visuals(story_id: str) -> dict[str, Any]:
     repository = repo()
     try:
         episode = repository.episode_for_story(story_id)
-        job = repository.active_job(
-            "visual_search", story_id=story_id
-        ) or repository.create_job(
-            "visual_search", episode_id=episode.episode_id, story_id=story_id
-        )
+        active_job = repository.active_job("visual_search", story_id=story_id)
+        if active_job:
+            return active_job.model_dump(mode="json")
+        script = repository.latest_script(story_id)
+        if not script or script.status != ScriptStatus.approved:
+            raise ValueError(
+                "The latest script revision must be approved before searching "
+                "for visuals"
+            )
+        begin_visual_search_revision(repository, story_id)
+        try:
+            job = repository.create_job(
+                "visual_search",
+                episode_id=episode.episode_id,
+                story_id=story_id,
+                payload={"_restore_workflow_state": "visuals_review"},
+            )
+        except Exception:
+            candidate = repository.candidate_for_story(story_id)
+            if candidate.workflow_state == StoryWorkflowState.visuals_searching:
+                repository.transition_story(
+                    story_id, StoryWorkflowState.visuals_review
+                )
+            raise
         return job.model_dump(mode="json")
     finally:
         repository.close()
@@ -823,10 +1054,7 @@ def save_timeline(story_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         payload["story_id"] = story_id
         plan = TimelinePlan.model_validate(payload)
-        errors, warnings = validate_timeline(plan)
-        plan.validation_errors = errors
-        plan.validation_warnings = warnings
-        return repository.save_timeline(plan).model_dump(mode="json")
+        return save_timeline_draft(repository, story_id, plan).model_dump(mode="json")
     finally:
         repository.close()
 
@@ -851,10 +1079,18 @@ def api_validate_timeline(
 
 
 @app.post("/api/stories/{story_id}/timeline/approve")
-def api_approve_timeline(story_id: str) -> dict[str, Any]:
+def api_approve_timeline(
+    story_id: str, payload: dict[str, Any] | None = None
+) -> dict[str, Any]:
     repository = repo()
     try:
-        return approve_timeline(repository, story_id).model_dump(mode="json")
+        if payload:
+            payload["story_id"] = story_id
+            plan = TimelinePlan.model_validate(payload)
+            save_timeline_draft(repository, story_id, plan)
+        approved = approve_timeline(repository, story_id)
+        _queue_final_video_job(repository, story_id)
+        return approved.model_dump(mode="json")
     finally:
         repository.close()
 
@@ -879,8 +1115,17 @@ def api_render_avatar(story_id: str, payload: RenderRequest) -> dict[str, Any]:
     try:
         episode = repository.episode_for_story(story_id)
         candidate = repository.candidate_for_story(story_id)
-        if candidate.workflow_state == StoryWorkflowState.timeline_approved:
+        if (
+            payload.render_profile == "production"
+            and not payload.test_mode
+            and candidate.workflow_state
+            in {
+                StoryWorkflowState.timeline_approved,
+                StoryWorkflowState.completed,
+            }
+        ):
             repository.transition_story(story_id, StoryWorkflowState.rendering_avatar)
+            reopen_episode_for_revision(repository, story_id)
         job = repository.active_job(
             "render_avatar",
             story_id=story_id,
@@ -903,14 +1148,31 @@ def api_render_story(story_id: str, payload: RenderRequest) -> dict[str, Any]:
     try:
         episode = repository.episode_for_story(story_id)
         candidate = repository.candidate_for_story(story_id)
-        if candidate.workflow_state == StoryWorkflowState.timeline_approved:
+        if (
+            payload.render_profile == "production"
+            and not payload.test_mode
+            and candidate.workflow_state == StoryWorkflowState.timeline_approved
+        ):
             repository.transition_story(
                 story_id, StoryWorkflowState.rendering_composition
             )
-        elif candidate.workflow_state == StoryWorkflowState.rendering_avatar:
+        elif (
+            payload.render_profile == "production"
+            and not payload.test_mode
+            and candidate.workflow_state == StoryWorkflowState.rendering_avatar
+        ):
             repository.transition_story(
                 story_id, StoryWorkflowState.rendering_composition
             )
+        elif (
+            payload.render_profile == "production"
+            and not payload.test_mode
+            and candidate.workflow_state == StoryWorkflowState.completed
+        ):
+            repository.transition_story(
+                story_id, StoryWorkflowState.rendering_composition
+            )
+            reopen_episode_for_revision(repository, story_id)
         job = repository.active_job(
             "render_story",
             story_id=story_id,
@@ -923,6 +1185,15 @@ def api_render_story(story_id: str, payload: RenderRequest) -> dict[str, Any]:
             payload=payload.model_dump(),
         )
         return job.model_dump(mode="json")
+    finally:
+        repository.close()
+
+
+@app.post("/api/stories/{story_id}/final-video")
+def api_generate_final_video(story_id: str) -> dict[str, Any]:
+    repository = repo()
+    try:
+        return _queue_final_video_job(repository, story_id).model_dump(mode="json")
     finally:
         repository.close()
 
@@ -1001,7 +1272,10 @@ def serve_artifact(artifact_path: str) -> FileResponse:
         )
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")
-    return FileResponse(resolved)
+    return FileResponse(
+        resolved,
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 # The remote/mobile build is served by the same localhost-only process as the

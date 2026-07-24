@@ -3,6 +3,7 @@
 export type Project = {
   project_id: string;
   title: string;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
   default_category: string;
@@ -14,6 +15,7 @@ export type Episode = {
   episode_id: string;
   project_id: string;
   title: string;
+  pinned: boolean;
   story_ids: string[];
   status: string;
   render_profile: string;

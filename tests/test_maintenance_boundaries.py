@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-import asyncio
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -75,6 +76,20 @@ class ConfigurationBoundaryTests(unittest.TestCase):
     def test_provider_credentials_are_feature_scoped(self) -> None:
         settings = config.load_settings({"SYNTHPOST_LLM_PROVIDER": "groq"})
         self.assertIn("GROQ_API_KEY", settings.llm.provider_problem() or "")
+
+    def test_codex_provider_uses_local_cli_without_api_keys(self) -> None:
+        settings = config.load_settings(
+            {
+                "SYNTHPOST_LLM_PROVIDER": "codex",
+                "SYNTHPOST_CODEX_BINARY": sys.executable,
+                "SYNTHPOST_CODEX_SANDBOX_BINARY": "/usr/bin/sandbox-exec",
+                "SYNTHPOST_CODEX_MODEL": "gpt-5.6-sol",
+                "SYNTHPOST_CODEX_REASONING_EFFORT": "high",
+            }
+        )
+        self.assertIsNone(settings.llm.provider_problem())
+        self.assertEqual(settings.llm.codex_model, "gpt-5.6-sol")
+        self.assertEqual(settings.llm.codex_reasoning_effort, "high")
 
     def test_parallel_worker_defaults_and_overrides_are_typed(self) -> None:
         defaults = config.load_settings({})

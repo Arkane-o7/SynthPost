@@ -237,7 +237,6 @@ def charter_prompt_context(*, show_format: str) -> str:
             f"Lens: {charter['lens']}",
             "Voice: " + "; ".join(charter["tone"]),
             f"Format: {show['label']}",
-            "Format structure: " + " → ".join(show["structure"]),
             "Narration profile: " + "; ".join(show["narration"]),
             "Shared narration rules: " + "; ".join(charter["narration_principles"]),
             "Avoid in narration: " + "; ".join(charter["narration_avoid"]),

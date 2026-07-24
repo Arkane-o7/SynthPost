@@ -9,7 +9,7 @@ SynthPost Studio is a local-first newsroom production editor built around the re
 - Store workflow state in SQLite and reproducible artifacts on disk.
 - Treat AI output as suggestions, never approvals.
 - Render only from approved scripts and timelines; visuals must be eligible local media, with optional approval used to pin an editorial choice.
-- Keep the newsroom application local on macOS while using explicitly configured hosted AI providers for production generation.
+- Keep the newsroom application local on macOS while using either the isolated local Codex CLI transport or explicitly configured hosted APIs for production generation.
 
 ## Major directories
 
@@ -24,7 +24,7 @@ pipeline/
   db/                                   SQLite migration + repository layer
   discovery/                            Source seeds, RSS/Atom discovery, ranking
   research/                             Source extraction and research-pack builder
-  llm/                                  Hosted Groq/Gemini structured-generation providers
+  llm/                                  Codex CLI and hosted Groq/Gemini structured-generation providers
   scripts/                              Script generation, revisions, grounding checks
   visuals/                              Local visual provider and rights review
   timeline/                             Template registry, draft planner, validator

@@ -47,6 +47,11 @@ def validate_timeline(
         previous_end = max(previous_end, segment.end_time)
         if segment.duration <= 0:
             errors.append(f"{prefix}: nonpositive duration")
+        elif segment.audio.mode != "source" and segment.duration > 12.0:
+            warnings.append(
+                f"{prefix}: {segment.duration:.1f}s narration shot exceeds the "
+                "retention pacing target; split the script into shorter spoken beats"
+            )
         if segment.template.template_id not in TEMPLATE_REGISTRY:
             errors.append(f"{prefix}: unknown template {segment.template.template_id}")
             continue

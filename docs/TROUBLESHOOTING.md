@@ -33,11 +33,19 @@ Then inspect the failed job in the Studio Jobs page and `.synthpost/jobs/<job_id
 
 Run `make doctor` and confirm the reported editorial/media/render capacity. Restart `make workers` after changing worker counts; a running supervisor does not hot-reload `.env`. `Another SynthPost worker supervisor is already running` means an existing pool owns the database—stop it instead of starting a second pool. A `legacy worker still owns` error means a pre-upgrade lane worker is still alive.
 
-Jobs for the same story intentionally wait for one another, and episode assembly waits for running work in that episode. Jobs from unrelated projects or episodes should show multiple `running` records when capacity is greater than one. If the Mac becomes memory-bound, lower `SYNTHPOST_RENDER_WORKERS` first, then set `SYNTHPOST_REMOTION_CONCURRENCY` to a smaller per-render value.
+Conflicting jobs for the same story intentionally wait for one another, while narration generation and visual search should run together after script approval. Episode assembly waits for running work in that episode. Jobs from unrelated projects or episodes should show multiple `running` records when capacity is greater than one. If the Mac becomes memory-bound, lower `SYNTHPOST_RENDER_WORKERS` first, then set `SYNTHPOST_REMOTION_CONCURRENCY` to a smaller per-render value.
 
 ## Provider failures and timeouts
 
-- Verify the selected provider and its key without printing the key.
+- Verify the selected provider and, for Groq/Gemini, its key without printing the key.
+- For `codex`, run `codex login status` and `make doctor`. A missing/expired
+  ChatGPT login, unavailable configured model, or exhausted ChatGPT plan limit
+  is surfaced as a provider failure.
+- The Codex provider requires macOS `/usr/bin/sandbox-exec` and fails closed
+  without it. `Operation not permitted` at startup usually means the configured
+  Codex executable changed and should be rechecked with `make doctor`.
+- `SYNTHPOST_CODEX_TIMEOUT_SECONDS` controls the full local Codex invocation;
+  `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` controls direct provider requests.
 - A rate limit is retryable only within the configured attempt/backoff budget.
 - `hosted_fallback` requires both hosted keys and does not consume fallback quota for a temporary primary rate-limit window.
 - Increase `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` only after confirming normal connectivity.
@@ -61,9 +69,14 @@ The bundled settings must allow JSON. On Docker Desktop, try `DOCKER_CONTEXT=des
 - Inspect `approval_blockers`, cleanliness status, warnings, and local file existence.
 - The presenter/anchor layout is the rights-safe fallback when real media is unavailable.
 
-## Ollama/local LLM assumptions
+## Local LLM and Codex assumptions
 
-The current code supports Groq, Gemini, explicit hosted fallback, and deterministic mock. Ollama is not a registered provider. Add it through the documented `LLMProvider` boundary with structured-output and offline adapter tests; changing `SYNTHPOST_LLM_PROVIDER` to an unknown value intentionally fails.
+The current code supports the local Codex CLI transport, Groq, Gemini, explicit
+hosted fallback, and deterministic mock. Codex still uses OpenAI-hosted models
+through the signed-in ChatGPT account; it is not an offline LLM. Ollama is not
+a registered provider. Add it through the documented `LLMProvider` boundary
+with structured-output and offline adapter tests; changing
+`SYNTHPOST_LLM_PROVIDER` to an unknown value intentionally fails.
 
 ## Avatar or TTS failures
 

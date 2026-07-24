@@ -5,7 +5,6 @@ import type { Page } from "./LeftRail";
 const MOBILE_NAV: { key: Page; label: string; icon: string }[] = [
   { key: "command", label: "Studio", icon: "◉" },
   { key: "episodes", label: "Episodes", icon: "▤" },
-  { key: "inbox", label: "Stories", icon: "◇" },
   { key: "jobs", label: "Jobs", icon: "↯" },
   { key: "sources", label: "Sources", icon: "⌁" },
 ];

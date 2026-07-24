@@ -17,9 +17,14 @@ import { request } from "./http";
 export { ApiError, API_BASE } from "./http";
 
 type ProjectPatch = Partial<
-  Pick<Project, "title" | "default_category" | "default_render_profile" | "status">
+  Pick<
+    Project,
+    "title" | "pinned" | "default_category" | "default_render_profile" | "status"
+  >
 >;
-type EpisodePatch = Partial<Pick<Episode, "title" | "render_profile" | "status">>;
+type EpisodePatch = Partial<
+  Pick<Episode, "title" | "pinned" | "render_profile" | "status">
+>;
 type SourcePatch = Partial<
   Pick<
     SourceDefinition,
@@ -53,16 +58,21 @@ export const api = {
   editorialCharter: () => request<Record<string, unknown>>("/api/editorial/charter"),
 
   listProjects: () => request<Project[]>("/api/projects"),
-  createProject: (title: string) =>
+  createProject: (title?: string) =>
     request<Project>("/api/projects", {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title: title?.trim() || undefined }),
     }),
   updateProject: (projectId: string, patch: ProjectPatch) =>
     request<Project>(`/api/projects/${projectId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  deleteProject: (projectId: string) =>
+    request<{ deleted: true; project_id: string }>(
+      `/api/projects/${projectId}`,
+      { method: "DELETE" },
+    ),
 
   listEpisodes: (projectId?: string) =>
     request<Episode[]>(
@@ -70,12 +80,15 @@ export const api = {
     ),
   createEpisode: (
     projectId: string,
-    title: string,
-    renderProfile = "preview",
+    title?: string,
+    renderProfile = "production",
   ) =>
     request<Episode>(`/api/projects/${projectId}/episodes`, {
       method: "POST",
-      body: JSON.stringify({ title, render_profile: renderProfile }),
+      body: JSON.stringify({
+        title: title?.trim() || undefined,
+        render_profile: renderProfile,
+      }),
     }),
   readEpisode: (episodeId: string) =>
     request<Episode>(`/api/episodes/${episodeId}`),
@@ -84,6 +97,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  deleteEpisode: (episodeId: string) =>
+    request<{ deleted: true; episode_id: string }>(
+      `/api/episodes/${episodeId}`,
+      { method: "DELETE" },
+    ),
 
   listSources: () => request<SourceDefinition[]>("/api/sources"),
   createSource: (
@@ -180,6 +198,16 @@ export const api = {
   startResearch: (storyId: string) =>
     request<RenderJob>(`/api/stories/${storyId}/research/start`, {
       method: "POST",
+    }),
+  researchAndScript: (
+    storyId: string,
+    provider?: string,
+    target_duration_seconds = 600,
+    narration_mode: NarrationMode = "explained",
+  ) =>
+    request<RenderJob>(`/api/stories/${storyId}/research-and-script`, {
+      method: "POST",
+      body: JSON.stringify({ provider, target_duration_seconds, narration_mode }),
     }),
   readResearch: (storyId: string) =>
     request<ResearchPack | null>(`/api/stories/${storyId}/research`),
@@ -302,9 +330,10 @@ export const api = {
       `/api/stories/${storyId}/timeline/validate`,
       { method: "POST", body: JSON.stringify(timeline ?? null) },
     ),
-  approveTimeline: (storyId: string) =>
+  approveTimeline: (storyId: string, timeline?: TimelinePlan) =>
     request<TimelinePlan>(`/api/stories/${storyId}/timeline/approve`, {
       method: "POST",
+      body: timeline ? JSON.stringify(timeline) : undefined,
     }),
 
   buildManifest: (
@@ -343,6 +372,10 @@ export const api = {
         // Production story renders should render/reuse the real avatar anchor.
         skip_avatar_render: test_mode || render_profile === "preview",
       }),
+    }),
+  generateFinalVideo: (storyId: string) =>
+    request<RenderJob>(`/api/stories/${storyId}/final-video`, {
+      method: "POST",
     }),
   assembleEpisode: (
     episodeId: string,
@@ -388,5 +421,11 @@ export const api = {
   jobLogs: (jobId: string) => request<string>(`/api/jobs/${jobId}/logs`),
 };
 
-export const artifactUrl = (path?: string | null): string =>
-  path ? `/api/artifacts/${path}` : "";
+export const artifactUrl = (
+  path?: string | null,
+  revision?: string | null,
+): string => {
+  if (!path) return "";
+  const url = `/api/artifacts/${path}`;
+  return revision ? `${url}?v=${encodeURIComponent(revision)}` : url;
+};

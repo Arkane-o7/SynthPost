@@ -190,7 +190,7 @@ There is no Redis or Celery queue. Jobs are SQLite records divided into lanes:
 - `media`: visual search, timeline
 - `render`: avatar, composition, assembly
 
-Workers use Unix/macOS `fcntl` locks for the supervisor and numbered lane slots. Atomic claiming allows independent projects and episodes to run concurrently while serializing mutations to one story. Episode assembly is exclusive with other work in that episode. Heartbeats, cooperative cancellation, stale-job recovery, and bounded retries are implemented in `pipeline/jobs/` and `pipeline/db/repository.py`.
+Workers use Unix/macOS `fcntl` locks for the supervisor and numbered lane slots. Atomic claiming allows independent projects and episodes to run concurrently while serializing conflicting mutations to one story. Narration generation and visual search are the explicit safe-overlap pair: they share an immutable approved script but write independent artifacts. Episode assembly is exclusive with other work in that episode. Heartbeats, cooperative cancellation, stale-job recovery, and bounded retries are implemented in `pipeline/jobs/` and `pipeline/db/repository.py`.
 
 Adding a job type normally requires coordinated changes to `StageName`, `STAGE_CONTRACTS`, the worker `HANDLERS` map, lane/retry policy, API/client surfaces, tests, and pipeline documentation. Handler and contract keys must match exactly.
 

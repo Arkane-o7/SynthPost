@@ -27,6 +27,7 @@ type StudioState = {
 type StudioContextValue = StudioState & {
   setSelectedProjectId: (value: string) => void;
   setSelectedEpisodeId: (value: string) => void;
+  openEpisode: (projectId: string, episodeId: string) => Promise<void>;
   setSelectedStoryId: (value: string) => void;
   setError: (value: string) => void;
   refreshAll: () => Promise<void>;
@@ -76,8 +77,11 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
         api.listSources(),
         api.listJobs(),
       ]);
-      const selectedProjectId =
-        state.selectedProjectId || projects[0]?.project_id || "";
+      const selectedProjectId = projects.some(
+        (project) => project.project_id === state.selectedProjectId,
+      )
+        ? state.selectedProjectId
+        : projects[0]?.project_id || "";
       const episodes = selectedProjectId
         ? await api.listEpisodes(selectedProjectId)
         : [];
@@ -189,10 +193,22 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           const candidates = await api.listCandidates({
             episodeId: selectedEpisodeId || undefined,
           });
+          const selectedStoryId =
+            candidates.find(
+              (candidate) => candidate.selection_status === "selected",
+            )?.story_id || "";
           if (selectedEpisodeId) {
             localStorage.setItem("synthpost.episode", selectedEpisodeId);
           }
-          patch({ episodes, candidates, selectedEpisodeId });
+          if (selectedStoryId) {
+            localStorage.setItem("synthpost.story", selectedStoryId);
+          }
+          patch({
+            episodes,
+            candidates,
+            selectedEpisodeId,
+            selectedStoryId,
+          });
         } catch (error) {
           patch({
             error: errorMessage(error),
@@ -209,13 +225,50 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           const candidates = await api.listCandidates({
             episodeId: selectedEpisodeId || undefined,
           });
-          patch({ candidates });
+          const selectedStoryId =
+            candidates.find(
+              (candidate) => candidate.selection_status === "selected",
+            )?.story_id || "";
+          if (selectedStoryId) {
+            localStorage.setItem("synthpost.story", selectedStoryId);
+          }
+          patch({ candidates, selectedStoryId });
         } catch (error) {
           patch({
             error: errorMessage(error),
           });
         }
       })();
+    },
+    openEpisode: async (selectedProjectId, selectedEpisodeId) => {
+      const [episodes, candidates] = await Promise.all([
+        api.listEpisodes(selectedProjectId),
+        api.listCandidates({ episodeId: selectedEpisodeId }),
+      ]);
+      if (
+        !episodes.some((episode) => episode.episode_id === selectedEpisodeId)
+      ) {
+        throw new Error("That episode no longer exists in this project.");
+      }
+      const selectedStoryId =
+        candidates.find(
+          (candidate) => candidate.selection_status === "selected",
+        )?.story_id || "";
+
+      localStorage.setItem("synthpost.project", selectedProjectId);
+      localStorage.setItem("synthpost.episode", selectedEpisodeId);
+      if (selectedStoryId) {
+        localStorage.setItem("synthpost.story", selectedStoryId);
+      } else {
+        localStorage.removeItem("synthpost.story");
+      }
+      patch({
+        selectedProjectId,
+        selectedEpisodeId,
+        selectedStoryId,
+        episodes,
+        candidates,
+      });
     },
     setSelectedStoryId: (selectedStoryId) => {
       localStorage.setItem("synthpost.story", selectedStoryId);

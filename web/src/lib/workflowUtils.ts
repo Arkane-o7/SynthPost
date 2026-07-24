@@ -3,13 +3,10 @@
 
 export const STAGES = [
   { key: "story", label: "Select Story", number: 1 },
-  { key: "research", label: "Research", number: 2 },
-  { key: "script", label: "Script", number: 3 },
-  { key: "visuals", label: "Visuals", number: 4 },
-  { key: "timeline", label: "Timeline", number: 5 },
-  { key: "preview", label: "Preview", number: 6 },
-  { key: "render", label: "Render", number: 7 },
-  { key: "assemble", label: "Assemble", number: 8 },
+  { key: "draft", label: "Research & Script", number: 2 },
+  { key: "visuals", label: "Visuals", number: 3 },
+  { key: "timeline", label: "Timeline", number: 4 },
+  { key: "final", label: "Final Video", number: 5 },
 ] as const;
 
 export type StageKey = (typeof STAGES)[number]["key"];
@@ -46,19 +43,19 @@ const STATE_ORDER = [
 const STATE_TO_STEP: Record<string, number> = {
   selected: 0,
   researching: 1,
-  research_ready: 2,
-  script_generating: 2,
-  script_review: 2,
-  script_approved: 3,
-  visuals_searching: 3,
-  visuals_review: 3,
-  timeline_draft: 4,
-  timeline_review: 4,
-  timeline_approved: 5,
-  rendering_avatar: 6,
-  rendering_composition: 6,
-  assembling: 7,
-  completed: 7,
+  research_ready: 1,
+  script_generating: 1,
+  script_review: 1,
+  script_approved: 2,
+  visuals_searching: 2,
+  visuals_review: 2,
+  timeline_draft: 3,
+  timeline_review: 3,
+  timeline_approved: 4,
+  rendering_avatar: 4,
+  rendering_composition: 4,
+  assembling: 4,
+  completed: 4,
   failed: 0,
   cancelled: 0,
 };
@@ -119,7 +116,7 @@ export type NextAction = {
   ctaLabel: string;
   ctaType: "navigate" | "api";
   stageKey: StageKey;
-  apiAction?: "startResearch" | "generateScript";
+  apiAction?: "researchAndScript" | "generateScript";
 };
 
 /**
@@ -129,50 +126,50 @@ export function getNextAction(workflowState?: string): NextAction {
   switch (workflowState) {
     case "selected":
       return {
-        title: "Start research",
+        title: "Research and write the first draft",
         description:
-          "Run the research job to extract claims, evidence, and entities from the source material.",
-        ctaLabel: "Start Research Job",
+          "SynthPost will gather source evidence, extract claims, and continue directly into a broadcast script.",
+        ctaLabel: "Research & Write Draft",
         ctaType: "api",
-        stageKey: "research",
-        apiAction: "startResearch",
+        stageKey: "draft",
+        apiAction: "researchAndScript",
       };
     case "researching":
       return {
-        title: "Research is running",
+        title: "Researching, then writing",
         description:
-          "The worker is extracting claims, evidence, and entities. Watch Active Jobs on the right rail.",
-        ctaLabel: "Open Research",
+          "Sources and claims are being assembled first. Script generation will begin automatically when the evidence pack is ready.",
+        ctaLabel: "Open Draft Desk",
         ctaType: "navigate",
-        stageKey: "research",
+        stageKey: "draft",
       };
     case "research_ready":
       return {
-        title: "Generate or write a script",
+        title: "Research ready — write the script",
         description:
-          "Use the configured hosted AI provider to generate a broadcast script, or write one manually from the research pack.",
-        ctaLabel: "Generate Script",
+          "The source pack is ready. Continue into a broadcast script if automatic generation was interrupted.",
+        ctaLabel: "Write Script",
         ctaType: "api",
-        stageKey: "script",
+        stageKey: "draft",
         apiAction: "generateScript",
       };
     case "script_generating":
       return {
         title: "Script generation is running",
         description:
-          "SynthPost is waiting for the hosted structured script generator. Provider failures are reported directly and never fall back to a local model.",
-        ctaLabel: "Open Script",
+          "SynthPost is waiting for the configured structured script generator. Provider failures are reported directly and never switch providers implicitly.",
+        ctaLabel: "Open Draft Desk",
         ctaType: "navigate",
-        stageKey: "script",
+        stageKey: "draft",
       };
     case "script_review":
       return {
         title: "Review and approve the script",
         description:
           "Read through the generated script, make edits, then approve it to lock this version.",
-        ctaLabel: "Open Script Editor",
+        ctaLabel: "Review Draft",
         ctaType: "navigate",
-        stageKey: "script",
+        stageKey: "draft",
       };
     case "script_approved":
       return {
@@ -221,48 +218,48 @@ export function getNextAction(workflowState?: string): NextAction {
       };
     case "timeline_approved":
       return {
-        title: "Build manifest and preview",
+        title: "Final video queued",
         description:
-          "Build the renderer manifest and generate a preview frame to verify the composition looks correct.",
-        ctaLabel: "Open Preview",
+          "The approved timeline is rendering at production quality. SynthPost will append the outro and publish the assembled episode automatically.",
+        ctaLabel: "Track Final Video",
         ctaType: "navigate",
-        stageKey: "preview",
+        stageKey: "final",
       };
     case "rendering_avatar":
       return {
-        title: "Avatar render is running",
+        title: "Generating the final video",
         description:
-          "The avatar engine is rendering the anchor. This can take several minutes in production mode.",
-        ctaLabel: "Open Render Controls",
+          "The production anchor and approved composition are rendering. Assembly will follow automatically.",
+        ctaLabel: "Track Final Video",
         ctaType: "navigate",
-        stageKey: "render",
+        stageKey: "final",
       };
     case "rendering_composition":
       return {
-        title: "Render the story",
+        title: "Generating the final video",
         description:
-          "Render avatar and story video using the approved timeline and visuals.",
-        ctaLabel: "Open Render Controls",
+          "SynthPost is rendering the approved timeline at production quality, then it will attach the brand outro.",
+        ctaLabel: "Track Final Video",
         ctaType: "navigate",
-        stageKey: "render",
+        stageKey: "final",
       };
     case "assembling":
       return {
-        title: "Assemble the final episode",
+        title: "Finishing the final episode",
         description:
-          "Concatenate rendered story segments and append the SynthPost outro.",
-        ctaLabel: "Open Assembly",
+          "The production render is complete. SynthPost is appending the outro and writing the final episode file.",
+        ctaLabel: "Track Final Video",
         ctaType: "navigate",
-        stageKey: "assemble",
+        stageKey: "final",
       };
     case "completed":
       return {
         title: "Production complete",
         description:
           "This episode has been fully rendered and assembled. You can start a new episode or review the output.",
-        ctaLabel: "View Output",
+        ctaLabel: "Watch Final Video",
         ctaType: "navigate",
-        stageKey: "assemble",
+        stageKey: "final",
       };
     case "failed":
       return {

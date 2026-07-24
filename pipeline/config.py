@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
@@ -35,11 +36,22 @@ class StorageSettings(SettingsModel):
 
 class LLMSettings(SettingsModel):
     provider: Literal[
-        "groq", "gemini", "hosted_fallback", "groq_then_gemini", "mock"
+        "codex",
+        "groq",
+        "gemini",
+        "sarvam",
+        "hosted_fallback",
+        "groq_then_gemini",
+        "mock",
     ] = "groq"
     request_timeout_seconds: float = Field(default=45.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=10)
     save_debug: bool = False
+    codex_binary: str = "codex"
+    codex_sandbox_binary: str = "/usr/bin/sandbox-exec"
+    codex_model: str = "gpt-5.6-sol"
+    codex_reasoning_effort: Literal["low", "medium", "high", "xhigh"] = "medium"
+    codex_timeout_seconds: float = Field(default=180.0, gt=0)
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.5-flash"
     gemini_temperature: float = Field(default=0.2, ge=0, le=2)
@@ -47,12 +59,29 @@ class LLMSettings(SettingsModel):
     groq_model: str = "openai/gpt-oss-120b"
     groq_temperature: float = Field(default=0.2, ge=0, le=2)
     groq_max_completion_tokens: int = Field(default=2300, ge=128)
+    sarvam_api_key: str | None = None
+    sarvam_model: str = "sarvam-105b"
+    sarvam_temperature: float = Field(default=0.2, ge=0, le=2)
+    sarvam_max_completion_tokens: int = Field(default=2300, ge=128)
 
     def provider_problem(self) -> str | None:
+        if self.provider == "codex":
+            if not shutil.which(self.codex_binary):
+                return (
+                    f"Codex CLI not found or not executable at {self.codex_binary!r}; "
+                    "install Codex or set SYNTHPOST_CODEX_BINARY"
+                )
+            if not shutil.which(self.codex_sandbox_binary):
+                return (
+                    "macOS sandbox-exec is required for the Codex provider; set "
+                    "SYNTHPOST_CODEX_SANDBOX_BINARY to its executable path"
+                )
         if self.provider == "gemini" and not self.gemini_api_key:
             return "GEMINI_API_KEY is required when SYNTHPOST_LLM_PROVIDER=gemini"
         if self.provider == "groq" and not self.groq_api_key:
             return "GROQ_API_KEY is required when SYNTHPOST_LLM_PROVIDER=groq"
+        if self.provider == "sarvam" and not self.sarvam_api_key:
+            return "SARVAM_API_KEY is required when SYNTHPOST_LLM_PROVIDER=sarvam"
         if self.provider in {"hosted_fallback", "groq_then_gemini"}:
             missing = [
                 name
@@ -78,6 +107,12 @@ class SearchSettings(SettingsModel):
     news_time_range: str = "month"
     research_max_documents: int = Field(default=6, ge=1)
     research_claims_per_document: int = Field(default=8, ge=1)
+
+
+class DiscoverySettings(SettingsModel):
+    """Controls for the actively curated story inbox."""
+
+    max_candidate_age_hours: float = Field(default=24.0, gt=0)
 
 
 class VisualSettings(SettingsModel):
@@ -170,6 +205,7 @@ class SynthPostSettings(SettingsModel):
     storage: StorageSettings
     llm: LLMSettings
     search: SearchSettings
+    discovery: DiscoverySettings
     visuals: VisualSettings
     avatar: AvatarSettings
     render: RenderSettings
@@ -260,6 +296,17 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
                 max_retries=r.integer("SYNTHPOST_LLM_MAX_RETRIES", 2),
                 save_debug=r.boolean("SYNTHPOST_SAVE_LLM_DEBUG", False),
+                codex_binary=r.text("SYNTHPOST_CODEX_BINARY", "codex"),
+                codex_sandbox_binary=r.text(
+                    "SYNTHPOST_CODEX_SANDBOX_BINARY", "/usr/bin/sandbox-exec"
+                ),
+                codex_model=r.text("SYNTHPOST_CODEX_MODEL", "gpt-5.6-sol"),
+                codex_reasoning_effort=(
+                    r.text("SYNTHPOST_CODEX_REASONING_EFFORT", "medium") or "medium"
+                ).lower(),
+                codex_timeout_seconds=r.number(
+                    "SYNTHPOST_CODEX_TIMEOUT_SECONDS", 180.0
+                ),
                 gemini_api_key=r.text("GEMINI_API_KEY"),
                 gemini_model=r.text("SYNTHPOST_GEMINI_MODEL", "gemini-3.5-flash"),
                 gemini_temperature=r.number("SYNTHPOST_GEMINI_TEMPERATURE", 0.2),
@@ -268,6 +315,12 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 groq_temperature=r.number("SYNTHPOST_GROQ_TEMPERATURE", 0.2),
                 groq_max_completion_tokens=r.integer(
                     "SYNTHPOST_GROQ_MAX_COMPLETION_TOKENS", 2300
+                ),
+                sarvam_api_key=r.text("SARVAM_API_KEY"),
+                sarvam_model=r.text("SYNTHPOST_SARVAM_MODEL", "sarvam-105b"),
+                sarvam_temperature=r.number("SYNTHPOST_SARVAM_TEMPERATURE", 0.2),
+                sarvam_max_completion_tokens=r.integer(
+                    "SYNTHPOST_SARVAM_MAX_COMPLETION_TOKENS", 2300
                 ),
             ),
             search=SearchSettings(
@@ -284,6 +337,11 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
                 research_claims_per_document=r.integer(
                     "SYNTHPOST_RESEARCH_CLAIMS_PER_DOCUMENT", 8
+                ),
+            ),
+            discovery=DiscoverySettings(
+                max_candidate_age_hours=r.number(
+                    "SYNTHPOST_DISCOVERY_MAX_AGE_HOURS", 24.0
                 ),
             ),
             visuals=VisualSettings(

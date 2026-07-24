@@ -56,6 +56,54 @@ SECTION_ORDER = [
 ]
 
 
+def _presentation_section_types(section_count: int) -> list[str]:
+    """Assign renderer-facing labels after, rather than during, story writing."""
+
+    types_by_count = {
+        3: ["cold_open", "key_developments", "conclusion"],
+        4: ["cold_open", "context", "key_developments", "conclusion"],
+        5: [
+            "cold_open",
+            "context",
+            "key_developments",
+            "why_it_matters",
+            "conclusion",
+        ],
+        6: [
+            "cold_open",
+            "intro",
+            "context",
+            "key_developments",
+            "why_it_matters",
+            "conclusion",
+        ],
+        7: [
+            "cold_open",
+            "intro",
+            "context",
+            "key_developments",
+            "why_it_matters",
+            "uncertainty",
+            "conclusion",
+        ],
+        8: [
+            "cold_open",
+            "intro",
+            "context",
+            "key_developments",
+            "why_it_matters",
+            "stakes",
+            "uncertainty",
+            "conclusion",
+        ],
+        9: SECTION_ORDER,
+    }
+    try:
+        return list(types_by_count[section_count])
+    except KeyError as exc:
+        raise ValueError("narrative segmentation must contain 3-9 groups") from exc
+
+
 def _assert_story_can_enter_script_review(repository, story_id: str) -> None:
     current = repository.candidate_for_story(story_id).workflow_state
     if current == StoryWorkflowState.script_review:
@@ -140,13 +188,14 @@ def reconcile_script_revision_workflows(repository) -> int:
     return repaired
 
 
-SCRIPT_PROMPT_VERSION = "synthpost.script.v5"
-LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v4"
+SCRIPT_PROMPT_VERSION = "synthpost.script.v6"
+LONG_FORM_PROMPT_VERSION = "synthpost.long-form-section.v5"
 HEADLINE_PROMPT_VERSION = "synthpost.headline-editor.v2"
-NARRATIVE_BRIEF_PROMPT_VERSION = "synthpost.narrative-brief.v3"
-NARRATIVE_DRAFT_PROMPT_VERSION = "synthpost.narrative-draft.v3"
-NARRATIVE_REPAIR_PROMPT_VERSION = "synthpost.narrative-repair.v3"
-NARRATIVE_SEGMENT_PROMPT_VERSION = "synthpost.narrative-segmentation.v1"
+NARRATIVE_BRIEF_PROMPT_VERSION = "synthpost.narrative-brief.v5"
+NARRATIVE_DRAFT_PROMPT_VERSION = "synthpost.narrative-draft.v5"
+NARRATIVE_REPAIR_PROMPT_VERSION = "synthpost.narrative-repair.v5"
+NARRATIVE_SEGMENT_PROMPT_VERSION = "synthpost.narrative-segmentation.v2"
+FULL_ARTICLE_DOCUMENT_LIMIT = 4
 
 
 def target_word_count(duration_seconds: int) -> int:
@@ -198,7 +247,14 @@ def section_word_targets(duration_seconds: int) -> dict[str, int]:
 
 
 def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
-    """Keep grounded evidence while excluding bulky scraped page boilerplate."""
+    """Keep full top-ranked articles plus compact grounding for other sources.
+
+    Research documents are stored in editorial rank order: the selected lead
+    first, followed by diversified related coverage ordered by relevance. The
+    writer gets the complete extracted text for the first four documents so it
+    can follow each article's structure and context. Lower-ranked documents stay
+    metadata-only to avoid multiplying prompt size without losing provenance.
+    """
 
     return {
         "story_id": pack.get("story_id"),
@@ -206,18 +262,25 @@ def compact_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
         "research_queries": pack.get("research_queries", []),
         "documents": [
             {
-                key: document.get(key)
-                for key in (
-                    "document_id",
-                    "title",
-                    "publisher",
-                    "published_at",
-                    "discovery_method",
-                    "relevance_score",
-                    "extraction_status",
-                )
+                **{
+                    key: document.get(key)
+                    for key in (
+                        "document_id",
+                        "title",
+                        "publisher",
+                        "published_at",
+                        "discovery_method",
+                        "relevance_score",
+                        "extraction_status",
+                    )
+                },
+                **(
+                    {"content_text": str(document.get("content_text") or "")}
+                    if index < FULL_ARTICLE_DOCUMENT_LIMIT
+                    else {}
+                ),
             }
-            for document in pack.get("documents", [])[:12]
+            for index, document in enumerate(pack.get("documents", [])[:12])
         ],
         # Keep the grounding fields the writer actually consumes. Notes repeat
         # claim text and can push Groq free/on-demand requests over their TPM cap.
@@ -435,13 +498,11 @@ def narrative_brief_schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "required": [
-                        "section_type",
                         "purpose",
                         "claim_ids",
                         "must_not_repeat",
                     ],
                     "properties": {
-                        "section_type": {"type": "string"},
                         "purpose": {"type": "string"},
                         "claim_ids": {
                             "type": "array",
@@ -495,7 +556,6 @@ def narrative_segmentation_schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "required": [
-                        "section_type",
                         "beat_ids",
                         "suggested_visual_types",
                         "suggested_search_queries",
@@ -505,7 +565,6 @@ def narrative_segmentation_schema() -> dict[str, Any]:
                         "source_clip",
                     ],
                     "properties": {
-                        "section_type": {"type": "string"},
                         "beat_ids": {
                             "type": "array",
                             "items": {"type": "string"},
@@ -550,26 +609,17 @@ def _validate_narrative_brief(
     if not isinstance(raw_arc, list) or not 3 <= len(raw_arc) <= len(SECTION_ORDER):
         raise ValueError("narrative brief must contain 3-9 ordered arc items")
     arc: list[NarrativeArcItem] = []
-    seen_types: set[str] = set()
-    previous_order = -1
-    for item in raw_arc:
+    for index, item in enumerate(raw_arc, start=1):
         if not isinstance(item, dict):
             raise ValueError("narrative arc items must be objects")
-        section_type = str(item.get("section_type") or "").strip()
-        if section_type not in SECTION_ORDER or section_type in seen_types:
-            raise ValueError(f"invalid or duplicate narrative section: {section_type}")
-        order = SECTION_ORDER.index(section_type)
-        if order <= previous_order:
-            raise ValueError("narrative arc section types must follow editorial order")
         claim_ids = [str(value) for value in item.get("claim_ids", [])]
         unknown = sorted(set(claim_ids) - valid_claims)
         if unknown:
             raise ValueError(
-                f"narrative arc {section_type} references unknown claims: {unknown}"
+                f"narrative arc item {index} references unknown claims: {unknown}"
             )
         arc.append(
             NarrativeArcItem(
-                section_type=section_type,  # type: ignore[arg-type]
                 purpose=" ".join(str(item.get("purpose") or "").split()),
                 claim_ids=list(dict.fromkeys(claim_ids)),
                 must_not_repeat=[
@@ -579,12 +629,6 @@ def _validate_narrative_brief(
                 ],
             )
         )
-        seen_types.add(section_type)
-        previous_order = order
-    if arc[0].section_type != "cold_open":
-        raise ValueError("narrative arc must begin with cold_open")
-    if arc[-1].section_type not in {"conclusion", "outro"}:
-        raise ValueError("narrative arc must end with conclusion or outro")
     return NarrativeBrief(
         headline=" ".join(str(raw.get("headline") or "SynthPost Briefing").split()),
         dek=" ".join(str(raw.get("dek") or "").split()),
@@ -761,7 +805,14 @@ def narrative_research_pack_for_prompt(pack: dict[str, Any]) -> dict[str, Any]:
     }
     relevant_claims: list[dict[str, Any]] = []
     relevant_evidence_ids: set[str] = set()
-    relevant_document_ids: set[str] = set()
+    # The top-ranked articles are the narrative writer's primary context, even
+    # when deterministic lexical filtering finds too little overlap in their
+    # first extracted claims. Always retain all four complete bodies in the prompt.
+    relevant_document_ids: set[str] = {
+        str(document.get("document_id"))
+        for document in compact.get("documents", [])[:FULL_ARTICLE_DOCUMENT_LIMIT]
+        if document.get("document_id")
+    }
     relevant_context: list[str] = []
     for index, claim in enumerate(claims):
         evidence_ids = [str(value) for value in claim.get("evidence_ids", [])]
@@ -927,12 +978,14 @@ news story before any prose is drafted.
 
 {charter_prompt_context(show_format=normalize_narration_mode(narration_mode, target_duration_seconds=target_duration_seconds, primary_topic=primary_topic))}
 
-Build a single thesis and a progressive arc. Allocate claims to the first place
-they need full explanation; later arc items may build on an established fact but
-must not independently restart or re-explain it. Use only section types from
-{json.dumps(SECTION_ORDER)} in that order. Use only the sections the story needs,
-but always begin with cold_open and end with conclusion or outro. For every arc
-item, list specific ideas or scenes it must not repeat from earlier items.
+Build a single thesis and a progressive arc. Each arc item is a free-form
+narrative move, not a named newsroom template. Allocate claims to the first
+place they need full explanation; later items may build on an established fact
+but must not independently restart or re-explain it. Begin with the most
+concrete consequential moment available in the research, then let each move
+change what the viewer understands. End with the most useful unresolved test,
+decision, or development to watch. For every arc item, list specific ideas or
+scenes it must not repeat from earlier items.
 
 Target duration: {target_duration_seconds} seconds.
 Return only JSON matching the response schema.
@@ -1029,11 +1082,12 @@ final narration for presentation and visual planning.
 
 Reference every beat_id exactly once, in its existing order, using contiguous
 groups. Never return narration text and never rewrite, duplicate, omit, or
-reorder a beat. Follow the brief's editorial arc, but use fewer sections when a
-separate section would not perform a distinct job. Section types must be unique
-and follow this order: {json.dumps(SECTION_ORDER)}.
+reorder a beat. Follow the brief's editorial arc, but use fewer groups when a
+separate group would not perform a distinct job. Do not name or force standard
+newsroom sections; group the narration only where the story or visual treatment
+genuinely changes.
 
-For every section, return two grounded search queries: a concrete still, map, or
+For every group, return two grounded search queries: a concrete still, map, or
 diagram query and an official primary-source video or raw-footage query. Return
 specific lower-third and chyron text plus appropriate visual and template hints.
 {audio_rule}
@@ -1053,22 +1107,18 @@ def _validate_narrative_segmentation(
         raise ValueError("narrative segmentation must contain 3-9 sections")
     expected_ids = [beat.beat_id for beat in draft.beats]
     expected_set = set(expected_ids)
+    section_types = _presentation_section_types(len(raw_sections))
     sections: list[NarrativeSegmentPlan] = []
     flattened: list[str] = []
-    previous_order = -1
-    seen_types: set[str] = set()
-    for item in raw_sections:
+    for index, item in enumerate(raw_sections):
         if not isinstance(item, dict):
             raise ValueError("narrative segmentation sections must be objects")
-        section_type = str(item.get("section_type") or "").strip()
-        if section_type not in SECTION_ORDER or section_type in seen_types:
-            raise ValueError(f"invalid or duplicate segmented section: {section_type}")
-        order = SECTION_ORDER.index(section_type)
-        if order <= previous_order:
-            raise ValueError("segmented section types must follow editorial order")
+        section_type = section_types[index]
         beat_ids = [str(value) for value in item.get("beat_ids", [])]
         if not beat_ids or any(beat_id not in expected_set for beat_id in beat_ids):
-            raise ValueError(f"{section_type} contains missing or unknown beat IDs")
+            raise ValueError(
+                f"narrative group {index + 1} contains missing or unknown beat IDs"
+            )
         source_clip = (
             source_clip_from_raw(item.get("source_clip"))
             if config.source_audio_inserts_enabled()
@@ -1080,7 +1130,9 @@ def _validate_narrative_segmentation(
             if str(value).strip()
         ][:2]
         if len(queries) != 2:
-            raise ValueError(f"{section_type} must contain exactly two visual queries")
+            raise ValueError(
+                f"narrative group {index + 1} must contain exactly two visual queries"
+            )
         sections.append(
             NarrativeSegmentPlan(
                 section_type=section_type,  # type: ignore[arg-type]
@@ -1102,16 +1154,10 @@ def _validate_narrative_segmentation(
             )
         )
         flattened.extend(beat_ids)
-        seen_types.add(section_type)
-        previous_order = order
     if flattened != expected_ids:
         raise ValueError(
             "segmentation must reference every narration beat exactly once in order"
         )
-    if sections[0].section_type != "cold_open":
-        raise ValueError("segmentation must begin with cold_open")
-    if sections[-1].section_type not in {"conclusion", "outro"}:
-        raise ValueError("segmentation must end with conclusion or outro")
     return NarrativeSegmentation(sections=sections)
 
 

@@ -21,25 +21,27 @@ class APIModel(BaseModel):
 
 
 class ProjectCreate(APIModel):
-    title: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
     default_category: str = "general"
-    default_render_profile: str = "preview"
+    default_render_profile: str = "production"
 
 
 class ProjectPatch(APIModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    pinned: bool | None = None
     default_category: str | None = None
     default_render_profile: str | None = None
     status: ProjectStatus | None = None
 
 
 class EpisodeCreate(APIModel):
-    title: str = Field(min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
     render_profile: str | None = None
 
 
 class EpisodePatch(APIModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    pinned: bool | None = None
     status: EpisodeStatus | None = None
     render_profile: str | None = None
 
@@ -111,6 +113,14 @@ class GenerateScriptRequest(APIModel):
     provider: str | None = None
     target_duration_seconds: int = Field(default=600, ge=60, le=7200)
     narration_mode: NarrationMode = NarrationMode.explained
+
+
+class ResearchAndScriptRequest(GenerateScriptRequest):
+    """One-click editorial draft settings.
+
+    Research remains a durable artifact and script generation remains its own
+    queue job; this request simply chains the two without another editor action.
+    """
 
 
 class VisualStageRequest(APIModel):

@@ -336,6 +336,44 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             second.close()
             temp.cleanup()
 
+    def test_parallel_claims_overlap_narration_and_visual_search(self) -> None:
+        for first_lane, second_lane in (
+            ("editorial", "media"),
+            ("media", "editorial"),
+        ):
+            with self.subTest(first_lane=first_lane):
+                temp = tempfile.TemporaryDirectory()
+                db_path = Path(temp.name) / "same-story-safe-overlap.sqlite3"
+                first = Repository(db_path)
+                second = Repository(db_path)
+                try:
+                    narration = first.create_job(
+                        "narration_generate",
+                        episode_id="ep_one",
+                        story_id="story_one",
+                    )
+                    visuals = first.create_job(
+                        "visual_search",
+                        episode_id="ep_one",
+                        story_id="story_one",
+                    )
+
+                    first_claim = first.claim_next_job(first_lane)
+                    second_claim = second.claim_next_job(second_lane)
+
+                    expected = {
+                        "editorial": narration.job_id,
+                        "media": visuals.job_id,
+                    }
+                    self.assertEqual(first_claim.job_id, expected[first_lane])
+                    self.assertEqual(second_claim.job_id, expected[second_lane])
+                    self.assertEqual(first_claim.status, JobStatus.running)
+                    self.assertEqual(second_claim.status, JobStatus.running)
+                finally:
+                    first.close()
+                    second.close()
+                    temp.cleanup()
+
     def test_assembly_is_exclusive_with_story_work_in_its_episode(self) -> None:
         temp = tempfile.TemporaryDirectory()
         db_path = Path(temp.name) / "assembly-exclusive.sqlite3"
@@ -899,10 +937,27 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 {
                     "document_id": "doc_motor",
                     "title": "Vimag magnet-free electric motor",
+                    "content_text": "Complete lead article about Vimag's motor.",
                 },
                 {
                     "document_id": "doc_health",
                     "title": "India medical research programme",
+                    "content_text": "Complete second-ranked article body.",
+                },
+                {
+                    "document_id": "doc_third",
+                    "title": "Third-ranked source",
+                    "content_text": "Complete third-ranked article body.",
+                },
+                {
+                    "document_id": "doc_fourth",
+                    "title": "Fourth-ranked source",
+                    "content_text": "Complete fourth-ranked article body.",
+                },
+                {
+                    "document_id": "doc_fifth",
+                    "title": "Fifth-ranked source",
+                    "content_text": "Lower-ranked article body.",
                 },
             ],
             "systems": ["ai", "electric motor supply chain"],
@@ -920,7 +975,23 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             {document["document_id"] for document in projected["documents"]},
-            {"doc_motor"},
+            {"doc_motor", "doc_health", "doc_third", "doc_fourth"},
+        )
+        self.assertEqual(
+            projected["documents"][0]["content_text"],
+            "Complete lead article about Vimag's motor.",
+        )
+        self.assertEqual(
+            projected["documents"][1]["content_text"],
+            "Complete second-ranked article body.",
+        )
+        self.assertEqual(
+            projected["documents"][2]["content_text"],
+            "Complete third-ranked article body.",
+        )
+        self.assertEqual(
+            projected["documents"][3]["content_text"],
+            "Complete fourth-ranked article body.",
         )
         self.assertNotIn("ai", projected["systems"])
         self.assertNotIn(
@@ -1070,7 +1141,6 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         raw = {
             "sections": [
                 {
-                    "section_type": "cold_open",
                     "beat_ids": ["beat_001", "beat_002"],
                     "suggested_visual_types": ["video"],
                     "suggested_search_queries": [
@@ -1083,7 +1153,6 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     "source_clip": None,
                 },
                 {
-                    "section_type": "context",
                     "beat_ids": ["beat_003", "beat_004"],
                     "suggested_visual_types": ["diagram"],
                     "suggested_search_queries": [
@@ -1096,7 +1165,6 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     "source_clip": None,
                 },
                 {
-                    "section_type": "conclusion",
                     "beat_ids": ["beat_005", "beat_006"],
                     "suggested_visual_types": ["context"],
                     "suggested_search_queries": [
@@ -1136,6 +1204,10 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 for beat_id in section.beat_ids
             ],
             [beat.beat_id for beat in draft.beats],
+        )
+        self.assertEqual(
+            [section.section_type for section in segmentation.sections],
+            ["cold_open", "key_developments", "conclusion"],
         )
 
     def test_narration_mode_is_independent_from_duration(self) -> None:
@@ -2412,22 +2484,58 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertTrue(all(value > 0 for value in targets.values()))
         self.assertNotIn("outro", targets)
 
-    def test_generation_prompt_pack_excludes_scraped_document_bodies(self) -> None:
+    def test_generation_prompt_pack_includes_full_top_four_article_bodies(self) -> None:
         compact = compact_research_pack_for_prompt(
             {
                 "story_id": "story_unit",
                 "documents": [
                     {
-                        "document_id": "doc_unit",
-                        "title": "Unit source",
-                        "content_text": "large scraped article body",
-                    }
+                        "document_id": "doc_lead",
+                        "title": "Lead source",
+                        "content_text": "complete lead article body",
+                    },
+                    {
+                        "document_id": "doc_second",
+                        "title": "Second source",
+                        "content_text": "complete second article body",
+                    },
+                    {
+                        "document_id": "doc_third",
+                        "title": "Third source",
+                        "content_text": "complete third article body",
+                    },
+                    {
+                        "document_id": "doc_fourth",
+                        "title": "Fourth source",
+                        "content_text": "complete fourth article body",
+                    },
+                    {
+                        "document_id": "doc_fifth",
+                        "title": "Fifth source",
+                        "content_text": "lower-ranked article body",
+                    },
                 ],
                 "claims": [],
                 "people": ["boilerplate entity"],
             }
         )
-        self.assertNotIn("content_text", compact["documents"][0])
+        self.assertEqual(
+            compact["documents"][0]["content_text"],
+            "complete lead article body",
+        )
+        self.assertEqual(
+            compact["documents"][1]["content_text"],
+            "complete second article body",
+        )
+        self.assertEqual(
+            compact["documents"][2]["content_text"],
+            "complete third article body",
+        )
+        self.assertEqual(
+            compact["documents"][3]["content_text"],
+            "complete fourth article body",
+        )
+        self.assertNotIn("content_text", compact["documents"][4])
         self.assertNotIn("people", compact)
 
     def test_generation_prompt_pack_removes_redundant_claim_notes(self) -> None:
@@ -2465,6 +2573,11 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertTrue(
             can_transition(
                 StoryWorkflowState.completed, StoryWorkflowState.script_review
+            )
+        )
+        self.assertTrue(
+            can_transition(
+                StoryWorkflowState.completed, StoryWorkflowState.timeline_review
             )
         )
 
@@ -3019,6 +3132,15 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.upsert_source(healthy)
             repository.upsert_source(broken)
             progress: list[tuple[float, str]] = []
+            repository.upsert_candidate(
+                StoryCandidate(
+                    candidate_id="cand_health",
+                    title="Previously seen infrastructure story",
+                    source_id=healthy.source_id,
+                    source_name=healthy.name,
+                )
+            )
+            stats: dict[str, int] = {}
 
             def fake_fetch(source: SourceDefinition, *, seen_groups=None):
                 if source.source_id == broken.source_id:
@@ -3029,7 +3151,13 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                         title="India expands AI data-centre capacity",
                         source_id=source.source_id,
                         source_name=source.name,
-                    )
+                    ),
+                    StoryCandidate(
+                        candidate_id="cand_new",
+                        title="A genuinely new energy-grid story",
+                        source_id=source.source_id,
+                        source_name=source.name,
+                    ),
                 ]
 
             with patch(
@@ -3041,20 +3169,29 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             ):
                 rows = discover(
                     repository,
+                    stats=stats,
                     progress_callback=lambda fraction, stage: progress.append(
                         (fraction, stage)
                     ),
                 )
 
-            self.assertEqual([item.candidate_id for item in rows], ["cand_health"])
+            self.assertEqual(
+                [item.candidate_id for item in rows],
+                ["cand_health", "cand_new"],
+            )
             healthy_after = repository.get_source(healthy.source_id)
             broken_after = repository.get_source(broken.source_id)
-            self.assertEqual(healthy_after.last_item_count, 1)
+            self.assertEqual(healthy_after.last_item_count, 2)
             self.assertIsNotNone(healthy_after.last_success_at)
             self.assertIn("feed unavailable", broken_after.last_error or "")
             self.assertEqual(broken_after.consecutive_failures, 1)
             self.assertEqual(progress[-1][0], 1.0)
             self.assertIn("clustering and ranking", progress[-1][1])
+            self.assertEqual(stats["feed_entry_count"], 2)
+            self.assertEqual(stats["new_entry_count"], 1)
+            self.assertEqual(stats["seen_entry_count"], 1)
+            self.assertIn("1 new to SynthPost", progress[-1][1])
+            self.assertIn("1 seen before", progress[-1][1])
         finally:
             repository.close()
             temp.cleanup()
@@ -3120,6 +3257,12 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 audit for audit in audits if audit.stage == "narrative_draft"
             )
             self.assertIn("Format: SynthPost Deep Dive", script_audit.prompt_text)
+            self.assertNotIn("Format structure:", script_audit.prompt_text)
+            segmentation_audit = next(
+                audit for audit in audits if audit.stage == "narrative_segmentation"
+            )
+            self.assertNotIn("Section types must be unique", segmentation_audit.prompt_text)
+            self.assertNotIn('"section_type"', segmentation_audit.prompt_text)
             self.assertIn("narrative_first=true", script.warnings)
             self.assertIn("narrative_quality_gate=passed", script.warnings)
             self.assertTrue(all(section.headline_cues for section in script.sections))
@@ -3321,6 +3464,86 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             segment.overlays.data["preferred_visual_asset_id"],
             visual.asset_id,
         )
+
+    def test_timeline_cuts_long_sections_into_retention_paced_visual_shots(
+        self,
+    ) -> None:
+        section = ScriptSection(
+            section_id="sec_001_context",
+            section_type="context",
+            text=(
+                "The first signal establishes the change. "
+                "The second signal shows who is affected. "
+                "The third signal explains what happens next."
+            ),
+            claim_ids=["claim_001"],
+            lower_third="Three signals explain the change",
+        )
+        script = ScriptDocument(
+            story_id="story_retention_pacing",
+            headline="Retention pacing test",
+            status="approved",
+            sections=[section],
+            estimated_duration_seconds=24,
+        )
+        visual_one = VisualCandidate(
+            asset_id="visual_retention_one",
+            story_id=script.story_id,
+            section_ids=[section.section_id],
+            provider="unit",
+            download_path=__file__,
+            media_type=MediaType.image,
+            content_role=ContentRole.context,
+            width=1920,
+            height=1080,
+            relevance_score=0.9,
+            visual_quality_score=0.9,
+            attribution_text="Unit source one",
+            rights_tier=RightsTier.green,
+            review_status=ReviewStatus.approved,
+        )
+        visual_two = visual_one.model_copy(
+            update={
+                "asset_id": "visual_retention_two",
+                "relevance_score": 0.8,
+                "attribution_text": "Unit source two",
+            }
+        )
+        repository = Mock()
+        repository.latest_script.return_value = script
+        repository.list_visuals.return_value = [visual_one, visual_two]
+        repository.save_timeline.side_effect = lambda plan: plan
+        repository.candidate_for_story.return_value = SimpleNamespace(
+            workflow_state=StoryWorkflowState.timeline_review
+        )
+
+        with patch(
+            "pipeline.timeline.planner.load_narration_artifact",
+            return_value=exact_test_narration(script),
+        ):
+            plan = generate_timeline(repository, script.story_id)
+
+        self.assertEqual(len(plan.segments), 3)
+        self.assertEqual(
+            [segment.template.template_id for segment in plan.segments],
+            [
+                "fullscreen_news_visual",
+                "split_anchor_visual",
+                "fullscreen_anchor",
+            ],
+        )
+        self.assertEqual(
+            [segment.visual.asset_id for segment in plan.segments],
+            [visual_one.asset_id, visual_two.asset_id, None],
+        )
+        self.assertTrue(
+            all(
+                segment.overlays.data["template_selection"]["policy"]
+                == "editorial_retention_v2"
+                for segment in plan.segments
+            )
+        )
+        self.assertEqual(plan.validation_errors, [])
 
     def test_non_quote_card_templates_are_blacklisted_for_production(self) -> None:
         blacklisted = {
@@ -3590,26 +3813,52 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 return_value=narration_artifact,
             ):
                 plan = generate_timeline(repository, story_id)
-            first_segment_cues = plan.segments[0].overlays.data["headline_cues"]
-            self.assertEqual(len(first_segment_cues), 2)
+            first_section_segments = [
+                segment
+                for segment in plan.segments
+                if segment.section_id == script.sections[0].section_id
+            ]
+            self.assertEqual(len(first_section_segments), 2)
+            first_segment_cues = first_section_segments[0].overlays.data[
+                "headline_cues"
+            ]
+            second_segment_cues = first_section_segments[1].overlays.data[
+                "headline_cues"
+            ]
+            self.assertEqual(len(first_segment_cues), 1)
+            self.assertEqual(len(second_segment_cues), 1)
             self.assertEqual(first_segment_cues[0]["start"], 0.0)
             self.assertEqual(
-                first_segment_cues[-1]["end"], plan.segments[0].duration
+                first_segment_cues[-1]["end"], first_section_segments[0].duration
             )
             self.assertNotEqual(
-                first_segment_cues[0]["text"], first_segment_cues[1]["text"]
+                first_segment_cues[0]["text"], second_segment_cues[0]["text"]
             )
+            first_shot_by_section = {
+                segment.section_id: segment for segment in reversed(plan.segments)
+            }
             self.assertEqual(
-                [segment.overlays.lower_third for segment in plan.segments],
+                [
+                    first_shot_by_section[section.section_id].overlays.lower_third
+                    for section in script.sections
+                ],
                 [section.lower_third for section in script.sections],
             )
             self.assertEqual(
-                [segment.overlays.chyron for segment in plan.segments],
+                [
+                    first_shot_by_section[section.section_id].overlays.chyron
+                    for section in script.sections
+                ],
                 [section.chyron for section in script.sections],
             )
             self.assertEqual(
-                len({segment.overlays.lower_third for segment in plan.segments}),
-                len(plan.segments),
+                len(
+                    {
+                        segment.overlays.lower_third
+                        for segment in first_shot_by_section.values()
+                    }
+                ),
+                len(script.sections),
             )
             errors, _warnings = validate_timeline(plan)
             self.assertEqual(errors, [])
