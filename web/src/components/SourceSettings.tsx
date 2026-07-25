@@ -4,7 +4,7 @@ import { useStudio } from '../state/useStudio';
 import { StatusBadge } from '../components/StatusBadge';
 import { relativeTime } from '../lib/formatters';
 
-export const SourcesPage: React.FC = () => {
+export const SourceSettings: React.FC = () => {
   const studio = useStudio();
   const [name, setName] = React.useState('');
   const [feedUrl, setFeedUrl] = React.useState('');
@@ -26,12 +26,23 @@ export const SourcesPage: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="topbar">
+    <section
+      className="settings-source-panel animate-fade-in"
+      role="tabpanel"
+      id="settings-panel-sources"
+      aria-labelledby="settings-tab-sources"
+    >
+      <div className="settings-section-intro">
         <div>
-          <div className="topbar-kicker">SynthPost Studio</div>
-          <h1>Sources</h1>
+          <div className="topbar-kicker">Discovery configuration</div>
+          <h2>News Sources</h2>
+          <p>
+            Manage the RSS and Atom feeds used to discover story candidates.
+          </p>
         </div>
+        <StatusBadge tone="neutral">
+          {studio.sources.length} configured
+        </StatusBadge>
       </div>
 
       <div className="grid grid-sidebar-main">
@@ -66,6 +77,7 @@ export const SourcesPage: React.FC = () => {
             </select>
           </label>
           <button
+            type="button"
             className="btn-primary"
             disabled={busy || !name.trim() || !feedUrl.trim()}
             onClick={() =>
@@ -129,6 +141,7 @@ export const SourcesPage: React.FC = () => {
                 </div>
                 <div className="stack" style={{ gap: 6, justifyContent: 'flex-start' }}>
                   <button
+                    type="button"
                     disabled={busy}
                     onClick={async () => {
                       try {
@@ -148,6 +161,7 @@ export const SourcesPage: React.FC = () => {
                     Test
                   </button>
                   <button
+                    type="button"
                     disabled={busy}
                     onClick={() =>
                       act(() =>
@@ -165,6 +179,6 @@ export const SourcesPage: React.FC = () => {
           )}
         </div>
       </div>
-    </div>
+    </section>
   );
 };

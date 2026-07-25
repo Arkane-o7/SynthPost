@@ -4,7 +4,7 @@ import { RightRail } from './RightRail';
 import { MobileChrome } from './MobileChrome';
 
 /** Pages that show the right rail. */
-const RIGHT_RAIL_PAGES = new Set<Page>(['command', 'jobs']);
+const RIGHT_RAIL_PAGES = new Set<Page>(['command']);
 
 export const AppShell: React.FC<{
   page: Page;

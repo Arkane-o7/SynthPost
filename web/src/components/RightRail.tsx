@@ -14,6 +14,7 @@ export const RightRail: React.FC<{
   onMobileClose?: () => void;
 }> = ({ mobileOpen = false, onMobileClose }) => {
   const studio = useStudio();
+  const [cancellingJobId, setCancellingJobId] = React.useState("");
 
   const story = studio.candidates.find(
     (c) => c.story_id === studio.selectedStoryId,
@@ -35,6 +36,19 @@ export const RightRail: React.FC<{
   const recentJobs = contextJobs.slice(0, 5);
   const [script, setScript] = React.useState<ScriptDocument | null>(null);
   const [timeline, setTimeline] = React.useState<TimelinePlan | null>(null);
+
+  const cancelJob = async (jobId: string) => {
+    try {
+      setCancellingJobId(jobId);
+      studio.setError("");
+      await api.cancelJob(jobId);
+      await studio.refreshAll();
+    } catch (error) {
+      studio.setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCancellingJobId("");
+    }
+  };
 
   React.useEffect(() => {
     if (!studio.selectedStoryId) {
@@ -150,7 +164,12 @@ export const RightRail: React.FC<{
         ) : (
           <div className="stack">
             {activeJobs.map((job) => (
-              <MiniJobCard key={job.job_id} job={job} />
+              <MiniJobCard
+                key={job.job_id}
+                job={job}
+                cancelling={cancellingJobId === job.job_id}
+                onCancel={() => void cancelJob(job.job_id)}
+              />
             ))}
           </div>
         )}

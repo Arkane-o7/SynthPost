@@ -1,7 +1,9 @@
 import React from "react";
 import { StatusBadge } from "../components/StatusBadge";
+import { SourceSettings } from "../components/SourceSettings";
 
 export const SettingsPage: React.FC = () => {
+  const [section, setSection] = React.useState<"general" | "sources">("general");
   const supported = "Notification" in window;
   const [permission, setPermission] = React.useState<NotificationPermission | "unsupported">(
     supported ? Notification.permission : "unsupported",
@@ -35,7 +37,41 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-2" style={{ alignItems: "start" }}>
+      <div className="settings-tab-list" role="tablist" aria-label="Settings sections">
+        <button
+          type="button"
+          id="settings-tab-general"
+          role="tab"
+          aria-selected={section === "general"}
+          aria-controls="settings-panel-general"
+          className={section === "general" ? "active" : ""}
+          onClick={() => setSection("general")}
+        >
+          General
+        </button>
+        <button
+          type="button"
+          id="settings-tab-sources"
+          role="tab"
+          aria-selected={section === "sources"}
+          aria-controls="settings-panel-sources"
+          className={section === "sources" ? "active" : ""}
+          onClick={() => setSection("sources")}
+        >
+          News Sources
+        </button>
+      </div>
+
+      {section === "sources" ? (
+        <SourceSettings />
+      ) : (
+        <div
+          className="grid grid-2 animate-fade-in"
+          id="settings-panel-general"
+          role="tabpanel"
+          aria-labelledby="settings-tab-general"
+          style={{ alignItems: "start" }}
+        >
         <div className="card stack remote-notification-card">
           <div className="mobile-section-kicker">Phone handoff</div>
           <h2>Remote Notifications</h2>
@@ -114,6 +150,50 @@ export const SettingsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Narration */}
+        <div className="card stack">
+          <h2>dots.tts Narration</h2>
+          <p className="text-muted" style={{ fontSize: 13 }}>
+            SynthPost generates the canonical voice track before Avatar Engine.
+            Voice identity and delivery come from an authorized enrolled profile.
+          </p>
+          <div className="stack" style={{ gap: 8 }}>
+            {[
+              { label: "Runtime", env: "SYNTHPOST_TTS_PYTHON" },
+              { label: "Model", env: "SYNTHPOST_TTS_MODEL_PATH" },
+              { label: "Voice profile", env: "SYNTHPOST_TTS_VOICE_PROFILE_PATH" },
+              { label: "Language", env: "SYNTHPOST_TTS_LANGUAGE" },
+              { label: "Prosody seed", env: "SYNTHPOST_TTS_SEED" },
+              { label: "Tempo", env: "SYNTHPOST_TTS_SPEED" },
+            ].map((item) => (
+              <div key={item.env} className="row-between">
+                <span className="text-muted" style={{ fontSize: 13 }}>
+                  {item.label}
+                </span>
+                <code
+                  className="font-mono"
+                  style={{
+                    fontSize: 11,
+                    padding: "3px 8px",
+                    background: "var(--surface-inset)",
+                    borderRadius: "var(--radius-sm)",
+                  }}
+                >
+                  {item.env}
+                </code>
+              </div>
+            ))}
+          </div>
+          <div
+            className="validation-msg validation-warning"
+            style={{ fontSize: 12 }}
+          >
+            ℹ Run <code>make setup-tts</code>, enroll a consented voice, then
+            restart the API and workers. The full cloning and expression guide is
+            in <code>docs/TTS.md</code>.
+          </div>
+        </div>
+
         {/* Renderer */}
         <div className="card stack">
           <h2>Renderer & Avatar Engine</h2>
@@ -158,7 +238,8 @@ export const SettingsPage: React.FC = () => {
             avatar-engine/config.
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 };

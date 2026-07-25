@@ -4,9 +4,6 @@ import type { Page } from "./LeftRail";
 
 const MOBILE_NAV: { key: Page; label: string; icon: string }[] = [
   { key: "command", label: "Studio", icon: "◉" },
-  { key: "episodes", label: "Episodes", icon: "▤" },
-  { key: "jobs", label: "Jobs", icon: "↯" },
-  { key: "sources", label: "Sources", icon: "⌁" },
 ];
 
 export const MobileChrome: React.FC<{
@@ -104,7 +101,6 @@ export const MobileChrome: React.FC<{
           >
             <span aria-hidden="true">{item.icon}</span>
             {item.label}
-            {item.key === "jobs" && activeJobs > 0 && <b>{activeJobs}</b>}
           </button>
         ))}
       </nav>
