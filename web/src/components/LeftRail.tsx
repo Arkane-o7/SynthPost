@@ -4,13 +4,11 @@ import { api } from "../api/client";
 import type { Episode } from "../contracts";
 import { useStudio } from "../state/useStudio";
 
-export type Page = "command" | "episodes" | "sources" | "jobs" | "settings";
+export type Page = "command" | "sources" | "settings";
 
 type RailIconName =
   | "studio"
-  | "episodes"
   | "sources"
-  | "jobs"
   | "settings"
   | "folder"
   | "pin"
@@ -22,9 +20,7 @@ const PRIMARY_NAV: {
   icon: RailIconName;
 }[] = [
   { key: "command", label: "Command Center", icon: "studio" },
-  { key: "episodes", label: "Episodes", icon: "episodes" },
   { key: "sources", label: "Sources", icon: "sources" },
-  { key: "jobs", label: "Jobs", icon: "jobs" },
 ];
 
 const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
@@ -48,24 +44,11 @@ const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
           <circle cx="12" cy="12" r="3" />
         </svg>
       );
-    case "episodes":
-      return (
-        <svg {...common}>
-          <rect x="4" y="4" width="16" height="16" rx="2.5" />
-          <path d="M8 8h8M8 12h8M8 16h5" />
-        </svg>
-      );
     case "sources":
       return (
         <svg {...common}>
           <path d="M5 17.5a1.5 1.5 0 1 0 0 .1" />
           <path d="M5 12a6 6 0 0 1 6 6M5 6.5A11.5 11.5 0 0 1 16.5 18" />
-        </svg>
-      );
-    case "jobs":
-      return (
-        <svg {...common}>
-          <path d="m13.5 2.5-8 11H12l-1.5 8 8-11H12z" />
         </svg>
       );
     case "settings":
@@ -214,10 +197,6 @@ export const LeftRail: React.FC<{
     }
   };
 
-  const activeJobCount = studio.jobs.filter((job) =>
-    ["queued", "running"].includes(job.status),
-  ).length;
-
   const toggleProject = (projectId: string) => {
     const willExpand = !expandedProjects.has(projectId);
     setExpandedProjects((current) => {
@@ -357,10 +336,7 @@ export const LeftRail: React.FC<{
             <span className="nav-icon">
               <RailIcon name={item.icon} />
             </span>
-            <span>{item.label}</span>
-            {item.key === "jobs" && activeJobCount > 0 && (
-              <span className="nav-badge">{activeJobCount}</span>
-            )}
+            <span className="nav-label">{item.label}</span>
           </button>
         ))}
       </nav>
@@ -489,17 +465,15 @@ export const LeftRail: React.FC<{
                               )
                             }
                           >
-                            {isOpening ? (
-                              <span className="rail-spinner" />
-                            ) : (
-                              <span
-                                className="rail-episode-status"
-                                aria-hidden="true"
-                              />
-                            )}
                             <span className="rail-row-label">
                               {episode.title}
                             </span>
+                            {isOpening && (
+                              <span
+                                className="rail-spinner rail-episode-spinner"
+                                aria-label="Opening episode"
+                              />
+                            )}
                           </button>
                           <div className="rail-row-actions">
                             <button
@@ -596,7 +570,7 @@ export const LeftRail: React.FC<{
           <span className="nav-icon">
             <RailIcon name="settings" />
           </span>
-          <span>Settings</span>
+          <span className="nav-label">Settings</span>
         </button>
       </div>
 

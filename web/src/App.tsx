@@ -5,9 +5,7 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import type { Page } from "./components/LeftRail";
 import { CommandCenter } from "./pages/CommandCenter";
 import { SourcesPage } from "./pages/SourcesPage";
-import { JobsPage } from "./pages/JobsPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { EpisodesPage } from "./pages/EpisodesPage";
 import "./styles/studio.css";
 
 const Main: React.FC = () => {
@@ -28,11 +26,7 @@ const Main: React.FC = () => {
       ) : (
         <>
           {page === "command" && <CommandCenter />}
-          {page === "episodes" && (
-            <EpisodesPage onOpenStudio={() => setPage("command")} />
-          )}
           {page === "sources" && <SourcesPage />}
-          {page === "jobs" && <JobsPage />}
           {page === "settings" && <SettingsPage />}
         </>
       )}

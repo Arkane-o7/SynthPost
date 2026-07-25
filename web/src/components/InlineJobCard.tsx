@@ -79,7 +79,11 @@ export const InlineJobCard: React.FC<{
 /**
  * Even more compact job card for the right rail.
  */
-export const MiniJobCard: React.FC<{ job: RenderJob }> = ({ job }) => {
+export const MiniJobCard: React.FC<{
+  job: RenderJob;
+  onCancel?: () => void;
+  cancelling?: boolean;
+}> = ({ job, onCancel, cancelling = false }) => {
   const progressClass =
     job.status === 'completed'
       ? 'progress-complete'
@@ -99,11 +103,28 @@ export const MiniJobCard: React.FC<{ job: RenderJob }> = ({ job }) => {
           style={{ width: `${job.progress}%` }}
         />
       </div>
-      <div className="text-muted" style={{ fontSize: 11 }}>
-        {job.queue_lane} · {job.stage}
-        {job.status === 'queued' && job.available_at
-          ? ` · retry in ${timeUntil(job.available_at)}`
-          : ''}
+      <div className="mini-job-controls">
+        <div className="text-muted mini-job-stage">
+          {job.queue_lane} · {job.stage}
+          {job.status === 'queued' && job.available_at
+            ? ` · retry in ${timeUntil(job.available_at)}`
+            : ''}
+        </div>
+        {onCancel && ['queued', 'paused', 'running'].includes(job.status) && (
+          <button
+            type="button"
+            className="job-stop-button"
+            disabled={cancelling}
+            aria-label={`${job.status === 'running' ? 'Stop' : 'Cancel'} ${job.job_type} job`}
+            onClick={onCancel}
+          >
+            {cancelling
+              ? 'Stopping…'
+              : job.status === 'running'
+                ? 'Stop'
+                : 'Cancel'}
+          </button>
+        )}
       </div>
     </div>
   );
