@@ -112,28 +112,6 @@ export const StorySelectionPanel: React.FC = () => {
 
   return (
     <div className="story-selection-stage">
-      <div className="story-selection-heading">
-        <div>
-          <div className="topbar-kicker">Stage 01 · Live assignment desk</div>
-          <h2>Select the story worth producing</h2>
-          <p>
-            Discovery runs automatically for a new episode. Choose a ranked
-            story below or add your own source.
-          </p>
-        </div>
-        <button
-          className="btn-primary"
-          disabled={busy || Boolean(activeDiscovery)}
-          onClick={() =>
-            void act(() =>
-              api.startDiscovery(studio.selectedEpisodeId || undefined),
-            )
-          }
-        >
-          {activeDiscovery ? "Discovering…" : busy ? "Refreshing…" : "Refresh Stories"}
-        </button>
-      </div>
-
       {activeDiscovery && (
         <div className="story-discovery-live" role="status">
           <span className="story-discovery-pulse" aria-hidden="true" />
@@ -164,7 +142,7 @@ export const StorySelectionPanel: React.FC = () => {
       </section>
 
       {/* Filters */}
-      <div className="filter-toolbar" style={{ marginBottom: 16 }}>
+      <div className="filter-toolbar story-selection-filters" style={{ marginBottom: 16 }}>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -189,6 +167,18 @@ export const StorySelectionPanel: React.FC = () => {
           <option value="rejected">Filtered out</option>
           <option value="all">All desk lanes</option>
         </select>
+        <button
+          type="button"
+          className="story-refresh-button"
+          disabled={busy || Boolean(activeDiscovery)}
+          onClick={() =>
+            void act(() =>
+              api.startDiscovery(studio.selectedEpisodeId || undefined),
+            )
+          }
+        >
+          {activeDiscovery ? "Discovering…" : busy ? "Refreshing…" : "Refresh Stories"}
+        </button>
       </div>
 
       {/* Tabs */}

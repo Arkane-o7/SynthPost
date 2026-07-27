@@ -301,7 +301,7 @@ def build_story_manifest(
     )
     if not narration_matches and not config.source_audio_inserts_enabled():
         raise ValueError(
-            "The approved timeline narration does not match the canonical Kokoro "
+            "The approved timeline narration does not match the canonical dots.tts "
             "audio. Regenerate and approve the timeline before rendering."
         )
     artifacts = materialize_story_artifacts(repository, story_id)

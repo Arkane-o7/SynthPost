@@ -87,29 +87,16 @@ clip is played only when selecting the final trim or investigating ambiguity.
 Implementation: `extract_representative_frames`, `_ocr_frame`, `_region`, and
 `_contact_sheet` in `pipeline/visuals/content_analysis.py`.
 
-## 8. Structured AI cleanliness classifier
+## 8. Deterministic cleanliness analysis
 
-The configured SynthPost LLM receives only bounded source metadata and
-deterministic evidence. It does not receive permission to invent unseen visual
-facts. It returns validated JSON containing:
+Cleanliness analysis does not call an LLM. SynthPost samples frames, runs OCR,
+checks source identity, detects known publisher brands, and looks for persistent
+lower-thirds and ticker regions. Any detected blocker rejects the asset; an
+asset with no deterministic blockers passes this stage while rights approval
+remains a separate editorial decision.
 
-- `decision`: `pass`, `reject`, or `needs_review`
-- `clean_broll_score`: 0.0–1.0
-- `contains_presenter_package`: boolean
-- evidence-based reasons
-
-The deterministic blockers are authoritative. An AI `pass` cannot override a
-known publisher channel, detected brand, lower-third, or ticker. AI failure,
-disabled AI, invalid JSON, or uncertainty produces `needs_review`, which has no
-renderable path and cannot be approved. The classifier therefore operates as a
-second opinion and explanation layer, never as the sole safety gate.
-
-The current provider interface is text/JSON, so this version classifies source
-metadata plus OCR/persistence evidence rather than raw pixels. Graphical-logo
-embeddings and dedicated presenter vision detection remain later hardening work.
-
-Implementation: `_ai_classify`, `_validate_ai_result`, and
-`analyze_media_cleanliness` in `pipeline/visuals/content_analysis.py`.
+Implementation: `analyze_media_cleanliness` in
+`pipeline/visuals/content_analysis.py`.
 
 ## 13. Studio evidence panel
 
@@ -123,7 +110,7 @@ review state, and cleanliness state. The evidence panel includes:
 - number of sampled frames
 - detected brands
 - logo/lower-third/ticker/presenter flags
-- AI and deterministic reasons
+- deterministic reasons
 - approval blockers
 - generated contact sheet
 

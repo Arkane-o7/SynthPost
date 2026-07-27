@@ -2,9 +2,9 @@ import React from "react";
 import { StudioProvider, useStudio } from "./state/useStudio";
 import { AppShell } from "./components/AppShell";
 import { AppErrorBoundary } from "./components/AppErrorBoundary";
+import { SettingsModal } from "./components/SettingsModal";
 import type { Page } from "./components/LeftRail";
 import { CommandCenter } from "./pages/CommandCenter";
-import { SettingsPage } from "./pages/SettingsPage";
 import "./styles/studio.css";
 
 const Main: React.FC = () => {
@@ -24,8 +24,10 @@ const Main: React.FC = () => {
         </div>
       ) : (
         <>
-          {page === "command" && <CommandCenter />}
-          {page === "settings" && <SettingsPage />}
+          <CommandCenter />
+          {page === "settings" && (
+            <SettingsModal onClose={() => setPage("command")} />
+          )}
         </>
       )}
     </AppShell>

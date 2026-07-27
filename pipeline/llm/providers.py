@@ -696,16 +696,6 @@ class MockProvider:
                     }
                 )
             return {"assessments": assessments}
-        if "editorial-cleanliness classifier" in prompt.lower():
-            marker = "EVIDENCE JSON:\n"
-            evidence = json.loads(prompt.split(marker, 1)[1])
-            blockers = evidence.get("deterministic_blockers", [])
-            return {
-                "decision": "reject" if blockers else "pass",
-                "clean_broll_score": 0.0 if blockers else 0.9,
-                "contains_presenter_package": False,
-                "reasons": blockers or ["no deterministic broadcast packaging detected"],
-            }
         if "narrative brief architect" in prompt.lower():
             marker = "INPUT JSON:\n"
             payload = json.loads(prompt.split(marker, 1)[1])
@@ -756,16 +746,31 @@ class MockProvider:
         if (
             "senior narrative writer" in prompt.lower()
             or "narrative continuity editor" in prompt.lower()
+            or "senior editorial writer" in prompt.lower()
         ):
-            marker = "INPUT JSON:\n"
-            payload = json.loads(prompt.split(marker, 1)[1])
-            research = payload.get("research", {})
-            claims = [
-                str(claim.get("claim_id"))
-                for claim in research.get("claims", [])
-                if claim.get("claim_id")
-            ]
-            primary_claim = claims[:1]
+            single_pass = "senior editorial writer" in prompt.lower()
+            if single_pass:
+                marker = "SOURCE ARTICLES:\n"
+                articles = json.loads(prompt.split(marker, 1)[1])
+                payload = {}
+                research = {}
+                primary_claim: list[str] = []
+                source_document_ids = [
+                    str(article.get("document_id"))
+                    for article in articles
+                    if article.get("document_id")
+                ][:1]
+            else:
+                marker = "INPUT JSON:\n"
+                payload = json.loads(prompt.split(marker, 1)[1])
+                research = payload.get("research", {})
+                claims = [
+                    str(claim.get("claim_id"))
+                    for claim in research.get("claims", [])
+                    if claim.get("claim_id")
+                ]
+                primary_claim = claims[:1]
+                source_document_ids = []
             target_match = re.search(r"(?:about|approximately)\s+(\d+)\s+spoken words", prompt)
             target_words = int(target_match.group(1)) if target_match else 145
             templates = [
@@ -969,11 +974,18 @@ class MockProvider:
                 )[:180],
                 "category": "news",
                 "beats": [
-                    {
-                        "beat_id": f"beat_{index:03d}",
-                        "text": sentence,
-                        "claim_ids": primary_claim,
-                    }
+                    (
+                        {
+                            "text": sentence,
+                            "source_document_ids": source_document_ids,
+                        }
+                        if single_pass
+                        else {
+                            "beat_id": f"beat_{index:03d}",
+                            "text": sentence,
+                            "claim_ids": primary_claim,
+                        }
+                    )
                     for index, sentence in enumerate(chosen, start=1)
                 ],
             }
@@ -1072,14 +1084,20 @@ class MockProvider:
                 "queries": [
                     {
                         "section_id": section["section_id"],
-                        "image_query": (
-                            f"{topic_words} {section['section_type']} editorial photo"
-                        ),
-                        "video_query": (
-                            f"{topic_words} {section['section_type']} official raw footage"
-                        ),
+                        "image_queries": [
+                            f"{topic_words} {section['section_type']} editorial photo",
+                            f"{topic_words} {section['section_type']} official document",
+                        ],
+                        "video_queries": [
+                            f"{topic_words} {section['section_type']} official raw footage",
+                            f"{topic_words} {section['section_type']} official B-roll",
+                        ],
                         "video_priority": section["section_type"]
                         in {"cold_open", "key_developments", "conclusion"},
+                        "visual_purpose": "Show the concrete subject discussed in this section.",
+                        "preferred_sources": ["official primary source"],
+                        "time_context": "",
+                        "rights_intent": "official publication or manual review",
                         "rationale": "deterministic offline visual-search plan",
                     }
                     for section in payload.get("sections", [])
@@ -1184,6 +1202,7 @@ def structured_generate(
     validator,
     *,
     max_retries: int = 2,
+    retry_with_original_prompt: bool = False,
 ) -> tuple[Any, list[dict[str, Any]]]:
     max_retries = min(max_retries, app_config.get_settings().llm.max_retries)
     attempts: list[dict[str, Any]] = []
@@ -1255,12 +1274,14 @@ def structured_generate(
             attempts.append(failure)
             if "request too large" in str(exc).casefold():
                 break
-            current_prompt = (
-                prompt
-                + "\n\nYour previous response failed validation with this error:\n"
-                + str(exc)
-                + "\nReturn only corrected JSON."
-            )
+            current_prompt = prompt
+            if not retry_with_original_prompt:
+                current_prompt = (
+                    prompt
+                    + "\n\nYour previous response failed validation with this error:\n"
+                    + str(exc)
+                    + "\nReturn only corrected JSON."
+                )
     raise StructuredGenerationError(
         f"Structured generation failed after {max_retries + 1} attempts: {attempts[-1].get('error')}",
         attempts,

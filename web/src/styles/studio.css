@@ -294,13 +294,6 @@ p {
     text-transform: uppercase;
 }
 
-/* Navigation */
-.nav {
-    margin-top: 22px;
-    display: grid;
-    gap: 3px;
-}
-
 .left-rail .nav-btn {
     width: 100%;
     min-height: 40px;
@@ -1096,6 +1089,103 @@ label {
     text-align: center;
 }
 
+/* ── Research and script setup ───────────────────────────────── */
+.research-script-setup {
+    display: grid;
+    gap: var(--sp-6);
+    padding: var(--sp-6);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(145deg, rgba(91, 156, 255, 0.055), transparent 38%),
+        var(--surface);
+    box-shadow: var(--shadow-card);
+}
+
+.research-script-setup-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--sp-5);
+}
+
+.research-script-setup-heading h2 {
+    margin-top: 4px;
+    font-size: 22px;
+}
+
+.research-script-setup-heading p {
+    max-width: 700px;
+    margin-top: 6px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.research-script-setup-footer {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+    gap: var(--sp-6);
+    align-items: end;
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--border);
+}
+
+.research-script-duration-input {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.research-script-duration-input span {
+    color: var(--text-faint);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.research-script-commit {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-5);
+    min-width: 0;
+}
+
+.research-script-commit p {
+    max-width: 430px;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.5;
+    text-align: right;
+}
+
+.research-script-commit button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+@media (max-width: 1320px) and (min-width: 901px) {
+    .research-script-setup-footer {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+    }
+
+    .research-script-duration {
+        max-width: 280px;
+    }
+
+    .research-script-commit {
+        justify-content: space-between;
+    }
+
+    .research-script-commit p {
+        text-align: left;
+    }
+}
+
 /* ── 11b. Unified editorial draft desk ───────────────────────── */
 .draft-desk {
     display: grid;
@@ -1426,43 +1516,69 @@ label {
     margin-bottom: var(--sp-4);
 }
 
-/* ── 12. Next action card ────────────────────────────────────── */
-.next-action-card {
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--accent-red);
-    border-radius: var(--radius-md);
-    padding: var(--sp-5) var(--sp-6);
-    box-shadow: var(--shadow-card);
+/* ── 12. Compact workflow action ─────────────────────────────── */
+.next-action-control {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--sp-4);
+    min-width: 0;
 }
-.next-action-kicker {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
+
+.next-action-control-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+    text-align: right;
+}
+
+.next-action-control-copy > span {
     color: var(--accent-red);
-    margin-bottom: var(--sp-2);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 }
-.next-action-title {
-    font-size: 20px;
-    font-weight: 700;
+
+.next-action-control-copy strong {
+    max-width: 250px;
     color: var(--text);
-    margin-bottom: var(--sp-2);
+    font-size: 13px;
+    font-weight: 650;
+    line-height: 1.35;
 }
-.next-action-desc {
-    color: var(--text-muted);
-    font-size: 14px;
-    margin-bottom: var(--sp-4);
-    line-height: 1.5;
+
+.next-action-control button {
+    flex: 0 0 auto;
+    min-height: 38px;
+    white-space: nowrap;
 }
 
 /* ── 13. Episode header ──────────────────────────────────────── */
 .episode-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-5);
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: var(--sp-5) var(--sp-6);
     box-shadow: var(--shadow-card);
+}
+
+.episode-header.has-action {
+    grid-template-columns: minmax(0, 1fr) minmax(285px, auto);
+    align-items: center;
+}
+
+.episode-header-context {
+    min-width: 0;
+}
+
+.episode-header-action {
+    min-width: 0;
+    padding-left: var(--sp-5);
+    border-left: 1px solid var(--border);
 }
 .episode-breadcrumb {
     display: flex;
@@ -1486,6 +1602,32 @@ label {
     margin-top: var(--sp-2);
 }
 
+@media (max-width: 1320px) and (min-width: 901px) {
+    .episode-header.has-action {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--sp-4);
+    }
+
+    .episode-header-action {
+        padding-top: var(--sp-4);
+        padding-left: 0;
+        border-top: 1px solid var(--border);
+        border-left: 0;
+    }
+
+    .next-action-control {
+        justify-content: space-between;
+    }
+
+    .next-action-control-copy {
+        text-align: left;
+    }
+
+    .next-action-control-copy strong {
+        max-width: none;
+    }
+}
+
 /* ── 14. Story cards (inbox) ─────────────────────────────────── */
 .story-selection-stage {
     display: grid;
@@ -1493,34 +1635,9 @@ label {
     min-width: 0;
 }
 
-.story-selection-heading {
-    display: flex;
-    gap: var(--sp-6);
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--sp-5) var(--sp-6);
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--accent-red);
-    border-radius: var(--radius-lg);
-    background:
-        linear-gradient(120deg, rgba(228, 28, 35, 0.07), transparent 42%),
-        var(--surface-elevated);
-    box-shadow: var(--shadow-card);
-}
-
-.story-selection-heading h2 {
-    margin: 3px 0 5px;
-    font-size: 25px;
-}
-
-.story-selection-heading p {
-    max-width: 760px;
-    color: var(--text-muted);
-    font-size: 13px;
-}
-
-.story-selection-heading > button {
+.story-selection-filters .story-refresh-button {
     flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .story-discovery-live {
@@ -3315,6 +3432,121 @@ label {
 }
 
 /* ── Settings navigation & source registry ──────────────────── */
+.settings-modal-scrim {
+    position: fixed;
+    z-index: 300;
+    inset: 0;
+    display: grid;
+    padding: clamp(16px, 3vw, 40px);
+    place-items: center;
+    background: rgba(1, 4, 8, 0.64);
+    backdrop-filter: blur(9px) saturate(78%);
+    -webkit-backdrop-filter: blur(9px) saturate(78%);
+    animation: settings-scrim-in 160ms ease-out;
+}
+
+.app-shell.settings-modal-open {
+    filter: blur(4px);
+    transition: filter 160ms ease-out;
+}
+
+.settings-modal-window {
+    position: relative;
+    width: min(1040px, calc(100vw - 40px));
+    max-height: min(88vh, 920px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid rgba(210, 222, 240, 0.16);
+    border-radius: 16px;
+    outline: none;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 120px),
+        #080e16;
+    box-shadow:
+        0 36px 110px rgba(0, 0, 0, 0.72),
+        0 0 0 1px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    scrollbar-color: rgba(169, 181, 199, 0.34) transparent;
+    animation: settings-window-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.settings-modal-window::before {
+    position: absolute;
+    top: 0;
+    right: 18px;
+    left: 18px;
+    height: 1px;
+    content: "";
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    pointer-events: none;
+}
+
+.settings-modal-content {
+    padding: 26px;
+}
+
+.settings-modal-header {
+    align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.settings-modal-header h1 {
+    font-size: 34px;
+}
+
+.settings-modal-close {
+    display: grid;
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    place-items: center;
+    border: 1px solid rgba(210, 222, 240, 0.14);
+    border-radius: 9px;
+    color: var(--text-muted);
+    background: rgba(240, 244, 250, 0.035);
+}
+
+.settings-modal-header .settings-modal-close:hover {
+    border-color: rgba(210, 222, 240, 0.24);
+    color: var(--text);
+    background: rgba(240, 244, 250, 0.075);
+}
+
+.settings-modal-close:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+}
+
+.settings-modal-error {
+    margin: 18px 18px 0;
+}
+
+@keyframes settings-scrim-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes settings-window-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-modal-scrim,
+    .settings-modal-window {
+        animation: none;
+    }
+}
+
 .settings-tab-list {
     width: fit-content;
     display: inline-grid;
@@ -3487,7 +3719,6 @@ label {
 
 /* ── 32. Mobile chrome ──────────────────────────────────────── */
 .mobile-command-header,
-.mobile-bottom-nav,
 .mobile-attention-heading,
 .mobile-drawer-scrim {
     display: none;
@@ -3558,7 +3789,7 @@ label {
         padding:
             calc(126px + env(safe-area-inset-top))
             14px
-            calc(92px + env(safe-area-inset-bottom));
+            calc(24px + env(safe-area-inset-bottom));
     }
 
     .mobile-command-header {
@@ -3702,60 +3933,6 @@ label {
         white-space: nowrap;
     }
 
-    .mobile-bottom-nav {
-        position: fixed;
-        z-index: 80;
-        right: 10px;
-        bottom: calc(8px + env(safe-area-inset-bottom));
-        left: 10px;
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        padding: 6px;
-        border: 1px solid rgba(200, 215, 240, 0.14);
-        border-radius: 20px;
-        background: rgba(5, 10, 17, 0.92);
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
-        backdrop-filter: blur(22px) saturate(130%);
-    }
-
-    .mobile-bottom-nav button {
-        position: relative;
-        display: grid;
-        min-width: 0;
-        min-height: 54px;
-        gap: 1px;
-        padding: 5px 2px;
-        place-items: center;
-        border: 0;
-        border-radius: 15px;
-        color: var(--text-faint);
-        background: transparent;
-        font-size: 8px;
-        letter-spacing: 0.04em;
-    }
-
-    .mobile-bottom-nav button > span {
-        font-size: 18px;
-        line-height: 1;
-    }
-
-    .mobile-bottom-nav button.active {
-        color: #07100b;
-        background: var(--status-green);
-        box-shadow: 0 6px 18px rgba(78, 201, 122, 0.24);
-    }
-
-    .mobile-bottom-nav button b {
-        position: absolute;
-        top: 3px;
-        right: 9px;
-        min-width: 15px;
-        border-radius: 99px;
-        color: white;
-        background: var(--accent-red);
-        font-size: 8px;
-    }
-
     .right-rail {
         position: fixed;
         z-index: 100;
@@ -3836,12 +4013,84 @@ label {
         box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
     }
 
+    .research-script-setup {
+        gap: 18px;
+        padding: 16px;
+    }
+
+    .research-script-setup-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .research-script-setup-heading h2 {
+        font-size: 20px;
+    }
+
+    .research-script-setup-footer {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 16px;
+        align-items: stretch;
+        padding-top: 16px;
+    }
+
+    .research-script-commit {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .research-script-commit p {
+        max-width: none;
+        text-align: left;
+    }
+
+    .research-script-commit button {
+        width: 100%;
+    }
+
     .settings-tab-list {
         width: 100%;
     }
 
     .settings-tab-list button {
         min-height: 40px;
+    }
+
+    .settings-modal-scrim {
+        padding: 10px;
+    }
+
+    .settings-modal-window {
+        width: 100%;
+        max-height: calc(100dvh - 20px);
+        border-radius: 15px;
+    }
+
+    .settings-modal-content {
+        padding: 16px;
+    }
+
+    .settings-modal-window .settings-modal-header {
+        align-items: center;
+        flex-direction: row;
+        margin-bottom: 14px;
+        padding-bottom: 14px;
+    }
+
+    .settings-modal-header h1 {
+        font-size: 28px;
+    }
+
+    .settings-modal-window .settings-modal-header > button {
+        width: 40px;
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .settings-modal-error {
+        margin: 12px 12px 0;
     }
 
     .settings-section-intro {
@@ -3859,20 +4108,6 @@ label {
         width: 100%;
     }
 
-    .story-selection-heading {
-        align-items: stretch;
-        flex-direction: column;
-        padding: 16px;
-    }
-
-    .story-selection-heading h2 {
-        font-size: 21px;
-    }
-
-    .story-selection-heading > button {
-        width: 100%;
-    }
-
     .filter-toolbar {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
@@ -3887,6 +4122,30 @@ label {
     .episode-header {
         padding: 15px;
         overflow: hidden;
+    }
+
+    .episode-header.has-action {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    .episode-header-action {
+        padding-top: 14px;
+        padding-left: 0;
+        border-top: 1px solid var(--border);
+        border-left: 0;
+    }
+
+    .next-action-control {
+        justify-content: space-between;
+    }
+
+    .next-action-control-copy {
+        text-align: left;
+    }
+
+    .next-action-control-copy strong {
+        max-width: 100%;
     }
 
     .episode-breadcrumb {
@@ -3926,18 +4185,6 @@ label {
 
     .stepper-label {
         font-size: 9px;
-    }
-
-    .next-action-card {
-        padding: 16px;
-    }
-
-    .next-action-title {
-        font-size: 18px;
-    }
-
-    .next-action-card button {
-        width: 100%;
     }
 
     .story-card {
@@ -4187,11 +4434,6 @@ label {
 
     .mobile-machine-state span {
         display: none;
-    }
-
-    .mobile-bottom-nav {
-        right: 6px;
-        left: 6px;
     }
 
 }

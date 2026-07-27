@@ -2,15 +2,10 @@ import React from "react";
 import { useStudio } from "../state/useStudio";
 import type { Page } from "./LeftRail";
 
-const MOBILE_NAV: { key: Page; label: string; icon: string }[] = [
-  { key: "command", label: "Studio", icon: "◉" },
-];
-
 export const MobileChrome: React.FC<{
-  page: Page;
   setPage: (page: Page) => void;
   onOpenAttention: () => void;
-}> = ({ page, setPage, onOpenAttention }) => {
+}> = ({ setPage, onOpenAttention }) => {
   const studio = useStudio();
   const episode = studio.episodes.find(
     (item) => item.episode_id === studio.selectedEpisodeId,
@@ -91,19 +86,6 @@ export const MobileChrome: React.FC<{
         </div>
       </header>
 
-      <nav className="mobile-bottom-nav" aria-label="Mobile production navigation">
-        {MOBILE_NAV.map((item) => (
-          <button
-            type="button"
-            key={item.key}
-            className={page === item.key ? "active" : ""}
-            onClick={() => setPage(item.key)}
-          >
-            <span aria-hidden="true">{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </nav>
     </>
   );
 };

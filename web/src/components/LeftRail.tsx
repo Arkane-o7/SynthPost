@@ -7,19 +7,10 @@ import { useStudio } from "../state/useStudio";
 export type Page = "command" | "settings";
 
 type RailIconName =
-  | "studio"
   | "settings"
   | "folder"
   | "pin"
   | "trash";
-
-const PRIMARY_NAV: {
-  key: Exclude<Page, "settings">;
-  label: string;
-  icon: RailIconName;
-}[] = [
-  { key: "command", label: "Command Center", icon: "studio" },
-];
 
 const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
   const common = {
@@ -35,13 +26,6 @@ const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
   };
 
   switch (name) {
-    case "studio":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="8.5" />
-          <circle cx="12" cy="12" r="3" />
-        </svg>
-      );
     case "settings":
       return (
         <svg {...common}>
@@ -314,23 +298,6 @@ export const LeftRail: React.FC<{
         <span className="rail-brand-mode">Studio</span>
       </div>
       <div className="rail-brand-sub">Local newsroom editor</div>
-
-      <nav className="nav" aria-label="Primary navigation">
-        {PRIMARY_NAV.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            className={`nav-btn ${page === item.key ? "active" : ""}`}
-            aria-current={page === item.key ? "page" : undefined}
-            onClick={() => setPage(item.key)}
-          >
-            <span className="nav-icon">
-              <RailIcon name={item.icon} />
-            </span>
-            <span className="nav-label">{item.label}</span>
-          </button>
-        ))}
-      </nav>
 
       <section className="rail-library" aria-label="Projects and episodes">
         <div className="rail-section-heading">

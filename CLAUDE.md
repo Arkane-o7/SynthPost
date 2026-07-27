@@ -158,7 +158,7 @@ discovery
 -> multi-source research
 -> narrative-first structured script generation
 -> script approval
--> Kokoro narration + visual discovery
+-> dots.tts narration + visual discovery
 -> timeline generation/review/approval
 -> renderer manifest
 -> avatar render
@@ -180,7 +180,7 @@ Important invariants:
 - Timeline approval requires current, non-test narration and successful timeline validation.
 - `build_story_manifest()` requires the latest approved script and timeline, compatible current narration, and valid media.
 - Rendering consumes approved editor state; renderer code must not invent editorial choices.
-- Kokoro narration timings come from actual PCM sample counts. The same WAV and beat clock drive the timeline, lip sync, avatar, and composition.
+- dots.tts narration timings come from actual PCM sample counts. The same WAV and beat clock drive the timeline, lip sync, avatar, and composition.
 
 ### Jobs and concurrency
 

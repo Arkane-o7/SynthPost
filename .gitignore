@@ -1,5 +1,6 @@
 .DS_Store
 .venv/
+.venv-dots-tts/
 __pycache__/
 *.pyc
 .env

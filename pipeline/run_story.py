@@ -54,7 +54,8 @@ def _sync_timeline_to_avatar_duration(manifest: dict[str, Any]) -> bool:
     narration = manifest.get("narration")
     if (
         isinstance(narration, dict)
-        and narration.get("timing_source") == "kokoro_exact_samples"
+        and narration.get("timing_source")
+        in {"tts_exact_samples", "kokoro_exact_samples"}
     ):
         return False
     timeline = _approved_timeline(manifest)

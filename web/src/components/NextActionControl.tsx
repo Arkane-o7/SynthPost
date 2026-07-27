@@ -1,7 +1,7 @@
 import React from "react";
 import { getNextAction, type StageKey } from "../lib/workflowUtils";
 
-export const NextActionCard: React.FC<{
+export const NextActionControl: React.FC<{
   workflowState?: string;
   onNavigate: (stage: StageKey) => void;
   onApiAction?: (action: string) => void;
@@ -18,20 +18,16 @@ export const NextActionCard: React.FC<{
   const isComplete = workflowState === "completed";
 
   return (
-    <div className="next-action-card animate-fade-in">
-      <div className="next-action-kicker">
-        {isComplete ? "✓ COMPLETE" : "▶ NEXT STEP"}
+    <div className="next-action-control animate-fade-in">
+      <div className="next-action-control-copy">
+        <span>{isComplete ? "Complete" : "Next step"}</span>
+        <strong>{action.title}</strong>
       </div>
-      <div className="next-action-title">{action.title}</div>
-      <p className="next-action-desc">{action.description}</p>
-      {disabled && disabledReason && (
-        <div className="text-muted" style={{ fontSize: 13, marginBottom: 12 }}>
-          {disabledReason}
-        </div>
-      )}
       <button
-        className={isComplete ? "btn-success btn-lg" : "btn-primary btn-lg"}
+        type="button"
+        className={isComplete ? "btn-success" : "btn-primary"}
         disabled={disabled}
+        title={disabled && disabledReason ? disabledReason : action.description}
         onClick={() => {
           if (action.ctaType === "navigate") {
             onNavigate(action.stageKey);
@@ -40,7 +36,20 @@ export const NextActionCard: React.FC<{
           }
         }}
       >
-        {action.ctaLabel}
+        <span>{action.ctaLabel}</span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
       </button>
     </div>
   );

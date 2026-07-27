@@ -4,7 +4,7 @@ import { RightRail } from './RightRail';
 import { MobileChrome } from './MobileChrome';
 
 /** Pages that show the right rail. */
-const RIGHT_RAIL_PAGES = new Set<Page>(['command']);
+const RIGHT_RAIL_PAGES = new Set<Page>(['command', 'settings']);
 
 export const AppShell: React.FC<{
   page: Page;
@@ -17,9 +17,11 @@ export const AppShell: React.FC<{
   React.useEffect(() => setMobileRailOpen(false), [page]);
 
   return (
-    <div className={`app-shell ${showRightRail ? 'has-right-rail' : ''}`}>
+    <div
+      className={`app-shell ${showRightRail ? 'has-right-rail' : ''} ${page === 'settings' ? 'settings-modal-open' : ''}`}
+      aria-hidden={page === 'settings' ? true : undefined}
+    >
       <MobileChrome
-        page={page}
         setPage={setPage}
         onOpenAttention={() => setMobileRailOpen(true)}
       />

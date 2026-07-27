@@ -200,7 +200,7 @@ def exact_performance_beats(
                 "end": float(timing.get("end_time") or 0.0),
                 "gesture": gesture,
                 "expression": expression,
-                "timing_source": "kokoro_exact_samples",
+                "timing_source": "tts_exact_samples",
             }
         )
     return beats or performance_beats_for(script, duration)
@@ -227,12 +227,14 @@ def gesture_events_for(
 
 
 def voice_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    narration = config.get_settings().narration
     settings: dict[str, Any] = {
-        "engine": "kokoro",
-        "voice_id": config.get_settings().avatar.voice_id,
-        "speed": config.get_settings().avatar.voice_speed,
-        "sample_rate": 24000,
-        "lang_code": config.get_settings().avatar.language_code,
+        "engine": "dots_tts",
+        "model": narration.model_name,
+        "voice_id": narration.voice_id,
+        "speed": narration.voice_speed,
+        "sample_rate": 48000,
+        "lang_code": narration.language_code,
     }
     if overrides:
         settings.update(
@@ -391,7 +393,7 @@ def browser_avatar_job_from_manifest(
         canonical_source = resolve_project_path(canonical_audio)
         if not canonical_source.exists():
             raise FileNotFoundError(
-                f"Canonical Kokoro narration is missing: {canonical_source}"
+                f"Canonical dots.tts narration is missing: {canonical_source}"
             )
         engine_audio = resolve_engine_path(generated_audio_path)
         engine_audio.parent.mkdir(parents=True, exist_ok=True)
@@ -687,7 +689,7 @@ def build_direction(
     narration_duration = float(narration.get("duration_seconds") or 0.0)
     estimated_duration = narration_duration or estimate_duration_seconds(script_text)
     duration_source = (
-        "kokoro_exact_samples" if narration_duration else "words_per_minute"
+        "tts_exact_samples" if narration_duration else "words_per_minute"
     )
     if is_browser_renderer(renderer) and not narration_duration:
         audio_duration, audio_path = existing_browser_audio_duration(
@@ -893,9 +895,9 @@ def prepare_browser_avatar_inputs(
     if canonical_audio:
         if not audio_path.exists():
             raise FileNotFoundError(
-                f"Canonical Kokoro narration is missing: {audio_path}"
+                f"Canonical dots.tts narration is missing: {audio_path}"
             )
-        print(safe_text(f"[tts] Using canonical Kokoro narration: {audio_path}"))
+        print(safe_text(f"[tts] Using canonical dots.tts narration: {audio_path}"))
     elif force or not path_is_fresh(audio_path, tts_inputs):
         tts_cmd = [
             avatar_python(),
@@ -1373,7 +1375,7 @@ def run_legacy_blender_avatar_engine(
         source_audio = resolve_project_path(canonical_audio)
         if not source_audio.exists():
             raise FileNotFoundError(
-                f"Canonical Kokoro narration is missing: {source_audio}"
+                f"Canonical dots.tts narration is missing: {source_audio}"
             )
         legacy_audio = engine_dir / "assets" / "temp" / str(job["job_id"]) / "audio.wav"
         legacy_audio.parent.mkdir(parents=True, exist_ok=True)

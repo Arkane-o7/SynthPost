@@ -105,7 +105,6 @@ service operation matter.
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
 | `SYNTHPOST_AI_VISUAL_QUERY_PLANNING` | `1` | no | `0` | Deterministic query planner is the fallback. |
-| `SYNTHPOST_AI_VISUAL_CLEANLINESS` | `1` | no | `0` | Compatibility switch for the legacy/manual cleanliness analyzer; the normal Studio review flow remains editor-controlled. |
 | `SYNTHPOST_INCLUDE_VISUAL_LEADS` | `1` | no | `1` | Retain non-downloadable results as editor leads. |
 | `SYNTHPOST_DISABLE_WEB_VISUALS` | `0` | no | `1` | Disables web source acquisition. |
 | `SYNTHPOST_GENERATE_FALLBACK_VISUALS` | `1` | no | `1` | Create anchor-only fallback records for uncovered sections; no synthetic image card is rendered. |
@@ -138,6 +137,32 @@ service operation matter.
 | `SYNTHPOST_STRICT_DURATION` | `1` | no | `0` | When enabled, duration validation is terminal. |
 | `SYNTHPOST_EXPERIMENTAL_SOURCE_AUDIO` | `0` | no | `0` | Keep disabled until clip timestamps/rights are verified. |
 
+## dots.tts narration
+
+Run `make setup-tts` once, then enroll an authorized voice using
+[the voice-cloning guide](TTS.md). Relative paths resolve from the repository
+root. The default SOAR int4 checkpoint prioritizes voice-cloning quality on
+Apple Silicon and emits 48 kHz mono audio.
+
+| Variable | Default | Required | Example | Notes |
+|---|---:|---|---|---|
+| `SYNTHPOST_TTS_PYTHON` | `.venv-dots-tts/bin/python` | narration | `.venv-dots-tts/bin/python` | Dedicated MLX runtime; kept separate from the main and Avatar Engine environments. |
+| `SYNTHPOST_TTS_MODEL_PATH` | `.cache/dots-tts/int4` | narration | `.cache/dots-tts/mf-int4` | Local converted MLX checkpoint directory. |
+| `SYNTHPOST_TTS_MODEL_NAME` | `dots.tts-soar-mlx-int4` | no | `dots.tts-mf-mlx-int4` | Artifact/provenance label. |
+| `SYNTHPOST_TTS_VOICE_ID` | `anchor` | narration | `anchor-serious` | Human-readable profile identity; dots.tts has no built-in voice IDs. |
+| `SYNTHPOST_TTS_VOICE_PROFILE_PATH` | empty | preferred | `.cache/dots-tts/voices/anchor-neutral.dtprofile` | Reusable enrolled voice/style profile. |
+| `SYNTHPOST_TTS_REFERENCE_AUDIO` | empty | one-shot alternative | `/Volumes/Voices/anchor.wav` | Authorized clean reference; requires exact reference text. |
+| `SYNTHPOST_TTS_REFERENCE_TEXT` | empty | with reference audio | `Good evening...` | Exact words spoken in the reference clip. |
+| `SYNTHPOST_TTS_LANGUAGE` | `EN` | no | `HI` | Uppercase ISO language tag supported by the MLX runtime. |
+| `SYNTHPOST_TTS_SPEED` | `1.0` | no | `0.96` | Pitch-preserving FFmpeg tempo adjustment; keep close to 1.0. |
+| `SYNTHPOST_TTS_NUM_STEPS` | checkpoint default | no | `10` | Empty means 4 for MF and 10 for SOAR. |
+| `SYNTHPOST_TTS_GUIDANCE_SCALE` | `1.2` | no | `1.2` | SOAR classifier-free guidance; ignored by MF, not an emotion control. |
+| `SYNTHPOST_TTS_SPEAKER_SCALE` | `1.5` | no | `1.5` | Reference-speaker conditioning strength used during enrollment. |
+| `SYNTHPOST_TTS_SEED` | `42` | no | `71` | Reproducible prosody variation; each beat offsets this base seed. |
+| `SYNTHPOST_TTS_MAX_GENERATE_LENGTH` | `500` | no | `500` | Maximum generated audio patch count per beat. |
+| `SYNTHPOST_NARRATION_BEAT_PAUSE_MS` | `80` | no | `100` | Silence between production beats, included in the exact clock. |
+| `SYNTHPOST_NARRATION_SECTION_PAUSE_MS` | `220` | no | `250` | Silence between script sections, included in the exact clock. |
+
 ## Avatar integration
 
 | Variable | Default | Required | Example | Notes |
@@ -151,11 +176,6 @@ service operation matter.
 | `SYNTHPOST_AVATAR_STYLE` | `professional_news_anchor` | no | `professional_news_anchor` | Performance style label. |
 | `SYNTHPOST_AVATAR_BODY_FORM` | `F` | no | `M` | Renderer body-form hint. |
 | `SYNTHPOST_AVATAR_RENDER_BACKGROUND` | `charcoal` | no | `chroma_green` | Render background mode. |
-| `SYNTHPOST_AVATAR_VOICE_ID` | `af_heart` | TTS | `af_bella` | Local Kokoro voice ID. |
-| `SYNTHPOST_AVATAR_VOICE_SPEED` | `1.10` | no | `1.0` | Positive multiplier. |
-| `SYNTHPOST_NARRATION_BEAT_PAUSE_MS` | `80` | no | `100` | Silence inserted between production beats. Included in the exact sample clock; range 0–2000 ms. |
-| `SYNTHPOST_NARRATION_SECTION_PAUSE_MS` | `220` | no | `250` | Silence inserted between script sections. Included in the exact sample clock; range 0–5000 ms. |
-| `SYNTHPOST_AVATAR_LANG_CODE` | `a` | no | `a` | TTS language code. |
 | `SYNTHPOST_AVATAR_DISTANCE_MULTIPLIER` | `0.86` | no | `0.9` | Camera framing calibration. |
 | `SYNTHPOST_AVATAR_TARGET_HEIGHT_FACTOR` | `0.52` | no | `0.52` | Camera target calibration. |
 | `SYNTHPOST_AVATAR_HEIGHT_FACTOR` | `0.86` | no | `0.86` | Avatar framing calibration. |

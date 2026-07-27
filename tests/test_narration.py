@@ -21,7 +21,7 @@ from pipeline.timeline.planner import (
 )
 
 
-class KokoroNarrationContractTests(unittest.TestCase):
+class DotsTtsNarrationContractTests(unittest.TestCase):
     def test_completed_production_can_approve_an_edited_timeline_revision(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "timeline-revision.sqlite3")
@@ -165,7 +165,9 @@ class KokoroNarrationContractTests(unittest.TestCase):
                 plan.segments[0].duration += 1.0
                 plan.segments[0].end_time += 1.0
                 repository.save_timeline(plan)
-                with self.assertRaisesRegex(ValueError, "match Kokoro audio"):
+                with self.assertRaisesRegex(
+                    ValueError, "match synthesized audio"
+                ):
                     approve_timeline(repository, story_id)
 
             save_manual_script(

@@ -617,7 +617,7 @@ class ScriptDocument(StrictModel):
 
 
 class NarrationBeatTiming(StrictModel):
-    """Sample-derived timing for one Kokoro production beat."""
+    """Sample-derived timing for one synthesized production beat."""
 
     beat_id: str
     section_id: str
@@ -671,13 +671,15 @@ class NarrationArtifact(StrictModel):
     script_id: str
     script_version: int
     input_hash: str
-    provider: Literal["kokoro"] = "kokoro"
-    model: str = "Kokoro-82M"
+    provider: Literal["dots_tts", "kokoro"] = "dots_tts"
+    model: str = "dots.tts-soar-mlx-int4"
     voice_id: str
     voice_speed: float = Field(gt=0)
     language_code: str
     sample_rate: int = Field(gt=0)
-    timing_source: Literal["kokoro_exact_samples"] = "kokoro_exact_samples"
+    timing_source: Literal["tts_exact_samples", "kokoro_exact_samples"] = (
+        "tts_exact_samples"
+    )
     test_mode: bool = False
     audio_path: str
     duration_seconds: float = Field(gt=0)

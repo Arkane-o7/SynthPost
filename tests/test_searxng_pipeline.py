@@ -270,17 +270,6 @@ class SearXNGPipelineTests(unittest.TestCase):
             ), patch(
                 "pipeline.visuals.content_analysis._contact_sheet",
                 return_value=None,
-            ), patch(
-                "pipeline.visuals.content_analysis._ai_classify",
-                return_value=(
-                    {
-                        "decision": "reject",
-                        "clean_broll_score": 0.02,
-                        "contains_presenter_package": False,
-                        "reasons": ["persistent broadcaster packaging"],
-                    },
-                    "unit-ai",
-                ),
             ):
                 result = analyze_media_cleanliness(
                     media,
@@ -297,6 +286,7 @@ class SearXNGPipelineTests(unittest.TestCase):
             self.assertTrue(result["contains_lower_third"])
             self.assertTrue(result["contains_third_party_logo"])
             self.assertTrue(result["approval_blockers"])
+            self.assertEqual(result["content_analysis_provider"], "deterministic")
         finally:
             temp.cleanup()
 

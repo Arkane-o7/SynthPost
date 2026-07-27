@@ -94,7 +94,7 @@ class DirectionTemplateTests(unittest.TestCase):
             "composition": {"template": "split_main"},
         }
         env = {
-            "SYNTHPOST_AVATAR_VOICE_ID": "af_bella",
+            "SYNTHPOST_TTS_VOICE_ID": "anchor-contract",
             "SYNTHPOST_AVATAR_RENDER_BACKGROUND": "chroma_green",
             "SYNTHPOST_AVATAR_ASSET_PATH": "assets/avatars/synthpost_anchor_v1/anchor.glb",
             "SYNTHPOST_AVATAR_META_PATH": "assets/avatars/synthpost_anchor_v1/avatar.json",
@@ -108,7 +108,7 @@ class DirectionTemplateTests(unittest.TestCase):
         self.assertEqual(job["renderer"], "rocketbox")
         self.assertEqual(job["script"], script_text)
         self.assertEqual(job["script_text"], script_text)
-        self.assertEqual(job["voice"]["voice_id"], "af_bella")
+        self.assertEqual(job["voice"]["voice_id"], "anchor-contract")
         self.assertEqual(
             job["audio_path"],
             "assets/temp/synthpost/ep_unit_direction/story_001/voice.wav",
@@ -191,7 +191,7 @@ class DirectionTemplateTests(unittest.TestCase):
         self.assertEqual(blender_job["canonical_audio_path"], audio_path)
         self.assertEqual(
             blender_job["performance_beats"][1]["timing_source"],
-            "kokoro_exact_samples",
+            "tts_exact_samples",
         )
 
 

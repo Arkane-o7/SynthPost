@@ -24,7 +24,7 @@ from pipeline.llm.providers import (
     configured_provider,
     structured_generate,
 )
-from pipeline.editorial.charter import CHARTER_VERSION, charter_prompt_context, show_format_for
+from pipeline.editorial.charter import CHARTER_VERSION
 from pipeline.models import (
     ContentRole,
     GenerationAudit,
@@ -77,6 +77,12 @@ class VisualQueryPlan:
     video_query: str
     video_priority: bool
     rationale: str
+    image_queries: tuple[str, ...] = ()
+    video_queries: tuple[str, ...] = ()
+    visual_purpose: str = ""
+    preferred_sources: tuple[str, ...] = ()
+    time_context: str = ""
+    rights_intent: str = ""
 
 
 class VisualSource(Protocol):
@@ -934,16 +940,33 @@ def _visual_query_schema() -> dict:
                     "type": "object",
                     "required": [
                         "section_id",
-                        "image_query",
-                        "video_query",
+                        "image_queries",
+                        "video_queries",
                         "video_priority",
+                        "visual_purpose",
+                        "preferred_sources",
+                        "time_context",
+                        "rights_intent",
                         "rationale",
                     ],
                     "properties": {
                         "section_id": {"type": "string"},
-                        "image_query": {"type": "string"},
-                        "video_query": {"type": "string"},
+                        "image_queries": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "video_queries": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
                         "video_priority": {"type": "boolean"},
+                        "visual_purpose": {"type": "string"},
+                        "preferred_sources": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "time_context": {"type": "string"},
+                        "rights_intent": {"type": "string"},
                         "rationale": {"type": "string"},
                     },
                 },
@@ -987,21 +1010,38 @@ def _validate_ai_visual_plan(
         section_id = str(row.get("section_id") or "").strip()
         if section_id not in section_ids or section_id in seen_sections:
             raise ValueError(f"invalid or duplicate section_id: {section_id}")
-        image_seed = _remove_unsupported_years(
-            " ".join(str(row.get("image_query") or "").split()),
-            supported_years,
-        )
-        video_seed = _remove_unsupported_years(
-            " ".join(str(row.get("video_query") or "").split()),
-            supported_years,
-        )
-        image_query = _image_query(image_seed)
-        video_query = _video_query(
-            video_seed, image_query
-        )
-        if not image_query or image_query.lower() == video_query.lower():
+        image_queries = [
+            _image_query(
+                _remove_unsupported_years(
+                    " ".join(str(value).split()), supported_years
+                )
+            )
+            for value in row.get("image_queries", [])
+            if str(value).strip()
+        ]
+        image_queries = list(dict.fromkeys(query for query in image_queries if query))
+        video_queries = [
+            _video_query(
+                _remove_unsupported_years(
+                    " ".join(str(value).split()), supported_years
+                ),
+                image_queries[0] if image_queries else "official event",
+            )
+            for value in row.get("video_queries", [])
+            if str(value).strip()
+        ]
+        video_queries = list(dict.fromkeys(query for query in video_queries if query))
+        if not 2 <= len(image_queries) <= 3:
+            raise ValueError(
+                f"section {section_id} needs 2-3 ranked image queries"
+            )
+        if not 2 <= len(video_queries) <= 3:
+            raise ValueError(
+                f"section {section_id} needs 2-3 ranked video queries"
+            )
+        if image_queries[0].lower() == video_queries[0].lower():
             raise ValueError(f"section {section_id} needs distinct image/video queries")
-        for query in (image_query, video_query):
+        for query in (*image_queries, *video_queries):
             word_count = len(query.split())
             if word_count < 3 or word_count > 18:
                 raise ValueError(
@@ -1015,13 +1055,29 @@ def _validate_ai_visual_plan(
         plans.append(
             VisualQueryPlan(
                 section_id=section_id,
-                image_query=image_query,
-                video_query=video_query,
+                image_query=image_queries[0],
+                video_query=video_queries[0],
                 video_priority=bool(row.get("video_priority")),
                 rationale=(
                     f"AI keyword planner ({provider_name}): "
                     f"{str(row.get('rationale') or 'section-grounded query').strip()}"
                 ),
+                image_queries=tuple(image_queries),
+                video_queries=tuple(video_queries),
+                visual_purpose=" ".join(
+                    str(row.get("visual_purpose") or "").split()
+                )[:240],
+                preferred_sources=tuple(
+                    " ".join(str(value).split())[:120]
+                    for value in row.get("preferred_sources", [])
+                    if str(value).strip()
+                )[:6],
+                time_context=" ".join(
+                    str(row.get("time_context") or "").split()
+                )[:120],
+                rights_intent=" ".join(
+                    str(row.get("rights_intent") or "").split()
+                )[:160],
             )
         )
     missing = section_ids - seen_sections
@@ -1043,30 +1099,25 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
     research_pack = (
         research_pack_loader(story_id) if research_pack_loader else None
     ) or {}
-    claim_by_id = {
-        str(claim.get("claim_id")): str(claim.get("claim_text") or "")
-        for claim in research_pack.get("claims", [])
-        if claim.get("claim_id")
-    }
     prompt_input = {
         "topic": candidate.title,
         "headline": script.headline,
         "category": script.category,
-        "verified_dates": research_pack.get("dates", []),
-        "verified_people": research_pack.get("people", []),
-        "verified_organizations": research_pack.get("organizations", []),
-        "verified_locations": research_pack.get("locations", []),
+        "source_documents": [
+            {
+                "document_id": document.get("document_id"),
+                "title": document.get("title"),
+                "publisher": document.get("publisher"),
+                "published_at": document.get("published_at"),
+                "url": document.get("url"),
+            }
+            for document in research_pack.get("documents", [])[:4]
+        ],
         "sections": [
             {
                 "section_id": section.section_id,
                 "section_type": section.section_type,
                 "narration": section.text[:900],
-                "claim_ids": section.claim_ids,
-                "linked_claims": [
-                    claim_by_id[claim_id]
-                    for claim_id in section.claim_ids
-                    if claim_id in claim_by_id
-                ],
                 "visual_direction": section.suggested_visual_types,
                 "source_clip": (
                     section.source_clip.model_dump(mode="json")
@@ -1077,30 +1128,28 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
             for section in script.sections
         ],
     }
-    editorial_fit = getattr(candidate, "editorial_fit", None)
-    primary_topic = getattr(editorial_fit, "primary_topic", script.category)
     prompt = f"""
 You are SynthPost's visual search keyword planner.
-Turn the supplied news topic and section narration into search-engine keyword phrases for SearXNG.
+Turn each narration section into a small ranked search plan for SearXNG.
 
-{charter_prompt_context(show_format=script.narration_mode.value)}
-
-For every section return exactly one image_query and one distinct video_query.
-- Ground both queries in concrete verified names, organizations, objects, events, places, and dates present in the input.
-- image_query should favor a map, system diagram, sourced data visual, infrastructure,
-  primary document, authentic editorial photograph, product demonstration or real interface.
-- video_query should seek the original event/person/place from an official primary source and use "official video", "raw footage", "B-roll", or "press footage".
+For every section return 2-3 ranked image_queries and 2-3 ranked video_queries.
+- First define the concrete visual_purpose: what viewers need to understand or verify while this section is spoken.
+- Ground every query in names, organizations, objects, events, places, and dates explicitly present in the narration or source-document metadata.
+- Rank the most specific, event-authentic query first and provide materially different fallbacks rather than paraphrases.
+- image_queries should cover the best available mix of authentic editorial photography, primary documents, maps, system diagrams, sourced data, infrastructure, product demonstrations, or real interfaces.
+- video_queries should target original events, people, places, demonstrations, hearings, speeches, launches, or facilities from primary sources, using terms such as "official video", "raw footage", "B-roll", or "press footage" only where appropriate.
 - Never ask for "news coverage", "breaking news", "explainer", "news report", or a finished broadcaster package.
-- Prefer named primary sources such as the responsible ministry, agency, organization, event operator, or official press office.
-- Target horizontal broadcast media close to 16:9 or 3:2. Prefer 1920x1080 or larger and never request portrait/vertical media.
+- Return preferred_sources separately as named ministries, agencies, organizations, event operators, official press offices, document repositories, or other likely primary publishers. Do not stuff every source name into every query.
+- Return time_context separately, using only dates or periods supported by the input.
+- Return rights_intent separately, describing the preferred usage basis such as official publication, public-domain government material, licensed editorial media, or manual review required. Do not claim that an asset is licensed.
+- Target horizontal broadcast media close to 16:9 or 3:2; keep format requirements out of the search phrase unless essential.
 - Prefer event-authentic footage over generic stock, CGI, explainers, thumbnails, presenter monologues, or speculative imagery.
 - Use concise keyword phrases of 3-18 words; do not write sentences or instructions.
 - Do not invent an event, appearance, location, date, or person that the input does not support.
-- Treat linked_claims and verified entities as factual grounding. Legacy search-query hints are intentionally excluded.
 - Set video_priority true only when motion materially improves the section.
-- When source_clip is present, video_priority MUST be true and video_query must
+- When source_clip is present, video_priority MUST be true and the first video_query must
   target that exact original audible moment—not generic B-roll or a news package.
-- Explain the concrete subject choice briefly in rationale.
+- Explain why the ranked plan serves the visual_purpose in rationale.
 
 INPUT JSON:
 {json.dumps(prompt_input, ensure_ascii=True)}
@@ -1131,7 +1180,7 @@ INPUT JSON:
         audit_saver(GenerationAudit(
             story_id=story_id,
             stage="visual_query_planner",
-            prompt_version="synthpost.visual-query.v3",
+            prompt_version="synthpost.visual-query.v4",
             charter_version=CHARTER_VERSION,
             provider=str(latest_attempt.get("provider") or provider.name),
             model=latest_attempt.get("model"),
@@ -1181,6 +1230,22 @@ INPUT JSON:
             rationale=(
                 f"authored source-audio insert: {plan.rationale}"
             ),
+            image_queries=plan.image_queries,
+            video_queries=tuple(
+                dict.fromkeys(
+                    [
+                        _video_query(
+                            source_clip_by_section[plan.section_id].search_query,
+                            script.headline,
+                        ),
+                        *plan.video_queries,
+                    ]
+                )
+            ),
+            visual_purpose=plan.visual_purpose,
+            preferred_sources=plan.preferred_sources,
+            time_context=plan.time_context,
+            rights_intent=plan.rights_intent,
         )
         if plan.section_id in source_clip_by_section
         else plan
@@ -1195,16 +1260,36 @@ def _visual_search_tasks(
 
     primary: list[tuple[VisualQueryPlan, str, str, MediaType]] = []
     secondary: list[tuple[VisualQueryPlan, str, str, MediaType]] = []
+    alternatives: list[tuple[VisualQueryPlan, str, str, MediaType]] = []
     for plan in plans:
-        image_task = (plan, "images", plan.image_query, MediaType.image)
-        video_task = (plan, "videos", plan.video_query, MediaType.video)
+        image_queries = getattr(plan, "image_queries", ()) or (plan.image_query,)
+        video_queries = getattr(plan, "video_queries", ()) or (plan.video_query,)
+        image_task = (plan, "images", image_queries[0], MediaType.image)
+        video_task = (plan, "videos", video_queries[0], MediaType.video)
         if plan.video_priority:
             primary.append(video_task)
             secondary.append(image_task)
         else:
             primary.append(image_task)
             secondary.append(video_task)
-    return (primary + secondary)[:max_queries]
+        alternatives.extend(
+            (plan, "images", query, MediaType.image)
+            for query in image_queries[1:]
+        )
+        alternatives.extend(
+            (plan, "videos", query, MediaType.video)
+            for query in video_queries[1:]
+        )
+    ordered = primary + secondary + alternatives
+    deduplicated: list[tuple[VisualQueryPlan, str, str, MediaType]] = []
+    seen: set[tuple[str, str]] = set()
+    for task in ordered:
+        key = (task[1], " ".join(task[2].casefold().split()))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduplicated.append(task)
+    return deduplicated[:max_queries]
 
 
 def _remote_asset_id(story_id: str, media_url: str) -> str:

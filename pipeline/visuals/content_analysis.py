@@ -11,11 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from pipeline import config
-from pipeline.llm.providers import configured_provider, structured_generate
 from pipeline.storage import project_relative
 
 
-ANALYSIS_VERSION = "editorial_cleanliness_v1"
+ANALYSIS_VERSION = "deterministic_cleanliness_v2"
 
 NEWS_BRANDS: dict[str, tuple[str, ...]] = {
     "Aaj Tak": ("aaj tak", "aajtak"),
@@ -331,77 +330,6 @@ def _contact_sheet(frames: list[Path], destination: Path) -> Path | None:
     return destination if destination.exists() else None
 
 
-def _ai_schema() -> dict[str, Any]:
-    return {
-        "type": "object",
-        "required": [
-            "decision",
-            "clean_broll_score",
-            "contains_presenter_package",
-            "reasons",
-        ],
-        "properties": {
-            "decision": {
-                "type": "string",
-                "enum": ["pass", "reject", "needs_review"],
-            },
-            "clean_broll_score": {"type": "number"},
-            "contains_presenter_package": {"type": "boolean"},
-            "reasons": {"type": "array", "items": {"type": "string"}},
-        },
-    }
-
-
-def _validate_ai_result(raw: dict[str, Any]) -> dict[str, Any]:
-    decision = str(raw.get("decision") or "").strip()
-    if decision not in {"pass", "reject", "needs_review"}:
-        raise ValueError("invalid content-cleanliness decision")
-    try:
-        score = float(raw.get("clean_broll_score"))
-    except (TypeError, ValueError) as exc:
-        raise ValueError("clean_broll_score must be numeric") from exc
-    reasons = [str(value).strip() for value in raw.get("reasons", []) if str(value).strip()]
-    if not reasons:
-        raise ValueError("content-cleanliness classifier must provide reasons")
-    return {
-        "decision": decision,
-        "clean_broll_score": max(0.0, min(1.0, score)),
-        "contains_presenter_package": bool(raw.get("contains_presenter_package")),
-        "reasons": reasons[:8],
-    }
-
-
-def _ai_classify(evidence: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    if not config.get_settings().visuals.ai_cleanliness:
-        raise ValueError("AI visual cleanliness classification is disabled")
-    provider = configured_provider()
-    prompt = f"""
-You are SynthPost's editorial-cleanliness classifier for visual media.
-Classify only from the supplied source metadata and deterministic OCR evidence.
-Do not invent visual observations that are not in the evidence.
-
-Reject finished packages from competing news publishers, including publisher
-logos, persistent watermarks, lower-thirds, tickers, presenter packages, and
-subscribe/promotional overlays. Official primary-source footage may pass this
-cleanliness stage when no third-party broadcaster packaging is indicated, but
-rights approval remains a separate human decision. Unknown evidence or a scan
-that cannot rule out branded packaging must return needs_review.
-
-Return a clean_broll_score from 0.0 to 1.0 and concise evidence-based reasons.
-
-EVIDENCE JSON:
-{json.dumps(evidence, ensure_ascii=True)}
-""".strip()
-    result, _attempts = structured_generate(
-        provider,
-        prompt,
-        _ai_schema(),
-        _validate_ai_result,
-        max_retries=2,
-    )
-    return result, provider.name
-
-
 def analyze_media_cleanliness(
     path: Path,
     analysis_dir: Path,
@@ -468,39 +396,16 @@ def analyze_media_cleanliness(
         "ocr_text_sample": [item["text"] for item in ocr_findings[:80]],
         "deterministic_blockers": hard_blockers,
     }
-    ai_provider: str | None = None
-    try:
-        ai_result, ai_provider = _ai_classify(evidence)
-    except Exception as exc:
-        ai_result = {
-            "decision": "needs_review",
-            "clean_broll_score": 0.0,
-            "contains_presenter_package": False,
-            "reasons": [f"AI cleanliness classification unavailable: {exc}"],
-        }
     blockers = list(dict.fromkeys(hard_blockers))
-    if ai_result["contains_presenter_package"]:
-        blockers.append("presenter or finished news package detected by AI classifier")
-    if blockers or ai_result["decision"] == "reject":
-        status = "rejected"
-    elif ai_result["decision"] == "pass":
-        status = "passed"
-    else:
-        status = "needs_review"
-    if status != "passed" and not blockers:
-        decision_reason = next(
-            (
-                str(reason).strip()
-                for reason in ai_result.get("reasons", [])
-                if str(reason).strip()
-            ),
-            "classifier returned needs_review",
-        )
-        blockers.append(f"cleanliness review required: {decision_reason}")
     if is_video and source.source_class == "unknown":
         blockers.append(
             "video source identity is not an approved primary, licensed, or user-owned source"
         )
+    blockers = list(dict.fromkeys(blockers))
+    status = "rejected" if blockers else "passed"
+    deterministic_reasons = blockers or [
+        "deterministic source, branding, overlay and OCR checks found no blockers"
+    ]
     return {
         "content_cleanliness_status": status,
         "source_class": source.source_class,
@@ -513,16 +418,14 @@ def analyze_media_cleanliness(
         "detected_brands": detected_brands,
         "contains_lower_third": contains_lower_third,
         "contains_ticker": contains_ticker,
-        "contains_presenter": bool(ai_result["contains_presenter_package"]),
+        "contains_presenter": False,
         "ocr_findings": ocr_findings[:240],
         "scan_timestamps": timestamps,
         "analysis_frame_paths": [project_relative(frame) for frame in frames],
         "contact_sheet_path": project_relative(contact_sheet) if contact_sheet else None,
-        "clean_broll_score": round(float(ai_result["clean_broll_score"]), 3),
+        "clean_broll_score": 0.0 if blockers else 1.0,
         "content_analysis_version": ANALYSIS_VERSION,
-        "content_analysis_provider": ai_provider,
-        "content_analysis_evidence": list(
-            dict.fromkeys(hard_blockers + ai_result["reasons"])
-        ),
-        "approval_blockers": list(dict.fromkeys(blockers)),
+        "content_analysis_provider": "deterministic",
+        "content_analysis_evidence": deterministic_reasons,
+        "approval_blockers": blockers,
     }

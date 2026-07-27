@@ -588,7 +588,7 @@ def _narration_clock_errors(
             expected = expected_beats.get(beat_id)
             if expected is None:
                 errors.append(
-                    f"Segment {segment.segment_id} has no matching Kokoro narration beat"
+                    f"Segment {segment.segment_id} has no matching narration beat"
                 )
                 cursor += segment.duration
                 continue
@@ -601,18 +601,18 @@ def _narration_clock_errors(
             if abs(segment.duration - expected_duration) > 0.02:
                 errors.append(
                     f"Segment {segment.segment_id} duration must remain "
-                    f"{expected_duration:.3f}s to match Kokoro audio beat {beat_id}"
+                    f"{expected_duration:.3f}s to match synthesized audio beat {beat_id}"
                 )
             if " ".join(segment.script_text.split()) != " ".join(
                 expected.text.split()
             ):
                 errors.append(
-                    f"Segment {segment.segment_id} text differs from Kokoro beat {beat_id}"
+                    f"Segment {segment.segment_id} text differs from narration beat {beat_id}"
                 )
             cursor += segment.duration
         if actual_beat_order != expected_beat_order:
             errors.append(
-                "Narrated shot order must match the approved Kokoro beat order; "
+                "Narrated shot order must match the approved narration beat order; "
                 "change templates or visuals without reordering the spoken beats"
             )
         return errors
@@ -632,7 +632,7 @@ def _narration_clock_errors(
         expected = expected_by_section.get(segment.section_id)
         if expected is None:
             errors.append(
-                f"Segment {segment.segment_id} has no Kokoro section timing"
+                f"Segment {segment.segment_id} has no narration section timing"
             )
             continue
         actual_order.append(segment.section_id)
@@ -643,7 +643,7 @@ def _narration_clock_errors(
         if abs(segment.duration - expected.duration_seconds) > 0.02:
             errors.append(
                 f"Segment {segment.segment_id} duration must remain "
-                f"{expected.duration_seconds:.3f}s to match Kokoro audio"
+                f"{expected.duration_seconds:.3f}s to match synthesized audio"
             )
         expected_text = " ".join(
             beat.text
@@ -703,7 +703,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
             section_timing = section_timings[section.section_id]
         except KeyError as exc:
             raise ValueError(
-                f"Kokoro alignment is missing section {section.section_id}"
+                f"Narration alignment is missing section {section.section_id}"
             ) from exc
         section_beats = [
             beat
@@ -712,7 +712,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         ]
         if not section_beats:
             raise ValueError(
-                f"Kokoro alignment has no beats for section {section.section_id}"
+                f"Narration alignment has no beats for section {section.section_id}"
             )
         section_visuals = visual_pools.get(section.section_id, [])
         has_timed_source_fallback = any(
@@ -834,10 +834,10 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                                 "start": 0.0,
                                 "end": round(duration, 3),
                                 "beat_id": beat.beat_id,
-                                "timing_source": "kokoro_exact_samples",
+                                "timing_source": "tts_exact_samples",
                             }
                         ],
-                        "timing_source": "kokoro_exact_samples",
+                        "timing_source": "tts_exact_samples",
                         "narration_audio_path": narration.audio_path,
                         "narration_beat_id": beat.beat_id,
                         "narration_beat_kind": beat.kind,
@@ -982,7 +982,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
     plan.validation_errors = errors
     plan.validation_warnings = warnings
     plan.validation_warnings.append(
-        "Timeline timing is derived from Kokoro narration sample offsets."
+        "Timeline timing is derived from dots.tts narration sample offsets."
     )
     saved = repository.save_timeline(plan)
     candidate = repository.candidate_for_story(story_id)

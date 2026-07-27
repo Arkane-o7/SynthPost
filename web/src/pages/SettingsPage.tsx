@@ -2,7 +2,10 @@ import React from "react";
 import { StatusBadge } from "../components/StatusBadge";
 import { SourceSettings } from "../components/SourceSettings";
 
-export const SettingsPage: React.FC = () => {
+export const SettingsPage: React.FC<{
+  onClose: () => void;
+  closeButtonRef: React.RefObject<HTMLButtonElement>;
+}> = ({ onClose, closeButtonRef }) => {
   const [section, setSection] = React.useState<"general" | "sources">("general");
   const supported = "Notification" in window;
   const [permission, setPermission] = React.useState<NotificationPermission | "unsupported">(
@@ -29,12 +32,33 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="topbar">
+    <div className="settings-modal-content">
+      <div className="topbar settings-modal-header">
         <div>
           <div className="topbar-kicker">SynthPost Studio</div>
-          <h1>Settings</h1>
+          <h1 id="settings-modal-title">Settings</h1>
         </div>
+        <button
+          ref={closeButtonRef}
+          type="button"
+          className="settings-modal-close"
+          aria-label="Close settings"
+          title="Close settings"
+          onClick={onClose}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
+            <path d="M6 6l12 12M18 6 6 18" />
+          </svg>
+        </button>
       </div>
 
       <div className="settings-tab-list" role="tablist" aria-label="Settings sections">

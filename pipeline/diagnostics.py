@@ -56,23 +56,25 @@ def _directory(name: str, path: Path, requirement: str) -> DiagnosticCheck:
     )
 
 
-def _kokoro(settings) -> DiagnosticCheck:
-    configured = settings.avatar.python_path
-    engine = resolve_project_path(settings.avatar.engine_path)
-    candidate = engine / ".venv" / "bin" / "python"
-    interpreter = Path(configured) if configured else candidate
-    if not interpreter.is_absolute():
-        interpreter = resolve_project_path(interpreter)
+def _dots_tts(settings) -> DiagnosticCheck:
+    interpreter = resolve_project_path(settings.narration.python_path)
     if not interpreter.exists():
         return DiagnosticCheck(
-            "kokoro",
+            "dots_tts",
             "missing",
             "feature",
             f"configured narration Python not found: {interpreter}",
-            "Install Avatar Engine dependencies or set SYNTHPOST_AVATAR_PYTHON.",
+            "Run `make setup-tts` or set SYNTHPOST_TTS_PYTHON.",
         )
     result = subprocess.run(
-        [str(interpreter), "-c", "import kokoro; print(kokoro.__version__)"],
+        [
+            str(interpreter),
+            "-c",
+            (
+                "import importlib.metadata; import dots_tts_mlx; "
+                "print(importlib.metadata.version('dots-tts-mlx'))"
+            ),
+        ],
         capture_output=True,
         text=True,
         timeout=30,
@@ -80,18 +82,55 @@ def _kokoro(settings) -> DiagnosticCheck:
     )
     if result.returncode != 0:
         return DiagnosticCheck(
-            "kokoro",
+            "dots_tts",
             "missing",
             "feature",
-            f"Kokoro import failed in {interpreter}",
-            "Install Kokoro in the Avatar Engine environment.",
+            f"dots-tts-mlx import failed in {interpreter}",
+            "Run `make setup-tts`.",
         )
     version = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "installed"
+    model_path = resolve_project_path(settings.narration.model_path)
+    required_model_files = (
+        "config.json",
+        "core.safetensors",
+        "speaker.safetensors",
+        "vocoder.safetensors",
+        "tokenizer/tokenizer.json",
+    )
+    missing_model_files = [
+        name for name in required_model_files if not (model_path / name).is_file()
+    ]
+    if missing_model_files:
+        return DiagnosticCheck(
+            "dots_tts",
+            "missing",
+            "feature",
+            f"dots-tts-mlx {version}; incomplete model at {model_path}: "
+            f"{', '.join(missing_model_files)}",
+            "Run `make setup-tts` to download the configured MLX checkpoint.",
+        )
+    profile_path = settings.narration.voice_profile_path
+    reference_path = settings.narration.reference_audio_path
+    has_profile = bool(profile_path and resolve_project_path(profile_path).is_dir())
+    has_reference = bool(
+        reference_path
+        and resolve_project_path(reference_path).is_file()
+        and settings.narration.reference_text
+    )
+    if not has_profile and not has_reference:
+        return DiagnosticCheck(
+            "dots_tts",
+            "misconfigured",
+            "feature",
+            f"dots-tts-mlx {version}; model={model_path}; no authorized voice configured",
+            "Enroll a voice profile or set SYNTHPOST_TTS_REFERENCE_AUDIO and "
+            "SYNTHPOST_TTS_REFERENCE_TEXT.",
+        )
     return DiagnosticCheck(
-        "kokoro",
+        "dots_tts",
         "available",
         "feature",
-        f"{version} via {interpreter}",
+        f"dots-tts-mlx {version}; model={model_path}; voice={settings.narration.voice_id}",
     )
 
 
@@ -286,7 +325,7 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
     )
     if settings.llm.provider == "codex":
         checks.append(_codex(settings))
-    checks.append(_kokoro(settings))
+    checks.append(_dots_tts(settings))
     rhubarb = PROJECT_ROOT / "Rhubarb-Lip-Sync-1.14.0-macOS" / "rhubarb"
     checks.append(
         DiagnosticCheck(

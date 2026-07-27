@@ -3,7 +3,7 @@ import { api } from "../api/client";
 import { useStudio } from "../state/useStudio";
 import { EpisodeHeader } from "../components/EpisodeHeader";
 import { WorkflowStepper } from "../components/WorkflowStepper";
-import { NextActionCard } from "../components/NextActionCard";
+import { NextActionControl } from "../components/NextActionControl";
 import { STAGES, getActiveStage, type StageKey } from "../lib/workflowUtils";
 
 import { StorySelectionPanel } from "../workspace/StorySelectionPanel";
@@ -45,20 +45,14 @@ export const CommandCenter: React.FC = () => {
       job.story_id === studio.selectedStoryId &&
       ["queued", "running"].includes(job.status),
   );
-  const hasActiveResearchJob = activeStoryJobs.some(
-    (job) => job.job_type === "research",
-  );
   const hasActiveScriptJob = activeStoryJobs.some(
     (job) => job.job_type === "script_generate",
   );
   const nextActionDisabled =
-    (story?.workflow_state === "selected" && hasActiveResearchJob) ||
-    (story?.workflow_state === "research_ready" && hasActiveScriptJob);
-  const nextActionDisabledReason = hasActiveResearchJob
-    ? "Research is already queued/running for this story."
-    : hasActiveScriptJob
-      ? "Script generation is already queued/running for this story."
-      : undefined;
+    story?.workflow_state === "research_ready" && hasActiveScriptJob;
+  const nextActionDisabledReason = hasActiveScriptJob
+    ? "Script generation is already queued/running for this story."
+    : undefined;
   const defaultStage = getActiveStage(story?.workflow_state);
   const [activeStage, setActiveStage] = React.useState<StageKey>(defaultStage);
 
@@ -227,29 +221,28 @@ export const CommandCenter: React.FC = () => {
   // State D: Full production flow
   return (
     <div className="stack-lg">
-      <EpisodeHeader story={story} />
+      <EpisodeHeader
+        story={story}
+        action={
+          <NextActionControl
+            workflowState={story.workflow_state}
+            onNavigate={setActiveStage}
+            disabled={nextActionDisabled}
+            disabledReason={nextActionDisabledReason}
+            onApiAction={(action) => {
+              if (action === "generateScript") {
+                setActiveStage("draft");
+                void act(() => api.generateScript(studio.selectedStoryId));
+              }
+            }}
+          />
+        }
+      />
       <WorkflowStepper
         workflowState={story.workflow_state}
         activeStage={activeStage}
         onStageClick={setActiveStage}
       />
-      {(activeStage !== "story" || story.workflow_state === "selected") && (
-        <NextActionCard
-          workflowState={story.workflow_state}
-          onNavigate={setActiveStage}
-          disabled={nextActionDisabled}
-          disabledReason={nextActionDisabledReason}
-          onApiAction={(action) => {
-            if (action === "researchAndScript") {
-              setActiveStage("draft");
-              void act(() => api.researchAndScript(studio.selectedStoryId));
-            } else if (action === "generateScript") {
-              setActiveStage("draft");
-              void act(() => api.generateScript(studio.selectedStoryId));
-            }
-          }}
-        />
-      )}
       <WorkspacePanel stage={activeStage} storyId={studio.selectedStoryId} />
     </div>
   );

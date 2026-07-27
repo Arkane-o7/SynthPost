@@ -38,14 +38,14 @@ flowchart LR
 | `pipeline/research/` | Related-source extraction, evidence, claims, research packs | `ResearchPack` |
 | `pipeline/llm/` | Structured Codex CLI, Groq, Gemini, fallback, and deterministic mock providers | `LLMProvider`, `provider_availability()` |
 | `pipeline/scripts/` | Script generation, validation, approval, and deterministic text shaping | `ScriptDocument` |
-| `pipeline/narration/` | Local Kokoro synthesis, versioned canonical audio, sample-exact beat alignment | `NarrationArtifact` |
+| `pipeline/narration/` | Local dots.tts-MLX synthesis, voice profiles, versioned canonical audio, sample-exact beat alignment | `NarrationArtifact` |
 | `pipeline/visuals/` | Local/SearXNG discovery, download, broadcast-fit and rights review | `VisualSource`, `VisualCandidate` |
 | `pipeline/timeline/` | Template registry, timeline planning, and validation | `TimelinePlan` |
 | `pipeline/manifest_builder.py` | Approved editor state to renderer manifest | `build_story_manifest()` |
 | `pipeline/jobs/` | SQLite queue, supervised process pools, slot leases, retries, cancellation, heartbeat | job type + `StageContract` |
 | `pipeline/api/` | HTTP contracts and feature routers | `/api/*` |
 | `web/` | Studio presentation, local UI state, typed API client, live job events | `api/client.ts`, `useStudio` |
-| `avatar-engine/` | Local TTS/lip-sync/avatar render subsystem | `scripts/run_job.py`, avatar job schemas |
+| `avatar-engine/` | Lip-sync and avatar rendering from canonical SynthPost audio; legacy standalone TTS remains compatibility-only | `scripts/run_job.py`, avatar job schemas |
 | `compositor/remotion_renderer/` | Timeline/template composition | renderer `story.json` |
 | `assembly/stitch_episode.py` | Normalization, intro/outro, episode assembly | episode ID and render profile |
 
@@ -55,7 +55,7 @@ flowchart LR
 flowchart TD
   D[Discovery] --> R[Research pack]
   R --> S[Script review]
-  S --> N[Kokoro narration and exact beat clock]
+  S --> N[dots.tts narration and exact beat clock]
   S --> V[Visual discovery and rights review]
   N --> T[Timeline planning and approval]
   V --> T

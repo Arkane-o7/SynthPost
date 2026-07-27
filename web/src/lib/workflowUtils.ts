@@ -116,7 +116,7 @@ export type NextAction = {
   ctaLabel: string;
   ctaType: "navigate" | "api";
   stageKey: StageKey;
-  apiAction?: "researchAndScript" | "generateScript";
+  apiAction?: "generateScript";
 };
 
 /**
@@ -126,13 +126,12 @@ export function getNextAction(workflowState?: string): NextAction {
   switch (workflowState) {
     case "selected":
       return {
-        title: "Research and write the first draft",
+        title: "Set up research and script",
         description:
-          "SynthPost will gather source evidence, extract claims, and continue directly into a broadcast script.",
-        ctaLabel: "Research & Write Draft",
-        ctaType: "api",
+          "Choose the narration format and target video length before starting the combined research and script run.",
+        ctaLabel: "Configure Draft",
+        ctaType: "navigate",
         stageKey: "draft",
-        apiAction: "researchAndScript",
       };
     case "researching":
       return {

@@ -117,7 +117,6 @@ class DiscoverySettings(SettingsModel):
 
 class VisualSettings(SettingsModel):
     ai_query_planning: bool = True
-    ai_cleanliness: bool = True
     include_leads: bool = True
     disable_web_visuals: bool = False
     generate_fallback_visuals: bool = True
@@ -150,13 +149,29 @@ class AvatarSettings(SettingsModel):
     renderer: str | None = None
     asset_path: str = "assets/avatars/synthpost_anchor_v1/anchor.glb"
     metadata_path: str = "assets/avatars/synthpost_anchor_v1/avatar.json"
-    voice_id: str = "af_heart"
-    voice_speed: float = Field(default=1.10, gt=0)
-    language_code: str = "a"
     words_per_minute: float = Field(default=145.0, gt=0)
+    browser_timeout_padding_seconds: float = Field(default=900.0, ge=0)
+
+
+class NarrationSettings(SettingsModel):
+    """Local dots.tts synthesis and voice-cloning configuration."""
+
+    python_path: Path = Path(".venv-dots-tts/bin/python")
+    model_path: Path = Path(".cache/dots-tts/int4")
+    model_name: str = "dots.tts-soar-mlx-int4"
+    voice_id: str = "anchor"
+    voice_profile_path: Path | None = None
+    reference_audio_path: Path | None = None
+    reference_text: str | None = None
+    language_code: str = "EN"
+    voice_speed: float = Field(default=1.0, gt=0)
+    num_steps: int | None = Field(default=None, ge=1, le=64)
+    guidance_scale: float = Field(default=1.2, ge=0, le=10)
+    speaker_scale: float = Field(default=1.5, gt=0, le=10)
+    seed: int = Field(default=42, ge=0)
+    max_generate_length: int = Field(default=500, ge=16, le=4096)
     narration_beat_pause_ms: int = Field(default=80, ge=0, le=2000)
     narration_section_pause_ms: int = Field(default=220, ge=0, le=5000)
-    browser_timeout_padding_seconds: float = Field(default=900.0, ge=0)
 
 
 class RenderSettings(SettingsModel):
@@ -208,6 +223,7 @@ class SynthPostSettings(SettingsModel):
     discovery: DiscoverySettings
     visuals: VisualSettings
     avatar: AvatarSettings
+    narration: NarrationSettings
     render: RenderSettings
     jobs: JobSettings
 
@@ -346,7 +362,6 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
             ),
             visuals=VisualSettings(
                 ai_query_planning=r.boolean("SYNTHPOST_AI_VISUAL_QUERY_PLANNING", True),
-                ai_cleanliness=r.boolean("SYNTHPOST_AI_VISUAL_CLEANLINESS", True),
                 include_leads=r.boolean("SYNTHPOST_INCLUDE_VISUAL_LEADS", True),
                 disable_web_visuals=r.boolean(
                     "SYNTHPOST_DISABLE_WEB_VISUALS", False
@@ -427,18 +442,71 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                     "SYNTHPOST_AVATAR_META_PATH",
                     "assets/avatars/synthpost_anchor_v1/avatar.json",
                 ),
-                voice_id=r.text("SYNTHPOST_AVATAR_VOICE_ID", "af_heart"),
-                voice_speed=r.number("SYNTHPOST_AVATAR_VOICE_SPEED", 1.10),
-                language_code=r.text("SYNTHPOST_AVATAR_LANG_CODE", "a"),
                 words_per_minute=r.number("SYNTHPOST_WORDS_PER_MINUTE", 145.0),
+                browser_timeout_padding_seconds=r.number(
+                    "AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S", 900.0
+                ),
+            ),
+            narration=NarrationSettings(
+                python_path=Path(
+                    r.text("SYNTHPOST_TTS_PYTHON", ".venv-dots-tts/bin/python")
+                    or ".venv-dots-tts/bin/python"
+                ),
+                model_path=Path(
+                    r.text(
+                        "SYNTHPOST_TTS_MODEL_PATH",
+                        ".cache/dots-tts/int4",
+                    )
+                    or ".cache/dots-tts/int4"
+                ),
+                model_name=r.text(
+                    "SYNTHPOST_TTS_MODEL_NAME", "dots.tts-soar-mlx-int4"
+                ),
+                voice_id=r.text(
+                    "SYNTHPOST_TTS_VOICE_ID",
+                    "anchor",
+                ),
+                voice_profile_path=(
+                    Path(value)
+                    if (
+                        value := r.text("SYNTHPOST_TTS_VOICE_PROFILE_PATH")
+                    )
+                    else None
+                ),
+                reference_audio_path=(
+                    Path(value)
+                    if (value := r.text("SYNTHPOST_TTS_REFERENCE_AUDIO"))
+                    else None
+                ),
+                reference_text=r.text("SYNTHPOST_TTS_REFERENCE_TEXT"),
+                language_code=r.text(
+                    "SYNTHPOST_TTS_LANGUAGE",
+                    "EN",
+                ),
+                voice_speed=r.number(
+                    "SYNTHPOST_TTS_SPEED",
+                    1.0,
+                ),
+                num_steps=(
+                    r.integer("SYNTHPOST_TTS_NUM_STEPS", 4)
+                    if r.text("SYNTHPOST_TTS_NUM_STEPS")
+                    else None
+                ),
+                guidance_scale=r.number(
+                    "SYNTHPOST_TTS_GUIDANCE_SCALE", 1.2
+                ),
+                speaker_scale=r.number(
+                    "SYNTHPOST_TTS_SPEAKER_SCALE", 1.5
+                ),
+                seed=r.integer("SYNTHPOST_TTS_SEED", 42),
+                max_generate_length=r.integer(
+                    "SYNTHPOST_TTS_MAX_GENERATE_LENGTH", 500
+                ),
                 narration_beat_pause_ms=r.integer(
                     "SYNTHPOST_NARRATION_BEAT_PAUSE_MS", 80
                 ),
                 narration_section_pause_ms=r.integer(
                     "SYNTHPOST_NARRATION_SECTION_PAUSE_MS", 220
-                ),
-                browser_timeout_padding_seconds=r.number(
-                    "AVATAR_ENGINE_BROWSER_TIMEOUT_PADDING_S", 900.0
                 ),
             ),
             render=RenderSettings(

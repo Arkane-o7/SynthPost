@@ -1,4 +1,4 @@
-"""Generate and load the canonical Kokoro narration artifact for a story."""
+"""Generate and load the canonical dots.tts narration artifact for a story."""
 
 from __future__ import annotations
 
@@ -31,19 +31,41 @@ from ..storage import (
     write_manifest,
 )
 
-SAMPLE_RATE = 24_000
+SAMPLE_RATE = 48_000
 
 
 class NarrationNotReadyError(ValueError):
     """The latest approved script has no current canonical narration."""
 
 
-def _kokoro_python() -> str:
-    configured = config.get_settings().avatar.python_path
-    if configured:
-        return str(configured)
-    candidate = config.avatar_engine_dir() / ".venv" / "bin" / "python"
+def _tts_python() -> str:
+    configured = config.get_settings().narration.python_path
+    candidate = resolve_project_path(configured)
     return str(candidate) if candidate.exists() else sys.executable
+
+
+def _configured_path(value: Path | None) -> str | None:
+    if value is None:
+        return None
+    return str(resolve_project_path(value))
+
+
+def _path_fingerprint(value: Path | None) -> str | None:
+    """Hash small voice-profile inputs so changed references invalidate audio."""
+
+    if value is None:
+        return None
+    path = resolve_project_path(value)
+    if path.is_file():
+        return file_sha256(path)
+    if path.is_dir():
+        digest = hashlib.sha256()
+        files = sorted(item for item in path.rglob("*") if item.is_file())
+        for item in files:
+            digest.update(item.relative_to(path).as_posix().encode("utf-8"))
+            digest.update(file_sha256(item).encode("ascii"))
+        return digest.hexdigest()
+    return "missing"
 
 
 @dataclass(frozen=True)
@@ -81,7 +103,7 @@ def _units(script: ScriptDocument) -> list[NarrationUnit]:
 
 
 def _request(script: ScriptDocument, *, test_mode: bool) -> dict[str, Any]:
-    settings = config.get_settings().avatar
+    settings = config.get_settings().narration
     units = _units(script)
     request_units: list[dict[str, Any]] = []
     for index, unit in enumerate(units):
@@ -106,9 +128,23 @@ def _request(script: ScriptDocument, *, test_mode: bool) -> dict[str, Any]:
         "contract_version": "synthpost.narration.request.v1",
         "script_id": script.script_id,
         "script_version": script.version,
+        "provider": "dots_tts",
+        "model_path": str(resolve_project_path(settings.model_path)),
+        "model_name": settings.model_name,
         "voice_id": settings.voice_id,
+        "voice_profile_path": _configured_path(settings.voice_profile_path),
+        "voice_profile_hash": _path_fingerprint(settings.voice_profile_path),
+        "reference_audio_path": _configured_path(settings.reference_audio_path),
+        "reference_audio_hash": _path_fingerprint(settings.reference_audio_path),
+        "reference_text": settings.reference_text,
         "voice_speed": settings.voice_speed,
         "language_code": settings.language_code,
+        "num_steps": settings.num_steps,
+        "guidance_scale": settings.guidance_scale,
+        "speaker_scale": settings.speaker_scale,
+        "seed": settings.seed,
+        "max_generate_length": settings.max_generate_length,
+        "ffmpeg_binary": config.get_settings().render.ffmpeg_binary,
         "sample_rate": SAMPLE_RATE,
         "test_mode": test_mode,
         "units": request_units,
@@ -177,7 +213,7 @@ def generate_narration(
     script = repository.latest_script(story_id)
     if not script or script.status != ScriptStatus.approved:
         raise NarrationNotReadyError(
-            "Approve the latest script before generating its Kokoro narration."
+            "Approve the latest script before generating its dots.tts narration."
         )
     episode = repository.episode_for_story(story_id)
     request = _request(script, test_mode=test_mode)
@@ -212,9 +248,8 @@ def generate_narration(
         )
         process = subprocess.run(
             [
-                _kokoro_python(),
-                "-m",
-                "pipeline.narration.kokoro_worker",
+                _tts_python(),
+                str(PROJECT_ROOT / "pipeline" / "narration" / "dots_worker.py"),
                 str(request_path),
                 str(temp_audio),
                 str(result_path),
@@ -229,7 +264,7 @@ def generate_narration(
         if process.returncode != 0:
             detail = (process.stderr or process.stdout).strip()
             raise RuntimeError(
-                "Kokoro narration generation failed"
+                "dots.tts narration generation failed"
                 + (f": {detail[-1200:]}" if detail else "")
             )
         result = json.loads(result_path.read_text(encoding="utf-8"))
@@ -258,6 +293,8 @@ def generate_narration(
         script_id=script.script_id,
         script_version=script.version,
         input_hash=expected_hash,
+        provider="dots_tts",
+        model=request["model_name"],
         voice_id=request["voice_id"],
         voice_speed=request["voice_speed"],
         language_code=request["language_code"],
@@ -270,7 +307,10 @@ def generate_narration(
         warnings=(
             ["test_synthesizer=true"]
             if test_mode
-            else ["timing_is_sample_exact_not_forced_alignment"]
+            else [
+                "timing_is_sample_exact_not_forced_alignment",
+                "synthetic_voice_disclosure_required",
+            ]
         ),
     )
     write_manifest(artifact_path, artifact.model_dump(mode="json"))
@@ -314,7 +354,7 @@ def load_narration_artifact(
     if not path.exists():
         if require_current:
             raise NarrationNotReadyError(
-                "Generate Kokoro narration for the latest approved script first."
+                "Generate dots.tts narration for the latest approved script first."
             )
         return None
     artifact = NarrationArtifact.model_validate(read_manifest(path))
@@ -329,7 +369,7 @@ def load_narration_artifact(
     if not current:
         if require_current:
             raise NarrationNotReadyError(
-                "The narration is stale because the script or Kokoro settings changed. "
+                "The narration is stale because the script or dots.tts settings changed. "
                 "Regenerate narration before planning the timeline."
             )
         return None

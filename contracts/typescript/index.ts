@@ -215,13 +215,13 @@ export type NarrationArtifact = {
   script_id: string;
   script_version: number;
   input_hash: string;
-  provider: 'kokoro';
+  provider: 'dots_tts' | 'kokoro';
   model: string;
   voice_id: string;
   voice_speed: number;
   language_code: string;
   sample_rate: number;
-  timing_source: 'kokoro_exact_samples';
+  timing_source: 'tts_exact_samples' | 'kokoro_exact_samples';
   test_mode: boolean;
   audio_path: string;
   duration_seconds: number;

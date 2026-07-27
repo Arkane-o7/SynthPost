@@ -7,10 +7,10 @@ SynthPost is a local-first, AI-assisted newsroom and video-production system for
 - Projects, episodes, RSS/Atom sources, discovery, ranking, and assignment desk
 - Multi-source research packs with evidence and claims
 - Narrative-first structured generation through local Codex/ChatGPT auth or direct Groq/Gemini APIs, with continuity validation, non-rewriting segmentation, manual revisions, and approvals
-- Local Kokoro narration with sample-exact beat/section timing shared by timeline, lip sync, and rendering
+- Local dots.tts voice-cloned narration with sample-exact beat/section timing shared by timeline, lip sync, and rendering
 - Episode-isolated media inbox, SearXNG image/video discovery, rights review, and safe fallbacks
 - Editable, validated multi-template timelines
-- Local avatar/TTS/lip-sync rendering through the retained Avatar Engine
+- Local avatar/lip-sync rendering through the retained Avatar Engine, consuming SynthPost's canonical narration
 - Remotion composition and FFmpeg episode assembly
 - React Studio with job progress, logs, retries, previews, and mobile/private Tailscale access
 - Configurable multi-process worker pools for parallel projects and episode renders
@@ -33,6 +33,7 @@ git clone https://github.com/Arkane-o7/SynthPost.git
 cd SynthPost
 cp .env.example .env
 make setup
+make setup-tts
 make doctor
 make dev
 ```
@@ -52,7 +53,7 @@ Run components separately with `make backend`, `make workers`, `make worker LANE
 2. Configure sources and discover or add a story.
 3. Select the story and create its research pack.
 4. Generate/edit/approve the script.
-5. Let script approval queue Kokoro narration and visual discovery; other projects continue in parallel.
+5. Let script approval queue dots.tts narration and visual discovery; other projects continue in parallel.
 6. Review visual media, then generate/edit/validate/approve the sample-timed timeline.
 7. Build the renderer manifest and render the avatar/composition.
 8. Assemble and review the finished episode.
@@ -107,6 +108,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 |---|---|
 | `make help` | Discover the command surface |
 | `make setup` | Install Python, Remotion, and Studio dependencies |
+| `make setup-tts` | Install dots.tts-MLX and download the local SOAR int4 model |
 | `make dev` | Start the full local stack |
 | `make backend` / `make workers` / `make web` | Start individual services and the configured worker pool |
 | `make searxng-up` / `make searxng-down` | Manage the local SearXNG container |
@@ -125,6 +127,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 - [Architecture](docs/ARCHITECTURE.md)
 - [Pipeline](docs/PIPELINE.md)
 - [Configuration](docs/CONFIGURATION.md)
+- [dots.tts voice cloning and expression](docs/TTS.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Contributing](CONTRIBUTING.md)

@@ -820,7 +820,7 @@ def queue_narration(story_id: str) -> dict[str, Any]:
         script = repository.latest_script(story_id)
         if not script or script.status != ScriptStatus.approved:
             raise ValueError(
-                "Approve the latest script before generating Kokoro narration"
+                "Approve the latest script before generating dots.tts narration"
             )
         episode = repository.episode_for_story(story_id)
         job = repository.active_job(

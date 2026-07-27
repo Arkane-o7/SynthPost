@@ -248,3 +248,27 @@ def charter_prompt_context(*, show_format: str) -> str:
             "Preferred visuals: " + "; ".join(charter["visual_preferences"]),
         ]
     )
+
+
+def narration_prompt_context(*, show_format: str) -> str:
+    """Return only the charter rules needed to write spoken narration.
+
+    The broader charter context also contains research and visual-production
+    policy. Injecting those unrelated rules into the writer prompt makes the
+    core editorial task harder to follow and needlessly consumes context.
+    """
+
+    charter = load_editorial_charter()
+    selected_format = normalize_narration_mode(show_format)
+    show = charter["show_formats"][selected_format]
+    return "\n".join(
+        [
+            f"Editorial promise: {charter['editorial_promise']}",
+            "Voice: " + "; ".join(charter["tone"]),
+            f"Format: {show['label']}",
+            "Format structure: " + " -> ".join(show["structure"]),
+            "Narration profile: " + "; ".join(show["narration"]),
+            "Shared narration rules: " + "; ".join(charter["narration_principles"]),
+            "Avoid in narration: " + "; ".join(charter["narration_avoid"]),
+        ]
+    )

@@ -78,6 +78,7 @@ from pipeline.scripts.generation import (
 from pipeline.scripts.generation import (
     compact_research_pack_for_prompt,
     _validate_narrative_draft,
+    _validate_narrative_script,
     _validate_narrative_segmentation,
     expand_long_form_script,
     generation_prompt,
@@ -2216,9 +2217,19 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     "queries": [
                         {
                             "section_id": "sec_001_cold_open",
-                            "image_query": "Jind Sonipat hydrogen train launch photo",
-                            "video_query": "PM Modi hydrogen train flag off video",
+                            "image_queries": [
+                                "Jind Sonipat hydrogen train launch photo",
+                                "Indian Railways hydrogen train official photograph",
+                            ],
+                            "video_queries": [
+                                "PM Modi hydrogen train flag off video",
+                                "Indian Railways hydrogen train official B-roll",
+                            ],
                             "video_priority": True,
+                            "visual_purpose": "Show the train and launch event.",
+                            "preferred_sources": ["Indian Railways", "PIB India"],
+                            "time_context": "",
+                            "rights_intent": "official publication or manual review",
                             "rationale": "the opening needs launch footage",
                         }
                     ]
@@ -2274,9 +2285,19 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 "queries": [
                     {
                         "section_id": "sec_001_context",
-                        "image_query": "Vimag Labs magnet free motor 2030 prototype",
-                        "video_query": "Vimag Labs 2030 motor official demonstration",
+                        "image_queries": [
+                            "Vimag Labs magnet free motor 2030 prototype",
+                            "Vimag Labs magnet free motor official photograph",
+                        ],
+                        "video_queries": [
+                            "Vimag Labs 2030 motor official demonstration",
+                            "Vimag Labs motor official B-roll",
+                        ],
                         "video_priority": True,
+                        "visual_purpose": "Show the physical motor.",
+                        "preferred_sources": ["Vimag Labs"],
+                        "time_context": "2025",
+                        "rights_intent": "official publication or manual review",
                         "rationale": "show the physical motor",
                     }
                 ]
@@ -3241,44 +3262,50 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             self.assertEqual(
                 {audit.stage for audit in audits},
                 {
-                    "narrative_brief",
-                    "narrative_draft",
+                    "narrative_script",
                     "narrative_segmentation",
-                    "headline_editor",
                 },
             )
             self.assertTrue(all(audit.prompt_text for audit in audits))
             self.assertTrue(all(audit.response for audit in audits))
-            self.assertTrue(any(audit.normalization_events for audit in audits))
             self.assertIn(f"editorial_charter={CHARTER_VERSION}", script.warnings)
             self.assertEqual(script.narration_mode, NarrationMode.deep_dive)
             self.assertIn("narration_mode=deep_dive", script.warnings)
             script_audit = next(
-                audit for audit in audits if audit.stage == "narrative_draft"
+                audit for audit in audits if audit.stage == "narrative_script"
             )
             self.assertIn("Format: SynthPost Deep Dive", script_audit.prompt_text)
-            self.assertNotIn("Format structure:", script_audit.prompt_text)
+            self.assertIn("Format structure:", script_audit.prompt_text)
+            self.assertNotIn('"systems"', script_audit.prompt_text)
+            self.assertNotIn('"stakeholders"', script_audit.prompt_text)
+            self.assertNotIn('"uncertainties"', script_audit.prompt_text)
             segmentation_audit = next(
                 audit for audit in audits if audit.stage == "narrative_segmentation"
             )
             self.assertNotIn("Section types must be unique", segmentation_audit.prompt_text)
             self.assertNotIn('"section_type"', segmentation_audit.prompt_text)
-            self.assertIn("narrative_first=true", script.warnings)
+            self.assertIn("single_pass_narrative=true", script.warnings)
             self.assertIn("narrative_quality_gate=passed", script.warnings)
             self.assertTrue(all(section.headline_cues for section in script.sections))
         finally:
             repository.close()
             temp.cleanup()
 
-    def test_headline_failure_keeps_accepted_narrative_script(self) -> None:
-        class InvalidHeadlineProvider(MockProvider):
+    def test_script_validation_failure_retries_the_original_prompt(self) -> None:
+        class RetryProvider(MockProvider):
+            def __init__(self):
+                self.script_prompts = []
+
             def generate_json(self, prompt, schema, *, temperature=None):
-                if "senior headline editor" in prompt.lower():
-                    return {
-                        "headline": "Hydrogen rail test",
-                        "dek": "A grounded test.",
-                        "sections": [],
-                    }
+                if "senior editorial writer" in prompt.lower():
+                    self.script_prompts.append(prompt)
+                    if len(self.script_prompts) == 1:
+                        return {
+                            "headline": "Hydrogen rail test",
+                            "dek": "A grounded test.",
+                            "category": "news",
+                            "beats": [],
+                        }
                 return super().generate_json(
                     prompt, schema, temperature=temperature
                 )
@@ -3311,9 +3338,10 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     research_summary="A documented Indian hydrogen rail pilot.",
                 )
             )
+            provider = RetryProvider()
             with patch(
                 "pipeline.scripts.generation.configured_provider",
-                return_value=InvalidHeadlineProvider(),
+                return_value=provider,
             ), patch(
                 "pipeline.scripts.generation.config.env_bool", return_value=False
             ):
@@ -3324,17 +3352,16 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     narration_mode="signal",
                 )
 
-            self.assertIn(
-                "headline_editor=fallback_to_narrative_metadata", script.warnings
-            )
             self.assertTrue(script.sections)
             self.assertTrue(all(section.headline_cues for section in script.sections))
-            headline_audit = next(
+            script_audit = next(
                 audit
                 for audit in repository.list_generation_audits(selected.story_id)
-                if audit.stage == "headline_editor"
+                if audit.stage == "narrative_script"
             )
-            self.assertEqual(headline_audit.status, "failed")
+            self.assertEqual(script_audit.status, "completed")
+            self.assertEqual(len(provider.script_prompts), 2)
+            self.assertEqual(provider.script_prompts[0], provider.script_prompts[1])
         finally:
             repository.close()
             temp.cleanup()
@@ -3382,10 +3409,10 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             draft_audit = next(
                 audit
                 for audit in repository.list_generation_audits(selected.story_id)
-                if audit.stage == "narrative_draft"
+                if audit.stage == "narrative_script"
                 and "Target duration: 7200 seconds" in audit.prompt_text
             )
-            draft = _validate_narrative_draft(
+            draft = _validate_narrative_script(
                 draft_audit.response,
                 repository.latest_research_pack(selected.story_id) or {},
                 target_duration_seconds=7_200,

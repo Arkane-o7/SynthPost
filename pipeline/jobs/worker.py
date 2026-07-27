@@ -271,14 +271,14 @@ def handle_visual_search(ctx: JobContext) -> dict[str, str]:
 def handle_narration_generate(ctx: JobContext) -> dict[str, str]:
     if not ctx.job.story_id:
         raise ValueError("narration job requires story_id")
-    ctx.progress(5, "loading approved script and Kokoro voice")
+    ctx.progress(5, "loading approved script and dots.tts voice profile")
     artifact = generate_narration(
         ctx.repository,
         ctx.job.story_id,
         force=bool(ctx.job.payload.get("force", False)),
         test_mode=bool(ctx.job.payload.get("test_mode", False)),
     )
-    ctx.progress(100, "sample-exact Kokoro narration ready")
+    ctx.progress(100, "sample-exact dots.tts narration ready")
     return {
         "narration_path": artifact.audio_path,
         "alignment_path": project_relative(

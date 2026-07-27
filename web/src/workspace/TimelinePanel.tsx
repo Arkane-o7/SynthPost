@@ -135,7 +135,9 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         .filter((segment) => segment.audio.mode !== "source")
         .every(
           (segment) =>
-            segment.overlays.data?.timing_source === "kokoro_exact_samples",
+            ["tts_exact_samples", "kokoro_exact_samples"].includes(
+              String(segment.overlays.data?.timing_source),
+            ),
         ),
   );
 
@@ -157,7 +159,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             }
           >
             {narrationJob
-              ? "Generating Kokoro narration…"
+              ? "Generating dots.tts narration…"
               : !narration
                 ? "Narration required"
                 : busy
@@ -169,7 +171,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               disabled={busy || !narrationEligible}
               title={
                 narrationEligible
-                  ? "Generate canonical Kokoro narration"
+                  ? "Generate canonical dots.tts narration"
                   : "Approve the latest script first"
               }
               onClick={() => act(() => api.generateNarration(storyId))}
@@ -205,12 +207,12 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         </div>
         {hasExactClock && narration && (
           <div className="validation-msg validation-success" style={{ marginBottom: 12 }}>
-            ✓ Kokoro exact clock · {narration.beats.length} beats · {formatDuration(narration.duration_seconds)} · {narration.sample_rate.toLocaleString()} Hz
+            ✓ dots.tts exact clock · {narration.beats.length} beats · {formatDuration(narration.duration_seconds)} · {narration.sample_rate.toLocaleString()} Hz
           </div>
         )}
         {narration && !hasExactClock && (
           <div className="validation-msg validation-warning" style={{ marginBottom: 12 }}>
-            ⚠ This is a legacy estimated timeline. Regenerate it to apply the current Kokoro exact clock.
+            ⚠ This is a legacy estimated timeline. Regenerate it to apply the current dots.tts exact clock.
           </div>
         )}
         <div className="row">
@@ -220,7 +222,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             title={
               narration
                 ? "Regenerate from the current exact narration"
-                : "Generate the current Kokoro narration first"
+                : "Generate the current dots.tts narration first"
             }
             onClick={() =>
               act(async () => {
@@ -238,7 +240,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               {narrationJob
                 ? "Generating narration…"
                 : narrationEligible
-                  ? "Generate Kokoro narration"
+                  ? "Generate dots.tts narration"
                   : "Approve the latest script first"}
             </button>
           )}
@@ -274,7 +276,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
             title={
               hasExactClock
                 ? "Approve this timeline and start the final production render"
-                : "Regenerate the timeline with current Kokoro narration first"
+                : "Regenerate the timeline with current dots.tts narration first"
             }
             onClick={() =>
               act(async () => {
@@ -356,7 +358,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
                     disabled={hasExactClock}
                     title={
                       hasExactClock
-                        ? "Duration comes from Kokoro's exact audio samples"
+                        ? "Duration comes from dots.tts exact audio samples"
                         : "Estimated legacy duration"
                     }
                     onChange={(e) =>
@@ -375,7 +377,7 @@ export const TimelinePanel: React.FC<{ storyId: string }> = ({ storyId }) => {
               {hasExactClock && narration && seg.audio.mode !== "source" && (
                 <div className="timeline-beat-clock" aria-label="Exact spoken beat timing">
                   <div className="timeline-beat-clock-title">
-                    Spoken beats · exact Kokoro clock
+                    Spoken beats · exact dots.tts clock
                   </div>
                   {narrationBeatsForSegment(seg, narration).map(
                     (beat, beatIndex, segmentBeats) => (
