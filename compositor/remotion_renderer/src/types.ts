@@ -1,7 +1,7 @@
 export type PublicMedia = {
   publicPath: string;
   absolutePath?: string;
-  kind: "image" | "video";
+  kind: "image" | "video" | "audio";
   remote?: boolean;
 };
 
@@ -82,6 +82,38 @@ export type HeadlineItem = {
   end?: number;
 };
 
+export type PresenterSpeechWindow = {
+  start: number;
+  speechEnd: number;
+  end: number;
+};
+
+export type PngPresenter = {
+  provider: "png_puppet";
+  characterId: string;
+  neutral: PublicMedia;
+  speaking: PublicMedia;
+  speechWindows: PresenterSpeechWindow[];
+  talkCadenceFps: number;
+  breathCycleSeconds: number;
+  breathScale: number;
+  entrySeconds: number;
+  layout: {
+    split?: {
+      width?: number;
+      scale?: number;
+      x?: number;
+      y?: number;
+    };
+    fullscreen?: {
+      width?: number;
+      scale?: number;
+      x?: number;
+      y?: number;
+    };
+  };
+};
+
 export type TimelineSegmentProps = {
   segmentId: string;
   sectionId: string;
@@ -143,6 +175,8 @@ export type StoryProps = {
   sourceDate: string;
   anchor?: PublicMedia;
   anchorChromaKey?: boolean;
+  narrationAudio?: PublicMedia;
+  presenter?: PngPresenter;
   visuals: TimedVisual[];
   points: NewsPoint[];
   logo?: PublicMedia;

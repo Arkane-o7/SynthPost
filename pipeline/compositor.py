@@ -67,6 +67,14 @@ def render_story(
     )
     if direction.get("anchor_output_path"):
         inputs.append(str(direction["anchor_output_path"]))
+    for key in (
+        "presenter_manifest_path",
+        "presenter_neutral_path",
+        "presenter_speaking_path",
+        "narration_audio_path",
+    ):
+        if direction.get(key):
+            inputs.append(str(direction[key]))
     inputs.extend(_visual_input_paths(manifest))
 
     if output_is_fresh(output_path, inputs) and not force:

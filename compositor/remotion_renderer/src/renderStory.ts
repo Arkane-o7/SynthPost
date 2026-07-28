@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import type {
   HeadlineItem,
+  PngPresenter,
   PublicMedia,
   StoryProps,
   TimedVisual,
@@ -27,6 +28,14 @@ const projectRoot = path.resolve(rendererRoot, "..", "..");
 const publicDir = path.join(rendererRoot, "public");
 
 const videoExtensions = new Set([".mp4", ".mov", ".webm", ".mkv"]);
+const audioExtensions = new Set([
+  ".wav",
+  ".mp3",
+  ".m4a",
+  ".aac",
+  ".flac",
+  ".ogg",
+]);
 const templateToCompositionId: Record<string, string> = {
   split_main: "split-main",
   signal_desk_split: "split-main",
@@ -95,6 +104,19 @@ const optionalPositiveInteger = (value: unknown): number | undefined => {
 };
 
 const isRemote = (value: string): boolean => /^https?:\/\//i.test(value);
+
+const mediaKind = (value: string): PublicMedia["kind"] => {
+  const ext = (
+    value.startsWith(".") ? value : path.extname(value)
+  ).toLowerCase();
+  if (videoExtensions.has(ext)) {
+    return "video";
+  }
+  if (audioExtensions.has(ext)) {
+    return "audio";
+  }
+  return "image";
+};
 
 const publicPathFor = (absolutePath: string): string | null => {
   const relative = path.relative(publicDir, absolutePath);
@@ -168,7 +190,7 @@ const stageMedia = async (
     const ext = path.extname(new URL(value).pathname).toLowerCase();
     return {
       publicPath: value,
-      kind: videoExtensions.has(ext) ? "video" : "image",
+      kind: mediaKind(ext),
       remote: true,
     };
   }
@@ -188,11 +210,7 @@ const stageMedia = async (
       return {
         publicPath: fallbackPublicPath,
         absolutePath: path.join(publicDir, fallbackPublicPath),
-        kind: videoExtensions.has(
-          path.extname(fallbackPublicPath).toLowerCase(),
-        )
-          ? "video"
-          : "image",
+        kind: mediaKind(fallbackPublicPath),
       };
     }
     throw new Error(`Required media was not found: ${value}`);
@@ -204,7 +222,7 @@ const stageMedia = async (
     return {
       publicPath: alreadyPublic,
       absolutePath: resolved,
-      kind: videoExtensions.has(ext) ? "video" : "image",
+      kind: mediaKind(ext),
     };
   }
 
@@ -216,7 +234,7 @@ const stageMedia = async (
   return {
     publicPath: publicPathFor(staged) ?? "",
     absolutePath: staged,
-    kind: videoExtensions.has(ext) ? "video" : "image",
+    kind: mediaKind(ext),
   };
 };
 
@@ -548,11 +566,108 @@ const main = async () => {
     : (templateToCompositionId[templateName] ?? templateName);
   const visualOnlyTemplate = compositionId === "FullScreenNewsVisuals";
 
+  const presenterProvider = String(
+    direction.presenter_provider ?? "avatar_engine",
+  );
   const anchorPath = String(direction.anchor_output_path ?? "");
   const anchor =
-    anchorPath || !visualOnlyTemplate
+    presenterProvider !== "png_puppet" && (anchorPath || !visualOnlyTemplate)
       ? await stageMedia(anchorPath, generatedDir, undefined, true)
       : undefined;
+
+  let narrationAudio: PublicMedia | undefined;
+  let presenter: PngPresenter | undefined;
+  if (presenterProvider === "png_puppet") {
+    const presenterManifestPath = String(
+      direction.presenter_manifest_path ?? "",
+    );
+    const resolvedPresenterManifest = await resolveInput(presenterManifestPath);
+    if (!resolvedPresenterManifest || isRemote(resolvedPresenterManifest)) {
+      throw new Error(
+        `PNG presenter manifest was not found: ${presenterManifestPath}`,
+      );
+    }
+    const presenterManifest =
+      await readJson<Record<string, any>>(resolvedPresenterManifest);
+    if (
+      presenterManifest.contract_version !==
+      "synthea.presenter.png_puppet.v1"
+    ) {
+      throw new Error("Unsupported PNG presenter character contract.");
+    }
+    const neutral = await stageMedia(
+      String(
+        direction.presenter_neutral_path ??
+          presenterManifest.poses?.neutral ??
+          "",
+      ),
+      generatedDir,
+      undefined,
+      true,
+    );
+    const speaking = await stageMedia(
+      String(
+        direction.presenter_speaking_path ??
+          presenterManifest.poses?.speaking ??
+          "",
+      ),
+      generatedDir,
+      undefined,
+      true,
+    );
+    if (neutral.kind !== "image" || speaking.kind !== "image") {
+      throw new Error("PNG presenter neutral and speaking poses must be images.");
+    }
+    narrationAudio = await stageMedia(
+      String(
+        direction.narration_audio_path ??
+          manifest.narration?.audio_path ??
+          "",
+      ),
+      generatedDir,
+      undefined,
+      true,
+    );
+    if (narrationAudio.kind !== "audio") {
+      throw new Error(
+        "PNG presenter requires a standalone narration audio file.",
+      );
+    }
+    const animation = presenterManifest.animation ?? {};
+    const beats = Array.isArray(manifest.narration?.beats)
+      ? manifest.narration.beats
+      : [];
+    presenter = {
+      provider: "png_puppet",
+      characterId: String(
+        presenterManifest.character_id ?? "meridian_analyst",
+      ),
+      neutral,
+      speaking,
+      speechWindows: beats
+        .map((beat: Record<string, unknown>) => ({
+          start: Number(beat.start_time),
+          speechEnd: Number(beat.speech_end_time ?? beat.end_time),
+          end: Number(beat.end_time),
+        }))
+        .filter(
+          (window: { start: number; speechEnd: number; end: number }) =>
+            Number.isFinite(window.start) &&
+            Number.isFinite(window.speechEnd) &&
+            Number.isFinite(window.end) &&
+            window.speechEnd > window.start &&
+            window.end >= window.speechEnd,
+        ),
+      talkCadenceFps: Number(animation.talk_cadence_fps ?? 7),
+      breathCycleSeconds: Number(animation.breath_cycle_seconds ?? 4.8),
+      breathScale: Number(animation.breath_scale ?? 0.006),
+      entrySeconds: Number(animation.entry_seconds ?? 0.45),
+      layout: presenterManifest.layout ?? {},
+    };
+    if (!presenter.speechWindows.length) {
+      throw new Error("PNG presenter requires exact narration beat windows.");
+    }
+  }
 
   const visuals: TimedVisual[] = [];
   const visualRecords =
@@ -693,6 +808,8 @@ const main = async () => {
     anchorChromaKey:
       String(direction.avatar_render_background ?? "").toLowerCase() ===
       "chroma_green",
+    narrationAudio,
+    presenter,
     visuals,
     timelineSegments,
     points: (manifest.points ?? []).map((point: any) => ({

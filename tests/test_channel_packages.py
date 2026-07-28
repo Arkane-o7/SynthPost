@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -69,6 +70,16 @@ class ChannelPackageTests(unittest.TestCase):
         self.assertEqual(request["voice_speed"], 0.94)
         self.assertIn("meridian.dtprofile", str(request["voice_profile_path"]))
 
+    def test_meridian_uses_png_presenter_package(self) -> None:
+        meridian = get_channel_profile("meridian")
+        production = resolved_production(meridian)
+        self.assertEqual(production["presenter_provider"], "png_puppet")
+        self.assertEqual(production["presenter_renderer"], "remotion")
+        self.assertIn(
+            "meridian/presenter/character.json",
+            production["presenter_asset_path"],
+        )
+
     def test_avatar_job_uses_manifest_presenter_package(self) -> None:
         profile = get_channel_profile("beyond")
         production = resolved_production(profile)
@@ -134,6 +145,80 @@ class ChannelPackageTests(unittest.TestCase):
                 read_manifest(manifest_path)["direction"]["presenter_profile"],
                 "external_news_presenter",
             )
+
+    def test_png_presenter_pins_character_and_exact_narration_clock(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            neutral = root / "neutral.png"
+            speaking = root / "speaking.png"
+            neutral.write_bytes(b"neutral pose")
+            speaking.write_bytes(b"speaking pose")
+            character = root / "character.json"
+            character.write_text(
+                json.dumps(
+                    {
+                        "contract_version": "synthea.presenter.png_puppet.v1",
+                        "character_id": "meridian_test",
+                        "name": "Meridian Test Analyst",
+                        "poses": {
+                            "neutral": str(neutral),
+                            "speaking": str(speaking),
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            narration = root / "narration.wav"
+            narration.write_bytes(b"narration")
+            manifest_path = root / "story.json"
+            write_manifest(
+                manifest_path,
+                {
+                    "story_id": "story_meridian",
+                    "episode_id": "episode_meridian",
+                    "channel_id": "meridian",
+                    "channel": {
+                        "production": {
+                            "presenter_provider": "png_puppet",
+                            "presenter_asset_path": str(character),
+                            "presenter_style": "meridian_editorial_analyst",
+                            "presenter_background": "transparent",
+                        }
+                    },
+                    "narration": {
+                        "audio_path": str(narration),
+                        "duration_seconds": 12.0,
+                        "timing_source": "tts_exact_samples",
+                        "beats": [
+                            {
+                                "start_time": 0.0,
+                                "speech_end_time": 11.6,
+                                "end_time": 12.0,
+                            }
+                        ],
+                    },
+                },
+            )
+            with patch(
+                "pipeline.presenters.render.ffprobe_summary",
+                return_value={
+                    "duration_seconds": 12.0,
+                    "audio_codec": "pcm_s16le",
+                },
+            ):
+                direction = render_presenter(manifest_path, render_profile="preview")
+
+            self.assertEqual(direction["presenter_provider"], "png_puppet")
+            self.assertEqual(direction["duration_source"], "canonical_narration")
+            self.assertEqual(
+                Path(direction["presenter_manifest_path"]).resolve(),
+                character.resolve(),
+            )
+            self.assertEqual(
+                Path(direction["narration_audio_path"]).resolve(),
+                narration.resolve(),
+            )
+            self.assertNotIn("anchor_output_path", direction)
 
 
 if __name__ == "__main__":

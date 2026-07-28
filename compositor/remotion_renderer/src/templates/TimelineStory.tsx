@@ -1,6 +1,7 @@
 import React from "react";
 import {
   AbsoluteFill,
+  Audio,
   Img,
   OffthreadVideo,
   Sequence,
@@ -12,6 +13,7 @@ import { AnchorPanel } from "../components/AnchorPanel";
 import { AnchorVideoLayer } from "../components/AnchorVideoLayer";
 import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
+import { MeridianPngNarrator } from "../components/MeridianPngNarrator";
 import { mediaSrc } from "../components/media";
 import { NewsVisualPanel } from "../components/NewsVisualPanel";
 import { SourceLabel } from "../components/SourceLabel";
@@ -173,6 +175,28 @@ const AnchorNarrationTrack: React.FC<{
   );
 };
 
+const PngNarrationTrack: React.FC<{
+  story: StoryProps;
+  startFrom: number;
+  enabled: boolean;
+  volume: number;
+}> = ({ story, startFrom, enabled, volume }) => {
+  if (
+    story.presenter?.provider !== "png_puppet" ||
+    !story.narrationAudio ||
+    !enabled
+  ) {
+    return null;
+  }
+  return (
+    <Audio
+      src={mediaSrc(story.narrationAudio)}
+      startFrom={startFrom}
+      volume={volume}
+    />
+  );
+};
+
 const RetainedSplitSegment: React.FC<{
   segment: TimelineSegmentProps;
   story: StoryProps;
@@ -202,12 +226,20 @@ const RetainedSplitSegment: React.FC<{
         mixBlendMode: "screen",
       }}
     />
-    <AnchorPanel
-      anchor={story.anchor}
-      chromaKey={story.anchorChromaKey}
-      muted={mutedAnchor}
-      startFrom={startFrom}
-    />
+    {story.presenter?.provider === "png_puppet" ? (
+      <MeridianPngNarrator
+        presenter={story.presenter}
+        narrationStart={segment.narrationStart ?? segment.start}
+        variant="split"
+      />
+    ) : (
+      <AnchorPanel
+        anchor={story.anchor}
+        chromaKey={story.anchorChromaKey}
+        muted={mutedAnchor}
+        startFrom={startFrom}
+      />
+    )}
     <NewsVisualPanel
       visuals={[relativeSegmentVisual(segment, visual)]}
       sourceLabel={story.sourceLabel}
@@ -290,16 +322,24 @@ const RetainedFullScreenAnchorSegment: React.FC<{
       color: brand.white,
     }}
   >
-    <AnchorVideoLayer
-      anchor={story.anchor}
-      chromaKey={story.anchorChromaKey}
-      crop={fullAnchorCrop}
-      muted={mutedAnchor}
-      startFrom={startFrom}
-      mediaFilter="saturate(0.92) contrast(1.03) brightness(0.88)"
-      overlay="linear-gradient(180deg, rgba(2,8,16,0.10) 0%, rgba(2,8,16,0.04) 44%, rgba(2,8,16,0.42) 78%, rgba(2,8,16,0.68) 100%), linear-gradient(90deg, rgba(2,8,16,0.28) 0%, transparent 26%, transparent 74%, rgba(2,8,16,0.30) 100%)"
-      style={{ left: 0, top: 0, width: "100%", height: "100%" }}
-    />
+    {story.presenter?.provider === "png_puppet" ? (
+      <MeridianPngNarrator
+        presenter={story.presenter}
+        narrationStart={segment.narrationStart ?? segment.start}
+        variant="fullscreen"
+      />
+    ) : (
+      <AnchorVideoLayer
+        anchor={story.anchor}
+        chromaKey={story.anchorChromaKey}
+        crop={fullAnchorCrop}
+        muted={mutedAnchor}
+        startFrom={startFrom}
+        mediaFilter="saturate(0.92) contrast(1.03) brightness(0.88)"
+        overlay="linear-gradient(180deg, rgba(2,8,16,0.10) 0%, rgba(2,8,16,0.04) 44%, rgba(2,8,16,0.42) 78%, rgba(2,8,16,0.68) 100%), linear-gradient(90deg, rgba(2,8,16,0.28) 0%, transparent 26%, transparent 74%, rgba(2,8,16,0.30) 100%)"
+        style={{ left: 0, top: 0, width: "100%", height: "100%" }}
+      />
+    )}
     <AbsoluteFill
       style={{
         opacity: 0.12,
@@ -818,6 +858,18 @@ const Segment: React.FC<{
               "repeating-linear-gradient(90deg, rgba(245,247,250,.08) 0 1px, transparent 1px 96px), repeating-linear-gradient(0deg, rgba(245,247,250,.04) 0 1px, transparent 1px 96px)",
             mixBlendMode: "screen",
           }}
+        />
+
+        <PngNarrationTrack
+          story={story}
+          startFrom={Math.round(
+            (segment.narrationStart ?? segment.start) * fps,
+          )}
+          enabled={
+            segment.audio?.mode !== "source" &&
+            segment.audio?.mode !== "silent"
+          }
+          volume={segment.audio?.narrationVolume ?? 1}
         />
 
         {template === "quote_card" ? (
