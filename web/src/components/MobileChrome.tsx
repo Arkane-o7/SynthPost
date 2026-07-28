@@ -1,12 +1,17 @@
 import React from "react";
 import { useStudio } from "../state/useStudio";
 import type { Page } from "./LeftRail";
+import { CHANNEL_IDS, channelPresentation } from "../channels";
 
 export const MobileChrome: React.FC<{
   setPage: (page: Page) => void;
   onOpenAttention: () => void;
 }> = ({ setPage, onOpenAttention }) => {
   const studio = useStudio();
+  const channel = channelPresentation(
+    studio.selectedChannelId,
+    studio.selectedChannelProfile,
+  );
   const episode = studio.episodes.find(
     (item) => item.episode_id === studio.selectedEpisodeId,
   );
@@ -23,13 +28,13 @@ export const MobileChrome: React.FC<{
     <>
       <header className="mobile-command-header">
         <div className="mobile-command-brand">
-          <div className="mobile-logo" aria-label="SynthPost Studio">
-            S<span>P</span>
+          <div className="mobile-logo" aria-label={`${channel.name} in Synthea Studio`}>
+            {channel.initials}
           </div>
           <div className="mobile-machine-state">
             <span className="machine-live-dot" aria-hidden="true" />
             <div>
-              <strong>{episode?.title ?? "SynthPost remote"}</strong>
+              <strong>{episode?.title ?? channel.name}</strong>
               <span>Laptop online · command link active</span>
             </div>
           </div>
@@ -53,6 +58,27 @@ export const MobileChrome: React.FC<{
         </div>
 
         <div className="mobile-context-switcher">
+          <label>
+            <span>Channel</span>
+            <select
+              aria-label="Current channel"
+              value={studio.selectedChannelId}
+              onChange={(event) =>
+                void studio.switchChannel(
+                  event.target.value as typeof studio.selectedChannelId,
+                )
+              }
+            >
+              {CHANNEL_IDS.map((channelId) => (
+                <option key={channelId} value={channelId}>
+                  {channelPresentation(
+                    channelId,
+                    studio.channels.find((item) => item.channel_id === channelId),
+                  ).name}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             <span>Project</span>
             <select

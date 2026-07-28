@@ -11,6 +11,7 @@ import { LowerThird } from "../components/LowerThird";
 import { SourceLabel } from "../components/SourceLabel";
 import { activeVisual, clampUnit } from "../components/VisualMediaLayer";
 import { VisualSkillRenderer } from "../components/visualSkills/VisualSkillRenderer";
+import {ChannelBrandFrame} from "../components/ChannelBrandFrame";
 import { brand, layout, typography } from "../styles/brand";
 import type { StoryProps, TimedVisual } from "../types";
 
@@ -42,7 +43,7 @@ export const FullScreenNewsVisuals: React.FC<StoryProps> = (props) => {
     active.kind === "video" && active.audio !== false;
 
   return (
-    <DesignCanvas background={brand.ink}>
+    <ChannelBrandFrame story={props}><DesignCanvas background={brand.ink}>
       <AbsoluteFill
         style={{
           backgroundColor: brand.ink,
@@ -160,8 +161,9 @@ export const FullScreenNewsVisuals: React.FC<StoryProps> = (props) => {
           sourceLabel={props.sourceLabel}
           sourceDate={props.sourceDate}
           logo={props.logo}
+          channelName={props.channelName}
         />
       </AbsoluteFill>
-    </DesignCanvas>
+    </DesignCanvas></ChannelBrandFrame>
   );
 };

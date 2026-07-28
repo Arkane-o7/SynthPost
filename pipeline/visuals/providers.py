@@ -19,6 +19,11 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pipeline import config
+from pipeline.channels import (
+    get_channel_profile,
+    prompt_identity,
+    visual_prompt_context,
+)
 from pipeline.llm.providers import (
     StructuredGenerationError,
     configured_provider,
@@ -1089,6 +1094,9 @@ def _validate_ai_visual_plan(
 def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
     script = repository.latest_script(story_id)
     candidate = repository.candidate_for_story(story_id)
+    channel_profile = get_channel_profile(
+        getattr(candidate, "channel_id", "synthpost")
+    )
     if not script:
         return _fallback_visual_search_plan(repository, story_id)
     if not config.get_settings().visuals.ai_query_planning:
@@ -1129,8 +1137,10 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
         ],
     }
     prompt = f"""
-You are SynthPost's visual search keyword planner.
+You are the visual search keyword planner for {channel_profile.name} inside Synthea Studio.
 Turn each narration section into a small ranked search plan for SearXNG.
+
+{visual_prompt_context(channel_profile)}
 
 For every section return 2-3 ranked image_queries and 2-3 ranked video_queries.
 - First define the concrete visual_purpose: what viewers need to understand or verify while this section is spoken.
@@ -1180,8 +1190,12 @@ INPUT JSON:
         audit_saver(GenerationAudit(
             story_id=story_id,
             stage="visual_query_planner",
-            prompt_version="synthpost.visual-query.v4",
-            charter_version=CHARTER_VERSION,
+            prompt_version=prompt_identity(channel_profile, "visual-query"),
+            charter_version=(
+                CHARTER_VERSION
+                if channel_profile.channel_id == "synthpost"
+                else f"{channel_profile.channel_id}.{channel_profile.profile_version}"
+            ),
             provider=str(latest_attempt.get("provider") or provider.name),
             model=latest_attempt.get("model"),
             prompt_text=prompt,

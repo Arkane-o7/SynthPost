@@ -2,6 +2,7 @@ import React from 'react';
 import { LeftRail, type Page } from './LeftRail';
 import { RightRail } from './RightRail';
 import { MobileChrome } from './MobileChrome';
+import { useStudio } from '../state/useStudio';
 
 /** Pages that show the right rail. */
 const RIGHT_RAIL_PAGES = new Set<Page>(['command', 'settings']);
@@ -11,6 +12,7 @@ export const AppShell: React.FC<{
   setPage: (page: Page) => void;
   children: React.ReactNode;
 }> = ({ page, setPage, children }) => {
+  const studio = useStudio();
   const showRightRail = RIGHT_RAIL_PAGES.has(page);
   const [mobileRailOpen, setMobileRailOpen] = React.useState(false);
 
@@ -19,6 +21,7 @@ export const AppShell: React.FC<{
   return (
     <div
       className={`app-shell ${showRightRail ? 'has-right-rail' : ''} ${page === 'settings' ? 'settings-modal-open' : ''}`}
+      data-channel={studio.selectedChannelId}
       aria-hidden={page === 'settings' ? true : undefined}
     >
       <MobileChrome

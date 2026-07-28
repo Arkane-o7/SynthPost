@@ -1,5 +1,5 @@
 import React from "react";
-import type { RenderJob } from "../contracts";
+import type { ChannelId, RenderJob } from "../contracts";
 
 const isRenderJob = (value: unknown): value is RenderJob =>
   typeof value === "object" &&
@@ -7,7 +7,7 @@ const isRenderJob = (value: unknown): value is RenderJob =>
   typeof (value as { job_id?: unknown }).job_id === "string" &&
   typeof (value as { status?: unknown }).status === "string";
 
-const notifyTerminalJobs = (jobs: RenderJob[]) => {
+const notifyTerminalJobs = (jobs: RenderJob[], channelName: string) => {
   if (
     localStorage.getItem("synthpost.notifications") !== "enabled" ||
     !("Notification" in window) ||
@@ -18,8 +18,8 @@ const notifyTerminalJobs = (jobs: RenderJob[]) => {
   for (const job of jobs.slice(0, 3)) {
     const title =
       job.status === "failed"
-        ? "SynthPost needs attention"
-        : "SynthPost task complete";
+        ? `${channelName} needs attention`
+        : `${channelName} task complete`;
     const options = {
       body:
         job.status === "failed"
@@ -39,6 +39,8 @@ const notifyTerminalJobs = (jobs: RenderJob[]) => {
 };
 
 export const useJobEvents = (
+  channelId: ChannelId,
+  channelName: string,
   onJobs: (jobs: RenderJob[]) => void,
   onError: (message: string) => void,
 ) => {
@@ -49,14 +51,17 @@ export const useJobEvents = (
   onErrorRef.current = onError;
 
   React.useEffect(() => {
-    const eventSource = new EventSource("/api/job-events");
+    previousJobs.current = [];
+    const eventSource = new EventSource(
+      `/api/job-events?channel_id=${encodeURIComponent(channelId)}`,
+    );
     eventSource.addEventListener("jobs", (event) => {
       try {
         const value: unknown = JSON.parse(event.data);
         if (!Array.isArray(value) || !value.every(isRenderJob)) {
           throw new Error("Job event payload did not match the RenderJob contract.");
         }
-        const jobs = value;
+        const jobs = value.filter((job) => job.channel_id === channelId);
         const terminalTransitions = jobs.filter((job) => {
           const previous = previousJobs.current.find(
             (candidate) => candidate.job_id === job.job_id,
@@ -68,7 +73,7 @@ export const useJobEvents = (
           );
         });
         previousJobs.current = jobs;
-        notifyTerminalJobs(terminalTransitions);
+        notifyTerminalJobs(terminalTransitions, channelName);
         onJobsRef.current(jobs);
       } catch (error) {
         const message =
@@ -82,5 +87,5 @@ export const useJobEvents = (
       onErrorRef.current("Live job updates disconnected; reconnecting automatically.");
     };
     return () => eventSource.close();
-  }, []);
+  }, [channelId, channelName]);
 };

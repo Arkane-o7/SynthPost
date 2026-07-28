@@ -3,12 +3,13 @@ import { AbsoluteFill } from "remotion";
 import { AnchorVideoLayer } from "../components/AnchorVideoLayer";
 import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
+import {ChannelBrandFrame} from "../components/ChannelBrandFrame";
 import { brand, fullAnchorCrop } from "../styles/brand";
 import type { StoryProps } from "../types";
 
 export const FullScreenAnchor: React.FC<StoryProps> = (props) => {
   return (
-    <DesignCanvas>
+    <ChannelBrandFrame story={props}><DesignCanvas>
       <AbsoluteFill
         style={{
           backgroundColor: brand.navy,
@@ -44,8 +45,9 @@ export const FullScreenAnchor: React.FC<StoryProps> = (props) => {
           sourceLabel={props.sourceLabel}
           sourceDate={props.sourceDate}
           logo={props.logo}
+          channelName={props.channelName}
         />
       </AbsoluteFill>
-    </DesignCanvas>
+    </DesignCanvas></ChannelBrandFrame>
   );
 };

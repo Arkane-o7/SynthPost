@@ -21,6 +21,7 @@ export const RightRail: React.FC<{
   );
   const currentEpisodeId = story?.episode_id ?? studio.selectedEpisodeId;
   const isCurrentContextJob = (job: RenderJob) => {
+    if (job.channel_id !== studio.selectedChannelId) return false;
     if (studio.selectedStoryId) {
       if (job.story_id) return job.story_id === studio.selectedStoryId;
       if (job.episode_id) return job.episode_id === currentEpisodeId;

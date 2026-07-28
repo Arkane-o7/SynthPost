@@ -1,4 +1,6 @@
 import type {
+  ChannelId,
+  ChannelProfile,
   Episode,
   GenerationAudit,
   NarrationMode,
@@ -54,14 +56,27 @@ type VisualPatch = Partial<
 export const api = {
   health: () =>
     request<{ ok: boolean; name: string; version: string }>("/api/health"),
-  templates: () => request<Array<Record<string, unknown>>>("/api/templates"),
-  editorialCharter: () => request<Record<string, unknown>>("/api/editorial/charter"),
+  templates: (channelId?: ChannelId) =>
+    request<Array<Record<string, unknown>>>(
+      `/api/templates${channelId ? `?channel_id=${encodeURIComponent(channelId)}` : ""}`,
+    ),
+  editorialCharter: (channelId?: ChannelId) =>
+    request<Record<string, unknown>>(
+      `/api/editorial/charter${channelId ? `?channel_id=${encodeURIComponent(channelId)}` : ""}`,
+    ),
+  listChannels: () => request<ChannelProfile[]>("/api/channels"),
 
-  listProjects: () => request<Project[]>("/api/projects"),
-  createProject: (title?: string) =>
+  listProjects: (channelId?: ChannelId) =>
+    request<Project[]>(
+      `/api/projects${channelId ? `?channel_id=${encodeURIComponent(channelId)}` : ""}`,
+    ),
+  createProject: (channelId: ChannelId, title?: string) =>
     request<Project>("/api/projects", {
       method: "POST",
-      body: JSON.stringify({ title: title?.trim() || undefined }),
+      body: JSON.stringify({
+        channel_id: channelId,
+        title: title?.trim() || undefined,
+      }),
     }),
   updateProject: (projectId: string, patch: ProjectPatch) =>
     request<Project>(`/api/projects/${projectId}`, {
@@ -133,6 +148,7 @@ export const api = {
   listCandidates: (
     params: {
       episodeId?: string;
+      channelId?: ChannelId;
       status?: string;
       category?: string;
       search?: string;
@@ -142,6 +158,7 @@ export const api = {
     } = {},
   ) => {
     const query = new URLSearchParams();
+    if (params.channelId) query.set("channel_id", params.channelId);
     if (params.episodeId) query.set("episode_id", params.episodeId);
     if (params.status) query.set("status", params.status);
     if (params.category) query.set("category", params.category);
@@ -396,11 +413,13 @@ export const api = {
     params: {
       storyId?: string;
       episodeId?: string;
+      channelId?: ChannelId;
       jobType?: string;
       limit?: number;
     } = {},
   ) => {
     const query = new URLSearchParams();
+    if (params.channelId) query.set("channel_id", params.channelId);
     if (params.storyId) query.set("story_id", params.storyId);
     if (params.episodeId) query.set("episode_id", params.episodeId);
     if (params.jobType) query.set("job_type", params.jobType);

@@ -4,12 +4,13 @@ import { AnchorPanel } from "../components/AnchorPanel";
 import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
 import { NewsVisualPanel } from "../components/NewsVisualPanel";
+import {ChannelBrandFrame} from "../components/ChannelBrandFrame";
 import { brand } from "../styles/brand";
 import type { StoryProps } from "../types";
 
 export const SplitMain: React.FC<StoryProps> = (props) => {
   return (
-    <DesignCanvas>
+    <ChannelBrandFrame story={props}><DesignCanvas>
       <AbsoluteFill
         style={{
           backgroundColor: brand.navy,
@@ -20,7 +21,7 @@ export const SplitMain: React.FC<StoryProps> = (props) => {
         <AbsoluteFill
           style={{
             background:
-              "linear-gradient(105deg, #020610 0%, #071B33 42%, #050A14 100%), linear-gradient(0deg, rgba(245,247,250,0.04) 1px, transparent 1px)",
+              `linear-gradient(105deg, ${brand.ink} 0%, ${brand.deepBlue} 42%, ${brand.navy} 100%), linear-gradient(0deg, rgba(245,247,250,0.04) 1px, transparent 1px)`,
             backgroundSize: "100% 100%, 96px 96px",
           }}
         />
@@ -44,8 +45,9 @@ export const SplitMain: React.FC<StoryProps> = (props) => {
           sourceLabel={props.sourceLabel}
           sourceDate={props.sourceDate}
           logo={props.logo}
+          channelName={props.channelName}
         />
       </AbsoluteFill>
-    </DesignCanvas>
+    </DesignCanvas></ChannelBrandFrame>
   );
 };

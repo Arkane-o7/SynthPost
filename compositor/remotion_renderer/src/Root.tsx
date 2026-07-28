@@ -9,6 +9,9 @@ import { TimelineStory } from "./templates/TimelineStory";
 import type { StoryProps } from "./types";
 
 const fallbackProps: StoryProps = {
+  channelId: "synthpost",
+  channelName: "SynthPost",
+  channelTagline: "Technology and culture, decoded",
   storyId: "preview",
   episodeId: "preview",
   fps: 24,
@@ -116,6 +119,36 @@ export const RemotionRoot: React.FC = () => {
         fps={24}
         durationInFrames={24 * 12}
         defaultProps={fallbackProps}
+        calculateMetadata={calculateStoryMetadata}
+      />
+      <Composition
+        id="timeline-story-synthpost"
+        component={TimelineStory}
+        width={1920}
+        height={1080}
+        fps={24}
+        durationInFrames={24 * 12}
+        defaultProps={fallbackProps}
+        calculateMetadata={calculateStoryMetadata}
+      />
+      <Composition
+        id="timeline-story-meridian"
+        component={TimelineStory}
+        width={1920}
+        height={1080}
+        fps={24}
+        durationInFrames={24 * 12}
+        defaultProps={{...fallbackProps, channelId: "meridian", channelName: "Meridian"}}
+        calculateMetadata={calculateStoryMetadata}
+      />
+      <Composition
+        id="timeline-story-beyond"
+        component={TimelineStory}
+        width={1920}
+        height={1080}
+        fps={24}
+        durationInFrames={24 * 12}
+        defaultProps={{...fallbackProps, channelId: "beyond", channelName: "Beyond"}}
         calculateMetadata={calculateStoryMetadata}
       />
     </>

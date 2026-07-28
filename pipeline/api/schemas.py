@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pipeline.channels import ChannelId, DEFAULT_CHANNEL_ID
 from pipeline.models import (
     ContentRole,
     EpisodeStatus,
@@ -22,8 +23,9 @@ class APIModel(BaseModel):
 
 class ProjectCreate(APIModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
-    default_category: str = "general"
-    default_render_profile: str = "production"
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
+    default_category: str | None = None
+    default_render_profile: str | None = None
 
 
 class ProjectPatch(APIModel):

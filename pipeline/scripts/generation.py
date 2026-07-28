@@ -7,6 +7,15 @@ from collections import defaultdict
 from typing import Any, Callable
 
 from pipeline import config
+from pipeline.channels import (
+    ChannelProfile,
+    get_channel_profile,
+    narration_format_context,
+    profile_for_story,
+    prompt_identity,
+    script_prompt_context,
+    segmentation_prompt_context,
+)
 from pipeline.llm.providers import (
     StructuredGenerationError,
     configured_provider,
@@ -1125,7 +1134,9 @@ def narrative_script_prompt(
     target_duration_seconds: int,
     primary_topic: str,
     narration_mode: NarrationMode | str,
+    channel_profile: ChannelProfile | None = None,
 ) -> str:
+    profile = channel_profile or get_channel_profile("synthpost")
     articles = source_articles_for_prompt(pack)
     if not articles:
         raise ValueError("script generation requires at least one complete source article")
@@ -1136,12 +1147,19 @@ def narrative_script_prompt(
         target_duration_seconds=target_duration_seconds,
         primary_topic=primary_topic,
     )
+    format_context = (
+        narration_prompt_context(show_format=selected_mode)
+        if profile.channel_id == "synthpost"
+        else narration_format_context(profile, selected_mode)
+    )
     return f"""
-You are SynthPost Studio's senior editorial writer. Read the supplied source
+You are {profile.name}'s senior editorial writer inside Synthea Studio. Read the supplied source
 articles, plan the story internally, and return the finished spoken narration.
 Do not return your outline, research notes, reasoning, or editorial analysis.
 
-{narration_prompt_context(show_format=selected_mode)}
+{script_prompt_context(profile)}
+
+{format_context}
 
 Write one coherent story rather than a collection of article summaries. Lead
 with the most consequential verified development, explain the necessary context
@@ -1273,15 +1291,20 @@ def narrative_segmentation_prompt(
     draft: NarrativeDraft,
     *,
     source_audio_enabled: bool,
+    channel_profile: ChannelProfile | None = None,
 ) -> str:
+    profile = channel_profile or get_channel_profile("synthpost")
     audio_rule = (
         "Use source_clip only for a verified primary-source audio interruption."
         if source_audio_enabled
         else "Return source_clip as null for every section."
     )
     return f"""
-You are SynthPost Studio's narrative segmentation editor. Group an already
-final narration into contiguous production sections without changing its words.
+You are {profile.name}'s narrative segmentation editor inside Synthea Studio.
+Group an already final narration into contiguous production sections without
+changing its words.
+
+{segmentation_prompt_context(profile)}
 
 Reference every beat_id exactly once, in its existing order, using contiguous
 groups. Never return narration text and never rewrite, duplicate, omit, or
@@ -2209,6 +2232,7 @@ def _save_generation_audit(
     prompt_version: str,
     prompt: str,
     attempts: list[dict[str, Any]],
+    charter_version: str = CHARTER_VERSION,
     normalization_events: list[dict[str, Any]] | None = None,
 ) -> None:
     latest = attempts[-1] if attempts else {}
@@ -2225,7 +2249,7 @@ def _save_generation_audit(
             story_id=story_id,
             stage=stage,
             prompt_version=prompt_version,
-            charter_version=CHARTER_VERSION,
+            charter_version=charter_version,
             provider=str(latest.get("provider") or "unknown"),
             model=latest.get("model"),
             prompt_text=prompt,
@@ -2248,6 +2272,7 @@ def _run_audited_stage(
     schema: dict[str, Any],
     validator,
     provider,
+    charter_version: str = CHARTER_VERSION,
     max_retries: int = 2,
     retry_with_original_prompt: bool = False,
     normalization_events: list[dict[str, Any]] | None = None,
@@ -2296,6 +2321,7 @@ def _run_audited_stage(
                     prompt_version=prompt_version,
                     prompt=prompt,
                     attempts=attempts,
+                    charter_version=charter_version,
                 )
                 raise StructuredGenerationError(
                     f"Structured generation failed across hosted providers: "
@@ -2310,6 +2336,7 @@ def _run_audited_stage(
                 prompt_version=prompt_version,
                 prompt=prompt,
                 attempts=attempts,
+                charter_version=charter_version,
             )
             raise
     _save_generation_audit(
@@ -2319,6 +2346,7 @@ def _run_audited_stage(
         prompt_version=prompt_version,
         prompt=prompt,
         attempts=attempts,
+        charter_version=charter_version,
         normalization_events=normalization_events,
     )
     return value, attempts
@@ -2334,6 +2362,7 @@ def _run_or_reuse_audited_stage(
     schema: dict[str, Any],
     validator,
     provider,
+    charter_version: str = CHARTER_VERSION,
     max_retries: int = 2,
     retry_with_original_prompt: bool = False,
     normalization_events: list[dict[str, Any]] | None = None,
@@ -2382,6 +2411,7 @@ def _run_or_reuse_audited_stage(
         schema=schema,
         validator=validator,
         provider=provider,
+        charter_version=charter_version,
         max_retries=max_retries,
         retry_with_original_prompt=retry_with_original_prompt,
         normalization_events=stage_normalization_events,
@@ -2477,6 +2507,16 @@ def generate_script(
     )
 
     candidate = repository.candidate_for_story(story_id)
+    channel_profile = profile_for_story(repository, story_id)
+    channel_charter_version = (
+        CHARTER_VERSION
+        if channel_profile.channel_id == "synthpost"
+        else f"{channel_profile.channel_id}.{channel_profile.profile_version}"
+    )
+    script_prompt_version = prompt_identity(channel_profile, "narrative-script")
+    segment_prompt_version = prompt_identity(
+        channel_profile, "narrative-segmentation"
+    )
     if candidate.workflow_state in {
         StoryWorkflowState.research_ready,
         StoryWorkflowState.script_review,
@@ -2489,12 +2529,13 @@ def generate_script(
         target_duration_seconds=target_duration_seconds,
         primary_topic=candidate.editorial_fit.primary_topic,
         narration_mode=selected_mode,
+        channel_profile=channel_profile,
     )
     draft, script_attempts = _run_or_reuse_audited_stage(
         repository,
         story_id=story_id,
         stage="narrative_script",
-        prompt_version=NARRATIVE_SCRIPT_PROMPT_VERSION,
+        prompt_version=script_prompt_version,
         prompt=script_prompt,
         schema=narrative_script_schema(),
         validator=lambda raw: _validate_narrative_script(
@@ -2503,6 +2544,7 @@ def generate_script(
             target_duration_seconds=target_duration_seconds,
         ),
         provider=provider,
+        charter_version=channel_charter_version,
         retry_with_original_prompt=True,
     )
 
@@ -2510,16 +2552,18 @@ def generate_script(
     segment_prompt = narrative_segmentation_prompt(
         draft,
         source_audio_enabled=config.source_audio_inserts_enabled(),
+        channel_profile=channel_profile,
     )
     segmentation, segment_attempts = _run_or_reuse_audited_stage(
         repository,
         story_id=story_id,
         stage="narrative_segmentation",
-        prompt_version=NARRATIVE_SEGMENT_PROMPT_VERSION,
+        prompt_version=segment_prompt_version,
         prompt=segment_prompt,
         schema=narrative_segmentation_schema(),
         validator=lambda raw: _validate_narrative_segmentation(raw, draft),
         provider=provider,
+        charter_version=channel_charter_version,
     )
     value = script_from_narrative(story_id, draft, segmentation, pack)
     value.narration_mode = selected_mode
@@ -2529,10 +2573,12 @@ def generate_script(
     generation_warnings = [
         f"llm_provider={provider.name}",
         f"structured_attempts={total_attempts}",
-        f"editorial_charter={CHARTER_VERSION}",
+        f"editorial_charter={channel_charter_version}",
+        f"channel={channel_profile.channel_id}",
+        f"channel_profile={channel_profile.profile_version}",
         "single_pass_narrative=true",
-        f"narrative_script_prompt={NARRATIVE_SCRIPT_PROMPT_VERSION}",
-        f"narrative_segment_prompt={NARRATIVE_SEGMENT_PROMPT_VERSION}",
+        f"narrative_script_prompt={script_prompt_version}",
+        f"narrative_segment_prompt={segment_prompt_version}",
         "narrative_quality_gate=passed",
         f"narration_mode={selected_mode.value}",
     ]

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from pipeline import config
+from pipeline.channels import get_channel_profile, resolved_production
 from pipeline.artifacts import (
     materialize_story_artifacts,
     story_manifest_path,
@@ -242,6 +243,11 @@ def build_story_manifest(
     test_mode: bool = False,
 ) -> dict[str, Any]:
     episode = repository.episode_for_story(story_id)
+    channel_id = getattr(episode, "channel_id", "synthpost")
+    channel_profile = get_channel_profile(
+        channel_id if isinstance(channel_id, str) else "synthpost"
+    )
+    production = resolved_production(channel_profile)
     candidate = repository.candidate_for_story(story_id)
     script = repository.latest_script(story_id)
     if not script or script.status != ScriptStatus.approved:
@@ -322,6 +328,13 @@ def build_story_manifest(
     ]
     manifest: dict[str, Any] = {
         "contract_version": "synthpost.v2.renderer_manifest",
+        "channel_id": channel_profile.channel_id,
+        "channel_profile_version": episode.profile_version,
+        "channel": {
+            **channel_profile.model_dump(mode="json"),
+            "profile_version": episode.profile_version,
+            "production": production,
+        },
         "story_id": story_id,
         "episode_id": episode.episode_id,
         "script": {
@@ -343,7 +356,10 @@ def build_story_manifest(
             "canonical_url": candidate.canonical_url,
         },
         "composition": {
-            "template": "timeline_story",
+            "template": production["composition_template"],
+            "template_pack": channel_profile.template_pack,
+            "template_policy": production["template_policy"],
+            "brand_pack": channel_profile.brand_pack,
             "output_path": project_relative(output_path),
             "preview_path": project_relative(preview_path),
         },
@@ -392,7 +408,12 @@ def build_story_manifest(
             inputs=list(artifacts.values()),
             render_profile=render_profile or episode.render_profile,
             test_mode=test_mode,
-            metadata={"story_id": story_id, "episode_id": episode.episode_id},
+            metadata={
+                "story_id": story_id,
+                "episode_id": episode.episode_id,
+                "channel_id": channel_profile.channel_id,
+                "channel_profile_version": episode.profile_version,
+            },
         ),
         story_id=story_id,
         episode_id=episode.episode_id,

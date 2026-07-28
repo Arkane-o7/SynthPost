@@ -117,6 +117,19 @@ export type TimelineSegmentProps = {
 };
 
 export type StoryProps = {
+  channelId?: string;
+  channelName?: string;
+  channelTagline?: string;
+  brandTheme?: {
+    navy: string;
+    deepBlue: string;
+    accent: string;
+    accentSecondary: string;
+    danger: string;
+    white: string;
+    muted: string;
+    ink: string;
+  };
   storyId: string;
   episodeId: string;
   fps: number;

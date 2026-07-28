@@ -47,20 +47,29 @@ export const ResearchScriptPanel: React.FC<{ storyId: string }> = ({
     latestConfiguredJob?.payload?.target_duration_seconds,
   );
   const latestRequestedMode = latestConfiguredJob?.payload?.narration_mode;
+  const profileDefaultDuration =
+    studio.selectedChannelProfile?.default_target_duration_seconds ?? 600;
+  const profileDefaultMode = studio.selectedChannelProfile?.default_narration_mode;
 
   React.useEffect(() => {
     if (Number.isFinite(latestRequestedDuration)) {
       setTargetDurationSeconds(
         Math.max(60, Math.min(7200, Math.round(latestRequestedDuration))),
       );
+    } else {
+      setTargetDurationSeconds(profileDefaultDuration);
     }
-  }, [latestRequestedDuration]);
+  }, [latestRequestedDuration, profileDefaultDuration, storyId]);
 
   React.useEffect(() => {
     if (isNarrationMode(latestRequestedMode)) {
       setNarrationMode(latestRequestedMode);
+    } else if (isNarrationMode(profileDefaultMode)) {
+      setNarrationMode(profileDefaultMode);
+    } else {
+      setNarrationMode("explained");
     }
-  }, [latestRequestedMode]);
+  }, [latestRequestedMode, profileDefaultMode, storyId]);
 
   const normalizedTargetDuration = Math.max(
     60,
@@ -94,7 +103,7 @@ export const ResearchScriptPanel: React.FC<{ storyId: string }> = ({
             <div className="generation-ledger-kicker">Editorial setup</div>
             <h2>Configure the research and script</h2>
             <p>
-              Choose the narration format and target runtime before SynthPost
+              Choose the narration format and target runtime before Synthea
               researches the story and writes the first draft.
             </p>
           </div>
@@ -136,7 +145,7 @@ export const ResearchScriptPanel: React.FC<{ storyId: string }> = ({
           <div className="research-script-commit">
             <p aria-live="polite">
               {activeJob
-                ? `${activeJob.stage} · SynthPost will continue from research into script generation automatically.`
+                ? `${activeJob.stage} · Synthea will continue from research into script generation automatically.`
                 : "Nothing starts until you confirm these settings."}
             </p>
             <button
@@ -233,9 +242,11 @@ export const ResearchScriptPanel: React.FC<{ storyId: string }> = ({
               Caveats ({pack.contradictions.length + pack.uncertainties.length})
             </summary>
             <ul>
-              {[...pack.contradictions, ...pack.uncertainties].map((item) => (
-                <li key={item}>{item}</li>
-              ))}
+              {[...pack.contradictions, ...pack.uncertainties].map(
+                (item, index) => (
+                  <li key={`${index}:${item}`}>{item}</li>
+                ),
+              )}
             </ul>
           </details>
         )}

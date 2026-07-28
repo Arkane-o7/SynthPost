@@ -74,8 +74,22 @@ def avatar_python() -> str:
     return sys.executable
 
 
-def avatar_renderer() -> str:
+def manifest_presenter(manifest: dict[str, Any] | None) -> dict[str, Any]:
+    channel = as_dict((manifest or {}).get("channel"))
+    production = as_dict(channel.get("production"))
+    return production
+
+
+def avatar_renderer(manifest: dict[str, Any] | None = None) -> str:
+    presenter = manifest_presenter(manifest)
+    provider = str(presenter.get("presenter_provider") or "avatar_engine")
+    if provider != "avatar_engine":
+        raise ValueError(
+            f"Presenter provider {provider!r} is not rendered by Avatar Engine"
+        )
     renderer = (
+        presenter.get("presenter_renderer")
+        or
         config.get_settings().avatar.renderer
         or config.env("AVATAR_ENGINE_RENDERER")
         or DEFAULT_BROWSER_RENDERER
@@ -102,25 +116,41 @@ def avatar_runtime(renderer: str | None) -> str:
     return "legacy_blender"
 
 
-def avatar_asset_path() -> str:
+def avatar_asset_path(manifest: dict[str, Any] | None = None) -> str:
+    presenter = manifest_presenter(manifest)
+    configured = str(presenter.get("presenter_asset_path") or "").strip()
+    if configured:
+        return configured
     return config.get_settings().avatar.asset_path.strip() or DEFAULT_AVATAR_ASSET_PATH
 
 
-def avatar_metadata_path() -> str:
+def avatar_metadata_path(manifest: dict[str, Any] | None = None) -> str:
+    presenter = manifest_presenter(manifest)
+    configured = str(presenter.get("presenter_metadata_path") or "").strip()
+    if configured:
+        return configured
     return (
         config.get_settings().avatar.metadata_path.strip()
         or DEFAULT_AVATAR_METADATA_PATH
     )
 
 
-def avatar_render_background() -> str:
+def avatar_render_background(manifest: dict[str, Any] | None = None) -> str:
+    presenter = manifest_presenter(manifest)
+    configured = str(presenter.get("presenter_background") or "").strip()
+    if configured:
+        return configured
     return (
         (config.env("SYNTHPOST_AVATAR_RENDER_BACKGROUND", DEFAULT_AVATAR_BACKGROUND) or "").strip()
         or DEFAULT_AVATAR_BACKGROUND
     )
 
 
-def avatar_body_form() -> str:
+def avatar_body_form(manifest: dict[str, Any] | None = None) -> str:
+    presenter = manifest_presenter(manifest)
+    configured = str(presenter.get("presenter_body_form") or "").strip()
+    if configured:
+        return configured
     return (
         (config.env("SYNTHPOST_AVATAR_BODY_FORM", DEFAULT_AVATAR_BODY_FORM) or "").strip()
         or DEFAULT_AVATAR_BODY_FORM
@@ -411,6 +441,8 @@ def browser_avatar_job_from_manifest(
 
     return {
         "job_id": story_id,
+        "channel_id": manifest.get("channel_id", "synthpost"),
+        "channel_profile_version": manifest.get("channel_profile_version"),
         "renderer": renderer,
         "episode_id": episode_id,
         "story_id": story_id,
@@ -425,13 +457,17 @@ def browser_avatar_job_from_manifest(
         ),
         "viseme_path": viseme_path,
         "avatar": {
-            "asset_path": avatar_asset_path(),
-            "metadata_path": avatar_metadata_path(),
-            "asset_id": Path(avatar_asset_path()).parent.name or "synthpost_anchor_v1",
-            "style": config.env("SYNTHPOST_AVATAR_STYLE", DEFAULT_AVATAR_STYLE),
+            "asset_path": avatar_asset_path(manifest),
+            "metadata_path": avatar_metadata_path(manifest),
+            "asset_id": Path(avatar_asset_path(manifest)).parent.name or "unknown_anchor",
+            "style": str(
+                manifest_presenter(manifest).get("presenter_style")
+                or config.env("SYNTHPOST_AVATAR_STYLE", DEFAULT_AVATAR_STYLE)
+            ),
             "face_type": "3d",
-            "body_form": avatar_body_form(),
+            "body_form": avatar_body_form(manifest),
             "requires_3d_lips": True,
+            "profile": manifest_presenter(manifest).get("presenter_style"),
         },
         "camera": {
             "name": camera_name,
@@ -447,7 +483,7 @@ def browser_avatar_job_from_manifest(
         },
         "camera_overrides": browser_camera_overrides(direction),
         "render": {
-            "background": avatar_render_background(),
+            "background": avatar_render_background(manifest),
             "output_path": output_path.as_posix(),
             "preview_png_path": preview_path.as_posix(),
         },
@@ -519,7 +555,7 @@ def avatar_job_from_manifest(
     render_profile: str = "production",
     renderer: str | None = None,
 ) -> dict[str, Any]:
-    selected_renderer = (renderer or avatar_renderer()).strip().lower()
+    selected_renderer = (renderer or avatar_renderer(manifest)).strip().lower()
     if selected_renderer not in SUPPORTED_RENDERERS:
         expected = ", ".join(sorted(SUPPORTED_RENDERERS))
         raise ValueError(
@@ -680,7 +716,7 @@ def build_direction(
 ) -> dict[str, Any]:
     manifest = read_manifest(story_json_path)
     profile = resolve_profile(render_profile)
-    renderer = avatar_renderer()
+    renderer = avatar_renderer(manifest)
     script_text = str(manifest.get("script", {}).get("text", "")).strip()
     if not script_text:
         raise ValueError("Cannot build direction because script.text is empty.")
@@ -830,10 +866,11 @@ def require_browser_avatar_assets(job: dict[str, Any], engine_dir: Path) -> None
     if missing:
         details = "\n".join(f"  - {item}" for item in missing)
         raise FileNotFoundError(
-            "Avatar-Engine browser renderer prerequisites are missing:\n"
+            f"{str(job.get('channel_id') or 'channel').title()} presenter assets are missing:\n"
             f"{details}\n"
-            "Provide the CC4/Reallusion GLB (normally avatar-engine/assets/avatars/synthpost_anchor_v1/anchor.glb), "
-            "or run with SYNTHPOST_AVATAR_RENDERER=blender for the legacy Blender path, or use --skip-avatar-render."
+            "Configure that channel's SYNTHEA_<CHANNEL>_PRESENTER_ASSET_PATH and "
+            "SYNTHEA_<CHANNEL>_PRESENTER_META_PATH, select the video_file presenter provider, "
+            "or use --skip-avatar-render for a non-production test."
         )
 
 
@@ -1444,7 +1481,7 @@ def run_avatar_engine(
     profile = resolve_profile(render_profile)
     voice = as_dict(direction.get("voice"))
     renderer = (
-        str(direction.get("avatar_renderer") or avatar_renderer()).strip().lower()
+        str(direction.get("avatar_renderer") or avatar_renderer(manifest)).strip().lower()
     )
 
     if is_browser_renderer(renderer):
@@ -1493,7 +1530,7 @@ def run(
         output_path = resolve_project_path(direction.get("anchor_output_path", ""))
         voice = as_dict(direction.get("voice"))
         renderer = (
-            str(direction.get("avatar_renderer") or avatar_renderer()).strip().lower()
+            str(direction.get("avatar_renderer") or avatar_renderer(read_manifest(story_json_path))).strip().lower()
         )
         metadata = {
             "avatar_renderer": renderer,

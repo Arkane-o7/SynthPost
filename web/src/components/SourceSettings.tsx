@@ -3,6 +3,7 @@ import { api } from '../api/client';
 import { useStudio } from '../state/useStudio';
 import { StatusBadge } from '../components/StatusBadge';
 import { relativeTime } from '../lib/formatters';
+import { channelPresentation } from '../channels';
 
 export const SourceSettings: React.FC = () => {
   const studio = useStudio();
@@ -11,6 +12,18 @@ export const SourceSettings: React.FC = () => {
   const [category, setCategory] = React.useState('technology');
   const [busy, setBusy] = React.useState(false);
   const [testResults, setTestResults] = React.useState<Record<string, string>>({});
+  const channel = channelPresentation(
+    studio.selectedChannelId,
+    studio.selectedChannelProfile,
+  );
+
+  React.useEffect(() => {
+    const profile = (studio.selectedChannelProfile ?? {}) as Partial<{
+      default_category: string;
+    }>;
+    setCategory(profile.default_category || 'technology');
+    setTestResults({});
+  }, [studio.selectedChannelId, studio.selectedChannelProfile]);
 
   const act = async (fn: () => Promise<unknown>) => {
     try {
@@ -37,7 +50,7 @@ export const SourceSettings: React.FC = () => {
           <div className="topbar-kicker">Discovery configuration</div>
           <h2>News Sources</h2>
           <p>
-            Manage the RSS and Atom feeds used to discover story candidates.
+            Manage the shared RSS and Atom feeds available to {channel.name}'s discovery desk.
           </p>
         </div>
         <StatusBadge tone="neutral">

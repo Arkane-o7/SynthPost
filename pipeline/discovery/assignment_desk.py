@@ -9,6 +9,7 @@ from difflib import SequenceMatcher
 from typing import Any
 
 from pipeline import config
+from pipeline.channels import get_channel_profile
 from pipeline.llm.providers import configured_provider, structured_generate
 from pipeline.models import StoryCandidate, StorySelectionStatus
 
@@ -271,6 +272,10 @@ def apply_assignment_desk(
 ) -> list[StoryCandidate]:
     if not candidates:
         return []
+    channel_id = candidates[0].channel_id
+    if any(candidate.channel_id != channel_id for candidate in candidates):
+        raise ValueError("assignment desk candidates must belong to one channel")
+    channel_profile = get_channel_profile(channel_id)
     sources = {source.source_id: source for source in repository.list_sources()}
     clusters = cluster_candidates(
         candidates,
@@ -308,7 +313,14 @@ def apply_assignment_desk(
             StorySelectionStatus.duplicate,
         }:
             leader.selection_status = StorySelectionStatus.suggested
-        impact, impact_confidence = india_impact_hypothesis(leader)
+        if channel_id == "synthpost":
+            impact, impact_confidence = india_impact_hypothesis(leader)
+        else:
+            impact = (
+                f"The development fits {channel_profile.name}'s focus on "
+                f"{channel_profile.editorial_focus.casefold()}"
+            )
+            impact_confidence = leader.editorial_fit.score
         leader.editorial_fit.india_impact = impact
         leader.editorial_fit.india_impact_confidence = impact_confidence
         leader.editorial_fit.india_relevance = impact_confidence
@@ -334,7 +346,10 @@ def apply_assignment_desk(
             leader.assignment_lane = "rejected"
         elif score >= 0.57 and impact_confidence >= 0.3:
             leader.assignment_lane = "recommended"
-        elif "system_change" in leader.editorial_fit.matched_criteria:
+        elif (
+            "system_change" in leader.editorial_fit.matched_criteria
+            or "channel_subject" in leader.editorial_fit.matched_criteria
+        ):
             leader.assignment_lane = "global_watch"
         else:
             leader.assignment_lane = "rejected"
@@ -344,12 +359,16 @@ def apply_assignment_desk(
             f"{leader.cluster_size} article(s) from {len(source_names)} source(s); "
             f"development {round(development * 100)}%, evidence {round(evidence * 100)}%."
         )
-        leader.recommended_format = _recommended_format(leader)
+        leader.recommended_format = (
+            _recommended_format(leader)
+            if channel_id == "synthpost"
+            else channel_profile.default_narration_mode
+        )
         leader.editorial_fit.eligible = leader.assignment_lane == "recommended"
         leaders.append(leader)
 
     assessments: dict[str, dict[str, Any]] = {}
-    if use_ai:
+    if use_ai and channel_id == "synthpost":
         try:
             assessments = _ai_assess(
                 sorted(leaders, key=lambda item: item.final_score, reverse=True)
@@ -409,4 +428,17 @@ def rebuild_assignment_desk(repository, *, use_ai: bool = False) -> list[StoryCa
             StorySelectionStatus.expired,
         }
     ]
-    return apply_assignment_desk(repository, candidates, use_ai=use_ai)
+    ranked: list[StoryCandidate] = []
+    for channel_id in sorted({candidate.channel_id for candidate in candidates}):
+        ranked.extend(
+            apply_assignment_desk(
+                repository,
+                [
+                    candidate
+                    for candidate in candidates
+                    if candidate.channel_id == channel_id
+                ],
+                use_ai=use_ai,
+            )
+        )
+    return sorted(ranked, key=lambda item: item.final_score, reverse=True)

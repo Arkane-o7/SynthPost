@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import config
+from ..channels import ChannelProfile, get_channel_profile, resolved_production
 from ..models import (
     ArtifactRecord,
     NarrationArtifact,
@@ -102,8 +103,19 @@ def _units(script: ScriptDocument) -> list[NarrationUnit]:
     return units
 
 
-def _request(script: ScriptDocument, *, test_mode: bool) -> dict[str, Any]:
+def _request(
+    script: ScriptDocument,
+    channel_profile: ChannelProfile,
+    *,
+    test_mode: bool,
+) -> dict[str, Any]:
     settings = config.get_settings().narration
+    production = resolved_production(channel_profile)
+    if production["narrator_provider"] != "dots_tts":
+        raise ValueError(
+            f"Unsupported narrator provider {production['narrator_provider']!r} "
+            f"for {channel_profile.name}; expected 'dots_tts'"
+        )
     units = _units(script)
     request_units: list[dict[str, Any]] = []
     for index, unit in enumerate(units):
@@ -125,19 +137,37 @@ def _request(script: ScriptDocument, *, test_mode: bool) -> dict[str, Any]:
             }
         )
     return {
-        "contract_version": "synthpost.narration.request.v1",
+        "contract_version": "synthea.narration.request.v2",
+        "channel_id": channel_profile.channel_id,
+        "channel_profile_version": channel_profile.profile_version,
         "script_id": script.script_id,
         "script_version": script.version,
         "provider": "dots_tts",
         "model_path": str(resolve_project_path(settings.model_path)),
-        "model_name": settings.model_name,
-        "voice_id": settings.voice_id,
-        "voice_profile_path": _configured_path(settings.voice_profile_path),
-        "voice_profile_hash": _path_fingerprint(settings.voice_profile_path),
-        "reference_audio_path": _configured_path(settings.reference_audio_path),
-        "reference_audio_hash": _path_fingerprint(settings.reference_audio_path),
-        "reference_text": settings.reference_text,
-        "voice_speed": settings.voice_speed,
+        "model_name": production["narrator_model_name"] or settings.model_name,
+        "voice_id": production["narrator_voice_id"],
+        "voice_profile_path": _configured_path(
+            Path(production["narrator_voice_profile_path"])
+            if production["narrator_voice_profile_path"]
+            else None
+        ),
+        "voice_profile_hash": _path_fingerprint(
+            Path(production["narrator_voice_profile_path"])
+            if production["narrator_voice_profile_path"]
+            else None
+        ),
+        "reference_audio_path": _configured_path(
+            Path(production["narrator_reference_audio_path"])
+            if production["narrator_reference_audio_path"]
+            else None
+        ),
+        "reference_audio_hash": _path_fingerprint(
+            Path(production["narrator_reference_audio_path"])
+            if production["narrator_reference_audio_path"]
+            else None
+        ),
+        "reference_text": production["narrator_reference_text"],
+        "voice_speed": production["narrator_voice_speed"],
         "language_code": settings.language_code,
         "num_steps": settings.num_steps,
         "guidance_scale": settings.guidance_scale,
@@ -216,7 +246,27 @@ def generate_narration(
             "Approve the latest script before generating its dots.tts narration."
         )
     episode = repository.episode_for_story(story_id)
-    request = _request(script, test_mode=test_mode)
+    channel_profile = get_channel_profile(episode.channel_id)
+    request = _request(script, channel_profile, test_mode=test_mode)
+    if not test_mode:
+        profile_path = request.get("voice_profile_path")
+        reference_path = request.get("reference_audio_path")
+        reference_text = str(request.get("reference_text") or "").strip()
+        if profile_path and not Path(str(profile_path)).is_file():
+            raise FileNotFoundError(
+                f"{channel_profile.name} narrator profile is missing: {profile_path}. "
+                f"Configure SYNTHEA_{channel_profile.channel_id.upper()}_TTS_VOICE_PROFILE_PATH."
+            )
+        if not profile_path and (
+            not reference_path
+            or not Path(str(reference_path)).is_file()
+            or not reference_text
+        ):
+            raise RuntimeError(
+                f"{channel_profile.name} has no configured narrator. Set either "
+                f"SYNTHEA_{channel_profile.channel_id.upper()}_TTS_VOICE_PROFILE_PATH, "
+                "or its TTS_REFERENCE_AUDIO and TTS_REFERENCE_TEXT values."
+            )
     expected_hash = _input_hash(request)
     artifact_path = narration_artifact_path(
         episode.episode_id, story_id, script.version
@@ -288,6 +338,8 @@ def generate_narration(
         os.replace(temp_audio, audio_path)
 
     artifact = NarrationArtifact(
+        channel_id=channel_profile.channel_id,
+        channel_profile_version=channel_profile.profile_version,
         story_id=story_id,
         episode_id=episode.episode_id,
         script_id=script.script_id,
@@ -328,6 +380,9 @@ def generate_narration(
                 metadata={
                     "story_id": story_id,
                     "episode_id": episode.episode_id,
+                    "channel_id": channel_profile.channel_id,
+                    "channel_profile_version": channel_profile.profile_version,
+                    "voice_id": request["voice_id"],
                     "script_id": script.script_id,
                     "script_version": script.version,
                     "input_hash": expected_hash,
@@ -358,7 +413,10 @@ def load_narration_artifact(
             )
         return None
     artifact = NarrationArtifact.model_validate(read_manifest(path))
-    expected_hash = _input_hash(_request(script, test_mode=False))
+    channel_profile = get_channel_profile(episode.channel_id)
+    expected_hash = _input_hash(
+        _request(script, channel_profile, test_mode=False)
+    )
     current = (
         artifact.script_id == script.script_id
         and artifact.script_version == script.version

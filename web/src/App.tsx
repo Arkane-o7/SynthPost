@@ -24,7 +24,7 @@ const Main: React.FC = () => {
         </div>
       ) : (
         <>
-          <CommandCenter />
+          <CommandCenter key={studio.selectedChannelId} />
           {page === "settings" && (
             <SettingsModal onClose={() => setPage("command")} />
           )}

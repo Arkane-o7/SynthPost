@@ -1,7 +1,12 @@
 import React from "react";
+import {Img, staticFile} from "remotion";
 import { brand, typography } from "../styles/brand";
+import type {PublicMedia} from "../types";
 
-export const LogoBug: React.FC = () => {
+export const LogoBug: React.FC<{
+  channelName?: string;
+  logo?: PublicMedia;
+}> = ({channelName = "SynthPost", logo}) => {
   return (
     <div
       style={{
@@ -13,7 +18,10 @@ export const LogoBug: React.FC = () => {
         borderRight: "1px solid rgba(245,247,250,0.34)",
       }}
     >
-      <div
+      {logo ? <Img
+        src={logo.remote ? logo.publicPath : staticFile(logo.publicPath)}
+        style={{maxWidth: 300, maxHeight: 112, objectFit: "contain", objectPosition: "left center"}}
+      /> : <div
         style={{
           fontFamily: typography.serif,
           fontSize: 68,
@@ -23,8 +31,8 @@ export const LogoBug: React.FC = () => {
           textShadow: "0 8px 30px rgba(0,0,0,0.38)",
         }}
       >
-        Synthpost<span style={{ color: brand.signalBlue }}>.</span>
-      </div>
+        {channelName}<span style={{ color: brand.signalBlue }}>.</span>
+      </div>}
     </div>
   );
 };

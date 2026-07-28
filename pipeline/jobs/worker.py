@@ -300,7 +300,7 @@ def handle_timeline_generate(ctx: JobContext) -> dict[str, str]:
 
 
 def handle_render_avatar(ctx: JobContext) -> dict[str, str]:
-    from pipeline.direction import avatar
+    from pipeline.presenters import render_presenter
 
     if not ctx.job.story_id:
         raise ValueError("render avatar job requires story_id")
@@ -318,7 +318,7 @@ def handle_render_avatar(ctx: JobContext) -> dict[str, str]:
     episode = ctx.repository.episode_for_story(ctx.job.story_id)
     manifest_path = story_manifest_path(episode.episode_id, ctx.job.story_id)
     ctx.progress(25, "invoking Avatar Engine")
-    direction = avatar.run(
+    direction = render_presenter(
         manifest_path,
         force=force,
         render=True,

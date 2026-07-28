@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Response
 from fastapi.responses import StreamingResponse
 
+from pipeline.channels import ChannelId
 from pipeline.db.repository import get_repository
 from pipeline.jobs.policy import default_max_attempts
 from pipeline.models import JobStatus, StoryWorkflowState
@@ -23,6 +24,7 @@ def public_job(job) -> dict[str, Any]:
 
 @router.get("/jobs")
 def list_jobs(
+    channel_id: ChannelId | None = None,
     story_id: str | None = None,
     episode_id: str | None = None,
     job_type: str | None = None,
@@ -34,6 +36,7 @@ def list_jobs(
             public_job(job)
             for job in repository.list_jobs(
                 max(1, min(limit, 500)),
+                channel_id=channel_id,
                 story_id=story_id,
                 episode_id=episode_id,
                 job_type=job_type,
@@ -181,7 +184,7 @@ def job_logs(job_id: str) -> Response:
 
 
 @router.get("/job-events")
-def job_events() -> StreamingResponse:
+def job_events(channel_id: ChannelId | None = None) -> StreamingResponse:
     def stream():
         last = ""
         while True:
@@ -189,7 +192,9 @@ def job_events() -> StreamingResponse:
             try:
                 payload = [
                     public_job(job)
-                    for job in repository.list_jobs(limit=50)
+                    for job in repository.list_jobs(
+                        limit=50, channel_id=channel_id
+                    )
                 ]
             finally:
                 repository.close()

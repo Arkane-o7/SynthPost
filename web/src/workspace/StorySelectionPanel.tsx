@@ -23,6 +23,9 @@ export const StorySelectionPanel: React.FC = () => {
   const [statusFilter, setStatusFilter] = React.useState("");
   const [deskFilter, setDeskFilter] = React.useState<DeskFilter>("all");
   const [busy, setBusy] = React.useState(false);
+  const discoveryCategory = studio.projects.find(
+    (project) => project.project_id === studio.selectedProjectId,
+  )?.default_category;
   const episodeDiscoveryJobs = studio.jobs.filter(
     (job) =>
       job.job_type === "discovery" &&
@@ -87,12 +90,13 @@ export const StorySelectionPanel: React.FC = () => {
       return;
     }
     autoStartedEpisodes.current.add(episodeId);
-    void act(() => api.startDiscovery(episodeId));
+    void act(() => api.startDiscovery(episodeId, discoveryCategory));
   }, [
     studio.selectedEpisodeId,
     studio.candidates.length,
     activeDiscovery,
     hasDiscoveryAttempt,
+    discoveryCategory,
   ]);
 
   const selectForEpisode = async (
@@ -173,7 +177,10 @@ export const StorySelectionPanel: React.FC = () => {
           disabled={busy || Boolean(activeDiscovery)}
           onClick={() =>
             void act(() =>
-              api.startDiscovery(studio.selectedEpisodeId || undefined),
+              api.startDiscovery(
+                studio.selectedEpisodeId || undefined,
+                discoveryCategory,
+              ),
             )
           }
         >
@@ -206,7 +213,7 @@ export const StorySelectionPanel: React.FC = () => {
               title={activeDiscovery ? "Finding current stories…" : "No story candidates"}
               description={
                 activeDiscovery
-                  ? "SynthPost is scanning the enabled feeds, identifying genuinely new entries, and ranking the strongest candidates for this episode."
+                  ? "Synthea is scanning this channel's enabled feeds, identifying genuinely new entries, and ranking the strongest candidates for this episode."
                   : "Refresh discovery to pull stories from your RSS sources, or switch to the 'Add Custom' tab to enter a story manually."
               }
             />
@@ -363,7 +370,7 @@ export const StorySelectionPanel: React.FC = () => {
           <div className="card stack">
             <h2>Custom Topic</h2>
             <p className="text-muted" style={{ fontSize: 13 }}>
-              Add a topic headline. SynthPost will try to find sources
+              Add a topic headline. Synthea will try to find sources
               automatically.
             </p>
             <input
@@ -392,7 +399,7 @@ export const StorySelectionPanel: React.FC = () => {
           <div className="card stack">
             <h2>Custom URL</h2>
             <p className="text-muted" style={{ fontSize: 13 }}>
-              Provide a direct URL to a news article. SynthPost will scrape and
+              Provide a direct URL to a news article. Synthea will scrape and
               analyze it.
             </p>
             <input

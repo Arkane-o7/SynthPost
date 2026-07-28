@@ -13,7 +13,7 @@ class StudioErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: unknown) {
-    console.error('SynthPost Studio render failed', error);
+    console.error('Synthea Studio render failed', error);
   }
 
   render() {
@@ -25,7 +25,7 @@ class StudioErrorBoundary extends React.Component<
           <span className="studio-crash-kicker">Studio recovery</span>
           <h1>This screen could not be displayed</h1>
           <p>
-            SynthPost hit an interface error. Reload to reconnect without
+            Synthea hit an interface error. Reload to reconnect without
             changing any episode or render data.
           </p>
           <button type="button" onClick={() => window.location.reload()}>

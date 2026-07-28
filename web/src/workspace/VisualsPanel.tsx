@@ -611,7 +611,7 @@ export const VisualsPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         <div className="text-muted" style={{ fontSize: 12, marginBottom: 12 }}>
           Episode media inbox: <code>{localFolder || "Loading…"}</code>
           <br />Only files placed in this project and episode are scanned.
-          <br />Visual approval is optional: SynthPost automatically uses the most relevant
+          <br />Visual approval is optional: Synthea automatically uses the most relevant
           renderable candidate per section. Approving a visual overrides and pins that choice.
         </div>
         <div className="row">

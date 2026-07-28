@@ -12,6 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pipeline import config
+from pipeline.channels import (
+    ChannelId,
+    get_channel_profile,
+    list_channel_profiles,
+    resolved_production,
+)
 from pipeline.api.schemas import (
     CandidateAction,
     CustomTopic,
@@ -90,7 +96,7 @@ from pipeline.visuals.providers import (
     update_visual,
 )
 
-app = FastAPI(title="SynthPost Studio API", version="2.0.0")
+app = FastAPI(title="Synthea Studio API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -291,7 +297,7 @@ def health() -> dict[str, Any]:
     jobs = config.get_settings().jobs
     return {
         "ok": True,
-        "name": "SynthPost Studio",
+        "name": "Synthea Studio",
         "version": "2.0.0",
         "worker_capacity": {
             "editorial": jobs.editorial_workers,
@@ -306,17 +312,28 @@ def templates() -> list[dict[str, Any]]:
     return template_registry_json()
 
 
+@app.get("/api/channels")
+def channels() -> list[dict[str, object]]:
+    values = []
+    for profile in list_channel_profiles():
+        value = profile.model_dump()
+        value["production"] = resolved_production(profile)
+        values.append(value)
+    return values
+
+
 @app.get("/api/editorial/charter")
 def editorial_charter() -> dict[str, Any]:
     return load_editorial_charter()
 
 
 @app.get("/api/projects")
-def list_projects() -> list[dict[str, Any]]:
+def list_projects(channel_id: ChannelId | None = None) -> list[dict[str, Any]]:
     repository = repo()
     try:
         return [
-            project.model_dump(mode="json") for project in repository.list_projects()
+            project.model_dump(mode="json")
+            for project in repository.list_projects(channel_id=channel_id)
         ]
     finally:
         repository.close()
@@ -326,10 +343,16 @@ def list_projects() -> list[dict[str, Any]]:
 def create_project(payload: ProjectCreate) -> dict[str, Any]:
     repository = repo()
     try:
+        profile = get_channel_profile(payload.channel_id)
         project = repository.create_project(
             payload.title,
-            default_category=payload.default_category,
-            default_render_profile=payload.default_render_profile,
+            channel_id=payload.channel_id,
+            default_category=(
+                payload.default_category or profile.default_category
+            ),
+            default_render_profile=(
+                payload.default_render_profile or profile.default_render_profile
+            ),
         )
         return project.model_dump(mode="json")
     finally:
@@ -377,12 +400,17 @@ def delete_project(project_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/episodes")
-def list_episodes(project_id: str | None = None) -> list[dict[str, Any]]:
+def list_episodes(
+    project_id: str | None = None,
+    channel_id: ChannelId | None = None,
+) -> list[dict[str, Any]]:
     repository = repo()
     try:
         return [
             episode.model_dump(mode="json")
-            for episode in repository.list_episodes(project_id)
+            for episode in repository.list_episodes(
+                project_id, channel_id=channel_id
+            )
         ]
     finally:
         repository.close()
@@ -509,6 +537,7 @@ def start_discovery(payload: DiscoveryStart) -> dict[str, Any]:
 
 @app.get("/api/discovery/candidates")
 def list_candidates(
+    channel_id: ChannelId | None = None,
     episode_id: str | None = None,
     status: StorySelectionStatus | None = None,
     category: str | None = None,
@@ -520,6 +549,7 @@ def list_candidates(
     repository = repo()
     try:
         candidates = repository.list_candidates(
+            channel_id=channel_id,
             episode_id=episode_id,
             status=status,
             category=category,

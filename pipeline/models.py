@@ -13,6 +13,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from pipeline.channels import ChannelId, DEFAULT_CHANNEL_ID
 from pipeline.scripts.text import (
     narration_beats,
     normalize_section_headline_cues,
@@ -183,6 +184,8 @@ def queue_lane_for_job_type(job_type: str) -> JobQueueLane:
 
 class Project(StrictModel):
     project_id: str = Field(default_factory=lambda: new_id("proj"))
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
+    profile_version: str = "1.0.0"
     title: str
     pinned: bool = False
     created_at: str = Field(default_factory=now_iso)
@@ -195,6 +198,8 @@ class Project(StrictModel):
 class Episode(StrictModel):
     episode_id: str = Field(default_factory=lambda: new_id("ep"))
     project_id: str
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
+    profile_version: str = "1.0.0"
     title: str
     pinned: bool = False
     story_ids: list[str] = Field(default_factory=list)
@@ -260,6 +265,7 @@ class EditorialFitAssessment(StrictModel):
 
 class StoryCandidate(StrictModel):
     candidate_id: str = Field(default_factory=lambda: new_id("cand"))
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
     title: str
     canonical_url: str | None = None
     source_id: str | None = None
@@ -666,6 +672,8 @@ class NarrationArtifact(StrictModel):
     """Canonical local narration audio and its exact beat-level clock."""
 
     contract_version: Literal["synthpost.narration.v1"] = "synthpost.narration.v1"
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
+    channel_profile_version: str = "1.0.0"
     story_id: str
     episode_id: str
     script_id: str
@@ -905,6 +913,7 @@ class TimelinePlan(StrictModel):
 
 class RenderJob(StrictModel):
     job_id: str = Field(default_factory=lambda: new_id("job"))
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
     episode_id: str | None = None
     story_id: str | None = None
     job_type: str

@@ -18,6 +18,7 @@ import { SourceLabel } from "../components/SourceLabel";
 import { VisualMediaLayer } from "../components/VisualMediaLayer";
 import { getTemplateDefinition } from "../registry/templates";
 import { brand, fullAnchorCrop, layout, typography } from "../styles/brand";
+import {ChannelBrandFrame} from "../components/ChannelBrandFrame";
 import type {
   HeadlineItem,
   StoryProps,
@@ -189,7 +190,7 @@ const RetainedSplitSegment: React.FC<{
     <AbsoluteFill
       style={{
         background:
-          "linear-gradient(105deg, #020610 0%, #071B33 42%, #050A14 100%), linear-gradient(0deg, rgba(245,247,250,0.04) 1px, transparent 1px)",
+          `linear-gradient(105deg, ${brand.ink} 0%, ${brand.deepBlue} 42%, ${brand.navy} 100%), linear-gradient(0deg, rgba(245,247,250,0.04) 1px, transparent 1px)`,
         backgroundSize: "100% 100%, 96px 96px",
       }}
     />
@@ -423,7 +424,7 @@ const QuoteCard: React.FC<{
     <AbsoluteFill
       style={{
         background:
-          "radial-gradient(circle at 78% 38%, rgba(7,27,51,.48), transparent 34%), radial-gradient(circle at 42% 112%, rgba(7,27,51,.72), transparent 55%), linear-gradient(112deg, #020610 0%, #050A14 54%, #040b16 100%)",
+          `radial-gradient(circle at 78% 38%, color-mix(in srgb, ${brand.deepBlue} 48%, transparent), transparent 34%), linear-gradient(112deg, ${brand.ink} 0%, ${brand.navy} 54%, ${brand.deepBlue} 100%)`,
         color: brand.white,
         overflow: "hidden",
         isolation: "isolate",
@@ -501,8 +502,8 @@ const QuoteCard: React.FC<{
             height: 640,
             zIndex: 4,
             opacity: 0.34,
-            backgroundImage:
-              "radial-gradient(circle, #1F7BFF 0 2.3px, transparent 2.6px)",
+              backgroundImage:
+              `radial-gradient(circle, ${brand.signalBlue} 0 2.3px, transparent 2.6px)`,
             backgroundSize: "17px 17px",
             maskImage: "radial-gradient(ellipse, #000 0 22%, transparent 72%)",
             mixBlendMode: "screen",
@@ -564,8 +565,7 @@ const QuoteCard: React.FC<{
                       position: "absolute",
                       inset: "7px 0 3px 0",
                       zIndex: 1,
-                      background:
-                        "linear-gradient(90deg, rgba(255,216,74,.92), #FFD84A 53%, rgba(255,216,74,.92))",
+                        background: brand.yellow,
                       transform: `scaleX(${highlightReveal})`,
                       transformOrigin: "left",
                       boxShadow: "0 0 36px rgba(255,216,74,.12)",
@@ -803,10 +803,10 @@ const Segment: React.FC<{
   };
 
   return (
-    <DesignCanvas background="linear-gradient(115deg, #020610, #07182c 52%, #04070d)">
+    <DesignCanvas background={`linear-gradient(115deg, ${brand.ink}, ${brand.deepBlue} 52%, ${brand.navy})`}>
       <AbsoluteFill
         style={{
-          background: "linear-gradient(115deg, #020610, #07182c 52%, #04070d)",
+          background: `linear-gradient(115deg, ${brand.ink}, ${brand.deepBlue} 52%, ${brand.navy})`,
           color: brand.white,
           overflow: "hidden",
         }}
@@ -895,10 +895,10 @@ export const TimelineStory: React.FC<StoryProps> = (props) => {
       ? props.timelineSegments
       : [];
   if (!segments.length) {
-    return <AbsoluteFill style={{ background: brand.navy }} />;
+    return <ChannelBrandFrame story={props}><AbsoluteFill style={{ background: brand.navy }} /></ChannelBrandFrame>;
   }
   return (
-    <AbsoluteFill style={{ background: brand.navy }}>
+    <ChannelBrandFrame story={props}><AbsoluteFill style={{ background: brand.navy }}>
       {segments.map((segment) => {
         const startFrame = Math.round(segment.start * fps);
         const endFrame = Math.round(segment.end * fps);
@@ -927,9 +927,10 @@ export const TimelineStory: React.FC<StoryProps> = (props) => {
             sourceLabel={props.sourceLabel}
             sourceDate={props.sourceDate}
             logo={props.logo}
+            channelName={props.channelName}
           />
         </DesignCanvas>
       </div>
-    </AbsoluteFill>
+    </AbsoluteFill></ChannelBrandFrame>
   );
 };

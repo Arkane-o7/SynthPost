@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 import feedparser
 
 from pipeline import config
+from pipeline.channels import ChannelId, get_channel_profile
 from pipeline.models import (
     SourceDefinition,
     SourceType,
@@ -177,6 +178,7 @@ def score_candidate(
     summary: str,
     published_at: str | None,
     duplicate_seen: bool = False,
+    channel_id: ChannelId = "synthpost",
 ) -> tuple[StoryScores, float, list[str]]:
     text = f"{title} {summary}".lower()
     importance_terms = [
@@ -242,7 +244,7 @@ def score_candidate(
     signal_score = sum(
         getattr(scores, key) * weight for key, weight in weights.items()
     )
-    editorial_fit = assess_editorial_fit(source, title, summary)
+    editorial_fit = assess_editorial_fit(source, title, summary, channel_id)
     priority = max(0.0, min(1.0, source.priority / 100.0))
     final = signal_score * 0.29 + editorial_fit.score * 0.66 + priority * 0.05
     if not editorial_fit.eligible:
@@ -330,7 +332,11 @@ def fetch_feed(url: str, *, timeout: float = 12.0, max_age_seconds: int = 900) -
 
 
 def candidate_from_feed_entry(
-    source: SourceDefinition, entry: Any, *, seen_groups: set[str]
+    source: SourceDefinition,
+    entry: Any,
+    *,
+    seen_groups: set[str],
+    channel_id: ChannelId = "synthpost",
 ) -> StoryCandidate | None:
     title = html.unescape(str(getattr(entry, "title", "") or "")).strip()
     if not title:
@@ -347,9 +353,9 @@ def candidate_from_feed_entry(
     duplicate_seen = group in seen_groups
     seen_groups.add(group)
     scores, final_score, reasons = score_candidate(
-        source, title, summary, published_at, duplicate_seen
+        source, title, summary, published_at, duplicate_seen, channel_id
     )
-    editorial_fit = assess_editorial_fit(source, title, summary)
+    editorial_fit = assess_editorial_fit(source, title, summary, channel_id)
     thumbnail_url = None
     media_thumbnail = getattr(entry, "media_thumbnail", None)
     if media_thumbnail and isinstance(media_thumbnail, list) and media_thumbnail:
@@ -357,8 +363,13 @@ def candidate_from_feed_entry(
     return StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
-            f"{source.source_id}:{link or title}".encode("utf-8")
+            (
+                f"{source.source_id}:{link or title}"
+                if channel_id == "synthpost"
+                else f"{channel_id}:{source.source_id}:{link or title}"
+            ).encode("utf-8")
         ).hexdigest()[:12],
+        channel_id=channel_id,
         title=title,
         canonical_url=link,
         source_id=source.source_id,
@@ -378,7 +389,10 @@ def candidate_from_feed_entry(
 
 
 def discover_from_source(
-    source: SourceDefinition, *, seen_groups: set[str] | None = None
+    source: SourceDefinition,
+    *,
+    seen_groups: set[str] | None = None,
+    channel_id: ChannelId = "synthpost",
 ) -> list[StoryCandidate]:
     if (
         source.source_type not in {SourceType.rss, SourceType.atom}
@@ -390,7 +404,9 @@ def discover_from_source(
     parsed = feedparser.parse(body)
     candidates: list[StoryCandidate] = []
     for entry in parsed.entries[:40]:
-        candidate = candidate_from_feed_entry(source, entry, seen_groups=groups)
+        candidate = candidate_from_feed_entry(
+            source, entry, seen_groups=groups, channel_id=channel_id
+        )
         if candidate:
             candidates.append(candidate)
     return candidates
@@ -406,6 +422,11 @@ def discover(
     stats: dict[str, int] | None = None,
 ) -> list[StoryCandidate]:
     candidates: list[StoryCandidate] = []
+    channel_id: ChannelId = (
+        repository.get_episode(episode_id).channel_id
+        if episode_id
+        else "synthpost"
+    )
     sources = repository.list_sources(enabled=True, category=category)
     if category and not sources:
         sources = repository.list_sources(enabled=True)
@@ -419,7 +440,16 @@ def discover(
     completed = 0
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="feed") as executor:
         futures = {
-            executor.submit(discover_from_source, source, seen_groups=set()): source
+            (
+                executor.submit(discover_from_source, source, seen_groups=set())
+                if channel_id == "synthpost"
+                else executor.submit(
+                    discover_from_source,
+                    source,
+                    seen_groups=set(),
+                    channel_id=channel_id,
+                )
+            ): source
             for source in sources
         }
         for future in as_completed(futures):
@@ -466,7 +496,9 @@ def discover(
         progress_callback(
             1.0,
             f"scanned {len(candidates)} feed entries · "
-            f"{new_count} new to SynthPost · {seen_before_count} seen before · "
+            f"{new_count} new to "
+            f"{'SynthPost' if channel_id == 'synthpost' else 'this channel'} · "
+            f"{seen_before_count} seen before · "
             "clustering and ranking",
         )
     ranked = apply_assignment_desk(repository, candidates, use_ai=True)
@@ -482,8 +514,13 @@ def rescore_existing_candidates(repository) -> int:
     for candidate in repository.list_candidates(
         limit=5000, include_duplicates=True, include_expired=True
     ):
+        expected_charter_version = (
+            CHARTER_VERSION
+            if candidate.channel_id == "synthpost"
+            else f"{candidate.channel_id}.{get_channel_profile(candidate.channel_id).profile_version}"
+        )
         if (
-            candidate.editorial_fit.charter_version == CHARTER_VERSION
+            candidate.editorial_fit.charter_version == expected_charter_version
             and candidate.editorial_fit.reasons
         ):
             continue
@@ -506,10 +543,11 @@ def rescore_existing_candidates(repository) -> int:
             candidate.summary,
             candidate.published_at,
             candidate.selection_status == StorySelectionStatus.duplicate,
+            candidate.channel_id,
         )
         candidate.scores = scores
         candidate.editorial_fit = assess_editorial_fit(
-            source, candidate.title, candidate.summary
+            source, candidate.title, candidate.summary, candidate.channel_id
         )
         candidate.final_score = final
         candidate.score_reasons = reasons
@@ -526,6 +564,11 @@ def add_custom_topic(
     category: str = "custom",
     episode_id: str | None = None,
 ) -> StoryCandidate:
+    channel_id: ChannelId = (
+        repository.get_episode(episode_id).channel_id
+        if episode_id
+        else "synthpost"
+    )
     source = SourceDefinition(
         source_id="src_manual_topic",
         name="Manual Topic",
@@ -536,13 +579,16 @@ def add_custom_topic(
         reliability_score=0.5,
         custom=True,
     )
-    scores, final, reasons = score_candidate(source, title, summary, None)
-    editorial_fit = assess_editorial_fit(source, title, summary)
+    scores, final, reasons = score_candidate(
+        source, title, summary, None, channel_id=channel_id
+    )
+    editorial_fit = assess_editorial_fit(source, title, summary, channel_id)
     candidate = StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
-            f"topic:{episode_id or 'global'}:{title}:{summary}".encode("utf-8")
+            f"{channel_id}:topic:{episode_id or 'global'}:{title}:{summary}".encode("utf-8")
         ).hexdigest()[:12],
+        channel_id=channel_id,
         title=title,
         canonical_url=None,
         source_id=source.source_id,
@@ -571,6 +617,11 @@ def add_custom_url(
     category: str = "custom",
     episode_id: str | None = None,
 ) -> StoryCandidate:
+    channel_id: ChannelId = (
+        repository.get_episode(episode_id).channel_id
+        if episode_id
+        else "synthpost"
+    )
     canonical = canonicalize_url(url)
     display_title = title or canonical or url
     source = SourceDefinition(
@@ -583,13 +634,18 @@ def add_custom_url(
         reliability_score=0.55,
         custom=True,
     )
-    scores, final, reasons = score_candidate(source, display_title, summary, None)
-    editorial_fit = assess_editorial_fit(source, display_title, summary)
+    scores, final, reasons = score_candidate(
+        source, display_title, summary, None, channel_id=channel_id
+    )
+    editorial_fit = assess_editorial_fit(
+        source, display_title, summary, channel_id
+    )
     candidate = StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
-            f"url:{episode_id or 'global'}:{canonical}".encode("utf-8")
+            f"{channel_id}:url:{episode_id or 'global'}:{canonical}".encode("utf-8")
         ).hexdigest()[:12],
+        channel_id=channel_id,
         title=display_title,
         canonical_url=canonical,
         source_id=source.source_id,
@@ -616,6 +672,11 @@ def add_manual_story(
     category: str = "manual",
     episode_id: str | None = None,
 ) -> StoryCandidate:
+    channel_id: ChannelId = (
+        repository.get_episode(episode_id).channel_id
+        if episode_id
+        else "synthpost"
+    )
     summary = re.sub(r"\s+", " ", body).strip()[:900]
     source = SourceDefinition(
         source_id="src_manual_story",
@@ -627,13 +688,16 @@ def add_manual_story(
         reliability_score=0.6,
         custom=True,
     )
-    scores, final, reasons = score_candidate(source, title, summary, None)
-    editorial_fit = assess_editorial_fit(source, title, summary)
+    scores, final, reasons = score_candidate(
+        source, title, summary, None, channel_id=channel_id
+    )
+    editorial_fit = assess_editorial_fit(source, title, summary, channel_id)
     candidate = StoryCandidate(
         candidate_id="cand_"
         + hashlib.sha1(
-            f"manual:{episode_id or 'global'}:{title}:{body}".encode("utf-8")
+            f"{channel_id}:manual:{episode_id or 'global'}:{title}:{body}".encode("utf-8")
         ).hexdigest()[:12],
+        channel_id=channel_id,
         title=title,
         source_id=source.source_id,
         source_name=source.name,

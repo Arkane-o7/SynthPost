@@ -10,7 +10,8 @@ export const LowerThird: React.FC<{
   sourceLabel: string;
   sourceDate: string;
   logo?: PublicMedia;
-}> = ({ headline, headlineItems }) => {
+  channelName?: string;
+}> = ({ headline, headlineItems, logo, channelName = "SynthPost" }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const second = frame / fps;
@@ -223,7 +224,7 @@ export const LowerThird: React.FC<{
         boxShadow: "0 -18px 58px rgba(0,0,0,0.34)",
       }}
     >
-      <LogoBug />
+      <LogoBug channelName={channelName} logo={logo} />
       <div
         style={{
           flex: 1,
@@ -287,7 +288,7 @@ export const LowerThird: React.FC<{
               textAlign: "right",
             }}
           >
-            SYNTHPOST
+            {channelName.toUpperCase()}
           </div>
         </div>
       </div>

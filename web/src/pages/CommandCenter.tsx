@@ -97,7 +97,7 @@ export const CommandCenter: React.FC = () => {
           <div>
             <div className="topbar-kicker">Welcome to</div>
             <h1 className="font-display" style={{ fontSize: 52, marginTop: 4 }}>
-              SynthPost Studio
+              Synthea Studio
             </h1>
           </div>
           <p className="text-muted">
@@ -115,7 +115,10 @@ export const CommandCenter: React.FC = () => {
             className="btn-primary btn-lg"
             onClick={() =>
               act(async () => {
-                const p = await api.createProject(projectTitle);
+                const p = await api.createProject(
+                  studio.selectedChannelId,
+                  projectTitle,
+                );
                 studio.setSelectedProjectId(p.project_id);
                 setProjectTitle("");
               })

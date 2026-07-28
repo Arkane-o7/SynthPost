@@ -1,5 +1,7 @@
 import React from "react";
 import type { NarrationMode } from "../contracts";
+import { channelPresentation } from "../channels";
+import { useStudio } from "../state/useStudio";
 
 const NARRATION_MODES: Array<{
   id: NarrationMode;
@@ -61,6 +63,11 @@ export const NarrationModeSelector: React.FC<{
   disabled?: boolean;
   onChange: (mode: NarrationMode) => void;
 }> = ({ value, durationSeconds, disabled, onChange }) => {
+  const studio = useStudio();
+  const channel = channelPresentation(
+    studio.selectedChannelId,
+    studio.selectedChannelProfile,
+  );
   const selected = NARRATION_MODES.find((mode) => mode.id === value)!;
   const outsideRange =
     durationSeconds < selected.minSeconds ||
@@ -84,7 +91,7 @@ export const NarrationModeSelector: React.FC<{
           >
             <span className="narration-mode-marker">{mode.marker}</span>
             <span className="narration-mode-copy">
-              <strong>SynthPost {mode.label}</strong>
+              <strong>{channel.name} {mode.label}</strong>
               <small>{mode.range}</small>
               <em>{mode.description}</em>
             </span>

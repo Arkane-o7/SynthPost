@@ -3566,7 +3566,7 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
         self.assertTrue(
             all(
                 segment.overlays.data["template_selection"]["policy"]
-                == "editorial_retention_v2"
+                == "synthpost_fast_explainer_v1"
                 for segment in plan.segments
             )
         )
@@ -3902,7 +3902,10 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                     repository, story_id, render_profile="preview", test_mode=True
                 )
             self.assertEqual(manifest["approved_timeline"]["status"], "approved")
-            self.assertEqual(manifest["composition"]["template"], "timeline_story")
+            self.assertEqual(
+                manifest["composition"]["template"],
+                "timeline_story_synthpost",
+            )
             save_manual_script(
                 repository,
                 story_id,

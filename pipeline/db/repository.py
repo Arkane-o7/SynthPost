@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from pipeline import config
+from pipeline.channels import (
+    ChannelId,
+    DEFAULT_CHANNEL_ID,
+    get_channel_profile,
+)
 from pipeline.db.sqlite import connect, dumps, init_db, loads, row_data, rows_data
 from pipeline.models import (
     Episode,
@@ -74,15 +79,19 @@ class Repository:
         self,
         title: str | None = None,
         *,
+        channel_id: ChannelId = DEFAULT_CHANNEL_ID,
         default_category: str = "general",
         default_render_profile: str = "production",
     ) -> Project:
+        profile = get_channel_profile(channel_id)
         normalized_title = (title or "").strip()
         if not normalized_title:
-            project_number = len(self.list_projects()) + 1
+            project_number = len(self.list_projects(channel_id=channel_id)) + 1
             date_label = datetime.now().strftime("%d %b %Y")
             normalized_title = f"Project {project_number} · {date_label}"
         project = Project(
+            channel_id=channel_id,
+            profile_version=profile.profile_version,
             title=normalized_title,
             default_category=default_category,
             default_render_profile=default_render_profile,
@@ -113,12 +122,22 @@ class Repository:
                 ),
             )
 
-    def list_projects(self) -> list[Project]:
+    def list_projects(
+        self, *, channel_id: ChannelId | None = None
+    ) -> list[Project]:
+        if channel_id is None:
+            rows = self._many("SELECT data FROM projects ORDER BY updated_at DESC")
+        else:
+            get_channel_profile(channel_id)
+            rows = self._many(
+                "SELECT data FROM projects "
+                "WHERE COALESCE(json_extract(data, '$.channel_id'), 'synthpost') = ? "
+                "ORDER BY updated_at DESC",
+                (channel_id,),
+            )
         projects = [
             Project.model_validate(data)
-            for data in rows_data(
-                self._many("SELECT data FROM projects ORDER BY updated_at DESC")
-            )
+            for data in rows_data(rows)
         ]
         return sorted(
             projects,
@@ -154,8 +173,10 @@ class Repository:
             normalized_title = f"Episode {episode_number} · {date_label}"
         episode = Episode(
             project_id=project_id,
+            channel_id=project.channel_id,
+            profile_version=project.profile_version,
             title=normalized_title,
-            render_profile=render_profile or "production",
+            render_profile=render_profile or project.default_render_profile,
         )
         self.upsert_episode(episode)
         return episode
@@ -186,14 +207,28 @@ class Repository:
                 ),
             )
 
-    def list_episodes(self, project_id: str | None = None) -> list[Episode]:
+    def list_episodes(
+        self,
+        project_id: str | None = None,
+        *,
+        channel_id: ChannelId | None = None,
+    ) -> list[Episode]:
+        clauses: list[str] = []
+        params: list[Any] = []
         if project_id:
-            rows = self._many(
-                "SELECT data FROM episodes WHERE project_id = ? ORDER BY updated_at DESC",
-                (project_id,),
+            clauses.append("project_id = ?")
+            params.append(project_id)
+        if channel_id is not None:
+            get_channel_profile(channel_id)
+            clauses.append(
+                "COALESCE(json_extract(data, '$.channel_id'), 'synthpost') = ?"
             )
-        else:
-            rows = self._many("SELECT data FROM episodes ORDER BY updated_at DESC")
+            params.append(channel_id)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._many(
+            f"SELECT data FROM episodes{where} ORDER BY updated_at DESC",
+            params,
+        )
         episodes = [Episode.model_validate(data) for data in rows_data(rows)]
         return sorted(
             episodes,
@@ -485,6 +520,7 @@ class Repository:
     def list_candidates(
         self,
         *,
+        channel_id: ChannelId | None = None,
         episode_id: str | None = None,
         status: StorySelectionStatus | str | None = None,
         category: str | None = None,
@@ -495,6 +531,12 @@ class Repository:
     ) -> list[StoryCandidate]:
         clauses: list[str] = []
         params: list[Any] = []
+        if channel_id is not None:
+            get_channel_profile(channel_id)
+            clauses.append(
+                "COALESCE(json_extract(data, '$.channel_id'), 'synthpost') = ?"
+            )
+            params.append(channel_id)
         if episode_id:
             # Episode workspaces are isolation boundaries. Global/unassigned
             # inbox candidates must not crowd out the selected episode's story
@@ -583,6 +625,12 @@ class Repository:
 
     def select_candidate(self, candidate_id: str, episode_id: str) -> StoryCandidate:
         candidate = self.get_candidate(candidate_id)
+        episode = self.get_episode(episode_id)
+        if candidate.channel_id != episode.channel_id:
+            raise ValueError(
+                f"Cannot add a {candidate.channel_id} story to a "
+                f"{episode.channel_id} episode"
+            )
         story_id = (
             candidate.story_id or f"story_{candidate.candidate_id.replace('cand_', '')}"
         )
@@ -887,13 +935,38 @@ class Repository:
         self,
         job_type: str,
         *,
+        channel_id: ChannelId | None = None,
         episode_id: str | None = None,
         story_id: str | None = None,
         render_profile: str = "preview",
         payload: dict[str, Any] | None = None,
     ) -> RenderJob:
+        inferred_channels: list[ChannelId] = []
+        if episode_id:
+            try:
+                inferred_channels.append(self.get_episode(episode_id).channel_id)
+            except NotFoundError:
+                # Retain support for maintenance/tests that queue work against
+                # an external or not-yet-persisted episode identifier.
+                pass
+        if story_id:
+            try:
+                inferred_channels.append(
+                    self.candidate_for_story(story_id).channel_id
+                )
+            except NotFoundError:
+                pass
+        resolved_channel = channel_id or (
+            inferred_channels[0] if inferred_channels else DEFAULT_CHANNEL_ID
+        )
+        get_channel_profile(resolved_channel)
+        if any(value != resolved_channel for value in inferred_channels):
+            raise ValueError(
+                "Job channel does not match its episode or story channel"
+            )
         job = RenderJob(
             job_type=job_type,
+            channel_id=resolved_channel,
             queue_lane=queue_lane_for_job_type(job_type),
             episode_id=episode_id,
             story_id=story_id,
@@ -1041,12 +1114,19 @@ class Repository:
         self,
         limit: int = 100,
         *,
+        channel_id: ChannelId | None = None,
         story_id: str | None = None,
         episode_id: str | None = None,
         job_type: str | None = None,
     ) -> list[RenderJob]:
         filters: list[str] = []
         params: list[Any] = []
+        if channel_id is not None:
+            get_channel_profile(channel_id)
+            filters.append(
+                "COALESCE(json_extract(data, '$.channel_id'), 'synthpost') = ?"
+            )
+            params.append(channel_id)
         if story_id is not None:
             filters.append("story_id = ?")
             params.append(story_id)

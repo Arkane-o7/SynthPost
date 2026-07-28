@@ -1,7 +1,71 @@
-// SynthPost V2 TypeScript contracts. Keep field names snake_case to match persisted JSON.
+// Synthea Studio contracts. Keep field names snake_case to match persisted JSON.
+
+export type ChannelId = 'synthpost' | 'meridian' | 'beyond';
+
+export type ChannelProductionProfile = {
+  composition_template: string;
+  template_policy: string;
+  logo_path: string | null;
+  outro_path: string;
+  presenter_provider: 'avatar_engine' | 'video_file' | string;
+  presenter_renderer: string;
+  presenter_asset_path: string | null;
+  presenter_metadata_path: string | null;
+  presenter_style: string;
+  presenter_body_form: string;
+  presenter_background: string;
+  narrator_provider: 'dots_tts' | string;
+  narrator_model_name: string | null;
+  narrator_voice_id: string;
+  narrator_voice_speed: number;
+  narrator_voice_profile_path: string | null;
+  narrator_reference_audio_path: string | null;
+  narrator_reference_text: string | null;
+  brand: {
+    navy: string;
+    deep_blue: string;
+    accent: string;
+    accent_secondary: string;
+    danger: string;
+    white: string;
+    muted: string;
+    ink: string;
+  };
+};
+
+export type ChannelProfile = {
+  channel_id: ChannelId;
+  profile_version: string;
+  name: string;
+  short_name: string;
+  tagline: string;
+  description: string;
+  accent_color: string;
+  accent_soft_color: string;
+  accent_hover_color: string;
+  default_category: string;
+  default_render_profile: string;
+  default_narration_mode: 'signal' | 'explained' | 'deep_dive' | 'india_builds';
+  default_target_duration_seconds: number;
+  editorial_focus: string;
+  research_style: string;
+  script_style: string;
+  narration_style: string;
+  visual_style: string;
+  timeline_style: string;
+  template_pack: string;
+  brand_pack: string;
+  anchor_profile: string;
+  voice_profile: string;
+  outro_pack: string;
+  prompt_pack_version: string;
+  production: ChannelProductionProfile;
+};
 
 export type Project = {
   project_id: string;
+  channel_id: ChannelId;
+  profile_version: string;
   title: string;
   pinned: boolean;
   created_at: string;
@@ -14,6 +78,8 @@ export type Project = {
 export type Episode = {
   episode_id: string;
   project_id: string;
+  channel_id: ChannelId;
+  profile_version: string;
   title: string;
   pinned: boolean;
   story_ids: string[];
@@ -62,6 +128,7 @@ export type EditorialFitAssessment = {
 
 export type StoryCandidate = {
   candidate_id: string;
+  channel_id: ChannelId;
   title: string;
   canonical_url: string | null;
   source_id: string | null;
@@ -368,6 +435,7 @@ export type TimelinePlan = {
 
 export type RenderJob = {
   job_id: string;
+  channel_id: ChannelId;
   episode_id: string | null;
   story_id: string | null;
   job_type: string;

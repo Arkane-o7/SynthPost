@@ -13,7 +13,7 @@ export class AppErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("SynthPost Studio render failed", error, info);
+    console.error("Synthea Studio render failed", error, info);
   }
 
   render() {

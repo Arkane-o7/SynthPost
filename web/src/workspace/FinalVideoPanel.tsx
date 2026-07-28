@@ -64,7 +64,7 @@ export const FinalVideoPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           <p>
             Production render and episode assembly run as one flow. The final
             file includes the approved timeline, anchor, visuals, audio mix, and
-            SynthPost outro.
+            channel outro.
           </p>
         </div>
         <StatusBadge tone={isComplete ? "green" : activeJob ? "blue" : "amber"}>

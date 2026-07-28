@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from pipeline import config
+from pipeline.channels import profile_for_story
 from pipeline.models import (
     ApprovalStatus,
     AudioMode,
@@ -127,6 +128,7 @@ def select_template(
     total_sections: int | None = None,
     previous_templates: list[str] | tuple[str, ...] = (),
     script_text: str = "",
+    template_policy: str = "synthpost_fast_explainer_v1",
 ) -> TemplateDecision:
     """Score production-safe layouts using editorial purpose and shot rhythm."""
 
@@ -155,6 +157,15 @@ def select_template(
     def boost(template: str, amount: float, reason: str) -> None:
         scores[template] += amount
         reasons[template].append(reason)
+
+    if template_policy.startswith("meridian_"):
+        boost("split_anchor_visual", 18, "Meridian favors presenter-led financial analysis")
+        boost("fullscreen_anchor", 6, "Meridian uses deliberate presenter resets")
+        boost("fullscreen_news_visual", -8, "Meridian reserves fullscreen for decisive evidence")
+    elif template_policy.startswith("beyond_"):
+        boost("fullscreen_news_visual", 18, "Beyond prioritizes verified primary news footage")
+        boost("fullscreen_anchor", 8, "Beyond retains an anchor-led newsroom rhythm")
+        boost("split_anchor_visual", -6, "Beyond avoids defaulting every report to a split screen")
 
     if section in ANCHOR_BEATS:
         boost("fullscreen_anchor", 46, "section is a direct-address editorial beat")
@@ -450,6 +461,7 @@ def choose_template(
     total_sections: int | None = None,
     previous_templates: list[str] | tuple[str, ...] = (),
     script_text: str = "",
+    template_policy: str = "synthpost_fast_explainer_v1",
 ) -> str:
     return select_template(
         section_type,
@@ -458,6 +470,7 @@ def choose_template(
         total_sections=total_sections,
         previous_templates=previous_templates,
         script_text=script_text,
+        template_policy=template_policy,
     ).template_id
 
 
@@ -673,6 +686,8 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
         )
     narration = load_narration_artifact(repository, story_id, require_current=True)
     assert narration is not None
+    channel_profile = profile_for_story(repository, story_id)
+    template_policy = channel_profile.production.template_policy
     section_timings = {
         timing.section_id: timing for timing in narration.sections
     }
@@ -757,6 +772,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 total_sections=len(script.sections),
                 previous_templates=[item.template.template_id for item in segments],
                 script_text=beat_text,
+                template_policy=template_policy,
             )
             decision = retention_template_decision(
                 decision,
@@ -848,7 +864,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                         "locations": [],
                         "events": [],
                         "template_selection": {
-                            "policy": "editorial_retention_v2",
+                            "policy": template_policy,
                             "selected": template_id,
                             "scores": decision.scores,
                             "reasons": decision.reasons,

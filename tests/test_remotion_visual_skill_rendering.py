@@ -115,16 +115,16 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             source = (REMOTION_SRC / "templates" / template).read_text(encoding="utf-8")
             self.assertIn("DesignCanvas", source)
 
-    def test_lower_third_matches_original_wordmark_and_static_bug_text(self) -> None:
+    def test_lower_third_uses_channel_wordmark_and_optional_logo(self) -> None:
         logo_bug = (REMOTION_SRC / "components" / "LogoBug.tsx").read_text(
             encoding="utf-8"
         )
         lower_third = (REMOTION_SRC / "components" / "LowerThird.tsx").read_text(
             encoding="utf-8"
         )
-        self.assertIn("Synthpost", logo_bug)
-        self.assertNotIn("<Img", logo_bug)
-        self.assertIn("SYNTHPOST", lower_third)
+        self.assertIn("channelName", logo_bug)
+        self.assertIn("<Img", logo_bug)
+        self.assertIn("channelName.toUpperCase()", lower_third)
         self.assertNotIn("sourceMeta", lower_third)
 
     def test_timeline_lower_thirds_use_intra_segment_spoken_cues(self) -> None:
@@ -194,6 +194,16 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         self.assertIn("clampStyle", renderer)
         self.assertIn("WebkitLineClamp", renderer)
         self.assertIn('overflowWrap: "anywhere"', renderer)
+
+    def test_renderer_registers_channel_compositions_and_dynamic_branding(self) -> None:
+        root = (REMOTION_SRC / "Root.tsx").read_text(encoding="utf-8")
+        render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
+        brand = (REMOTION_SRC / "styles" / "brand.ts").read_text(encoding="utf-8")
+        for channel in ("synthpost", "meridian", "beyond"):
+            self.assertIn(f'id="timeline-story-{channel}"', root)
+            self.assertIn(f"timeline_story_{channel}", render_story)
+        self.assertIn("production.brand?.accent", render_story)
+        self.assertIn("--synthea-accent", brand)
 
 
 if __name__ == "__main__":

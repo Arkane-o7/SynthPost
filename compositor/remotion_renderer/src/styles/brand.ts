@@ -1,13 +1,50 @@
 export const brand = {
+  navy: "var(--synthea-navy, #050A14)",
+  deepBlue: "var(--synthea-deep-blue, #071B33)",
+  signalBlue: "var(--synthea-accent, #1F7BFF)",
+  steelBlue: "var(--synthea-steel-blue, #5C7FA6)",
+  yellow: "var(--synthea-accent-secondary, #FFD84A)",
+  red: "var(--synthea-danger, #E13B33)",
+  white: "var(--synthea-white, #F5F7FA)",
+  muted: "var(--synthea-muted, #AAB4C2)",
+  ink: "var(--synthea-ink, #020610)",
+};
+
+export type BrandTheme = {
+  navy: string;
+  deepBlue: string;
+  accent: string;
+  accentSecondary: string;
+  danger: string;
+  white: string;
+  muted: string;
+  ink: string;
+};
+
+export const defaultBrandTheme: BrandTheme = {
   navy: "#050A14",
   deepBlue: "#071B33",
-  signalBlue: "#1F7BFF",
-  steelBlue: "#5C7FA6",
-  yellow: "#FFD84A",
-  red: "#E13B33",
+  accent: "#1F7BFF",
+  accentSecondary: "#FFD84A",
+  danger: "#E13B33",
   white: "#F5F7FA",
   muted: "#AAB4C2",
   ink: "#020610",
+};
+
+export const brandVariables = (theme?: Partial<BrandTheme>): CSSProperties => {
+  const value = {...defaultBrandTheme, ...(theme ?? {})};
+  return {
+    "--synthea-navy": value.navy,
+    "--synthea-deep-blue": value.deepBlue,
+    "--synthea-accent": value.accent,
+    "--synthea-steel-blue": value.accent,
+    "--synthea-accent-secondary": value.accentSecondary,
+    "--synthea-danger": value.danger,
+    "--synthea-white": value.white,
+    "--synthea-muted": value.muted,
+    "--synthea-ink": value.ink,
+  } as CSSProperties;
 };
 
 export const layout = {
@@ -36,3 +73,4 @@ export const typography = {
   serif: 'Georgia, "Times New Roman", serif',
   sans: '"Avenir Next", "Helvetica Neue", Helvetica, sans-serif',
 };
+import type { CSSProperties } from "react";

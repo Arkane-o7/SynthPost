@@ -198,7 +198,9 @@ def run_story(
         else None
     )
     if avatar.template_requires_avatar(template_name):
-        avatar.run(
+        from pipeline.presenters import render_presenter
+
+        render_presenter(
             story_json_path,
             force=force_avatar,
             render=not skip_avatar_render,

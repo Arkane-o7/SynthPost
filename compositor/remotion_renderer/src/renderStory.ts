@@ -43,6 +43,9 @@ const templateToCompositionId: Record<string, string> = {
   news_visuals_full_screen: "FullScreenNewsVisuals",
   source_clip_full_screen: "FullScreenNewsVisuals",
   timeline_story: "timeline-story",
+  timeline_story_synthpost: "timeline-story-synthpost",
+  timeline_story_meridian: "timeline-story-meridian",
+  timeline_story_beyond: "timeline-story-beyond",
   approved_timeline: "timeline-story",
 };
 
@@ -248,7 +251,7 @@ const providerLabel = (value: unknown): string => {
       "user provided local media",
     ].includes(normalized)
   ) {
-    return "SYNTHPOST";
+    return "LOCAL MEDIA";
   }
   if (normalized === "nasa") {
     return "NASA";
@@ -269,7 +272,7 @@ const visualSourceLabel = (...values: unknown[]): string => {
       return label;
     }
   }
-  return "SYNTHPOST";
+  return "SOURCE";
 };
 
 const headlineCueItems = (value: unknown): HeadlineItem[] => {
@@ -362,7 +365,8 @@ const buildHeadlineItems = (manifest: StoryManifest): HeadlineItem[] => {
       break;
     }
   }
-  return headlines.length ? headlines : [{ text: "SYNTHPOST BRIEFING" }];
+  const channel = manifest.channel && typeof manifest.channel === "object" ? manifest.channel : {};
+  return headlines.length ? headlines : [{ text: `${channel.name ?? "Synthea"} briefing` }];
 };
 
 const timelineSegmentProps = async (
@@ -540,7 +544,7 @@ const main = async () => {
       (timelineSegments.length ? "timeline_story" : "split_main"),
   );
   const compositionId = timelineSegments.length
-    ? "timeline-story"
+    ? (templateToCompositionId[templateName] ?? "timeline-story")
     : (templateToCompositionId[templateName] ?? templateName);
   const visualOnlyTemplate = compositionId === "FullScreenNewsVisuals";
 
@@ -636,19 +640,34 @@ const main = async () => {
     visuals.push({ ...fallback, start: 0, end: 30, fit: "cover" });
   }
 
-  const logoCandidates = ["synthpost_bug.svg", "synthpost_bug.png"];
-  const logoFile = logoCandidates.find((fileName) =>
-    fsSync.existsSync(path.join(publicDir, "brand", fileName)),
-  );
+  const channelManifest = manifest.channel && typeof manifest.channel === "object" ? manifest.channel : {};
+  const production = channelManifest.production && typeof channelManifest.production === "object" ? channelManifest.production : {};
+  const configuredLogo = String(production.logo_path ?? "").replace(/^\/+/, "");
+  const logoFile = configuredLogo && fsSync.existsSync(path.join(publicDir, configuredLogo))
+    ? configuredLogo
+    : undefined;
   const logo = logoFile
     ? {
-        publicPath: `brand/${logoFile}`,
-        absolutePath: path.join(publicDir, "brand", logoFile),
+        publicPath: logoFile,
+        absolutePath: path.join(publicDir, logoFile),
         kind: "image" as const,
       }
     : undefined;
 
   const props: StoryProps = {
+    channelId: String(manifest.channel_id ?? channelManifest.channel_id ?? "synthpost"),
+    channelName: String(channelManifest.name ?? "SynthPost"),
+    channelTagline: String(channelManifest.tagline ?? ""),
+    brandTheme: {
+      navy: String(production.brand?.navy ?? "#050A14"),
+      deepBlue: String(production.brand?.deep_blue ?? "#071B33"),
+      accent: String(production.brand?.accent ?? "#1F7BFF"),
+      accentSecondary: String(production.brand?.accent_secondary ?? "#FFD84A"),
+      danger: String(production.brand?.danger ?? "#E13B33"),
+      white: String(production.brand?.white ?? "#F5F7FA"),
+      muted: String(production.brand?.muted ?? "#AAB4C2"),
+      ink: String(production.brand?.ink ?? "#020610"),
+    },
     storyId,
     episodeId,
     fps: Number(direction.fps ?? profileSettings.fps ?? 24),
@@ -664,11 +683,11 @@ const main = async () => {
         30,
     ),
     headline: String(
-      script.headline ?? raw.headline_source ?? "SYNTHPOST BRIEFING",
+      script.headline ?? raw.headline_source ?? `${channelManifest.name ?? "Synthea"} briefing`,
     ).toUpperCase(),
     headlineItems: buildHeadlineItems(manifest),
     category: String(script.category ?? raw.category ?? "NEWS").toUpperCase(),
-    sourceLabel: String(raw.source_name ?? "SYNTHPOST").toUpperCase(),
+    sourceLabel: String(raw.source_name ?? channelManifest.name ?? "SYNTHEA").toUpperCase(),
     sourceDate: formatDate(raw.published_at),
     anchor,
     anchorChromaKey:

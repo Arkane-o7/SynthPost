@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { api } from "../api/client";
 import type { Episode } from "../contracts";
 import { useStudio } from "../state/useStudio";
+import { ChannelSwitcher } from "./ChannelSwitcher";
 
 export type Page = "command" | "settings";
 
@@ -84,6 +85,16 @@ export const LeftRail: React.FC<{
   );
 
   React.useEffect(() => {
+    setExpandedProjects(new Set());
+    setEpisodesByProject({});
+    setLoadingProjects(new Set());
+    setCreatingEpisodeFor("");
+    setOpeningEpisodeId("");
+    setMutatingItem("");
+    setDeleteTarget(null);
+  }, [studio.selectedChannelId]);
+
+  React.useEffect(() => {
     if (!studio.selectedProjectId) return;
     setExpandedProjects((current) =>
       new Set(current).add(studio.selectedProjectId),
@@ -138,7 +149,7 @@ export const LeftRail: React.FC<{
     try {
       setCreatingProject(true);
       studio.setError("");
-      const project = await api.createProject();
+      const project = await api.createProject(studio.selectedChannelId);
       await studio.refreshAll();
       setEpisodesByProject((current) => ({
         ...current,
@@ -291,13 +302,14 @@ export const LeftRail: React.FC<{
 
   return (
     <aside className="left-rail">
-      <div className="rail-brand">
-        <div className="rail-brand-wordmark">
-          Synth<span>Post</span>
+      <div className="rail-studio-identity">
+        <div className="rail-brand">
+          <div className="rail-brand-wordmark">Synthea</div>
+          <span className="rail-brand-mode">Studio</span>
         </div>
-        <span className="rail-brand-mode">Studio</span>
+        <div className="rail-brand-sub">Production operating system</div>
       </div>
-      <div className="rail-brand-sub">Local newsroom editor</div>
+      <ChannelSwitcher onChange={() => setPage("command")} />
 
       <section className="rail-library" aria-label="Projects and episodes">
         <div className="rail-section-heading">

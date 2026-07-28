@@ -106,7 +106,7 @@ const fallbackVisual = (): TimelineSegment["visual"] => ({
   path: null,
   media_type: "fallback",
   content_role: "fallback",
-  source: "SynthPost",
+  source: "Synthea",
   source_url: null,
   rights_tier: "green",
   review_status: "approved",

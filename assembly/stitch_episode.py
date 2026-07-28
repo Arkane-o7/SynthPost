@@ -10,12 +10,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pipeline import config
+from pipeline.channels import get_channel_profile, resolved_production
 from pipeline.observability import safe_text
 from pipeline.provenance import artifact_record, record_episode_artifact
 from pipeline.render_profiles import profile_record, resolve_profile
 from pipeline.storage import (
     PROJECT_ROOT,
     episode_dir,
+    project_relative,
     read_manifest,
     resolve_project_path,
 )
@@ -76,6 +78,7 @@ def ensure_placeholder_clip(
     width: int = WIDTH,
     height: int = HEIGHT,
     fps: int = FPS,
+    color: str = "#050A14",
 ) -> None:
     if path.exists():
         return
@@ -90,6 +93,12 @@ def ensure_placeholder_clip(
             return
         path.parent.mkdir(parents=True, exist_ok=True)
         ffmpeg = config.ffmpeg_binary()
+        safe_label = label.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+        video_filter = (
+            "format=yuv420p,"
+            f"drawtext=text='{safe_label}':fontcolor=white:fontsize={max(42, height // 11)}:"
+            "x=(w-text_w)/2:y=(h-text_h)/2"
+        )
         command = [
             ffmpeg,
             "-hide_banner",
@@ -99,13 +108,13 @@ def ensure_placeholder_clip(
             "-f",
             "lavfi",
             "-i",
-            f"color=c=#050A14:s={width}x{height}:d={duration}",
+            f"color=c={color}:s={width}x{height}:d={duration}",
             "-f",
             "lavfi",
             "-i",
             f"anullsrc=r=48000:cl=stereo:d={duration}",
             "-vf",
-            "format=yuv420p",
+            video_filter,
             "-shortest",
             "-r",
             str(fps),
@@ -117,7 +126,14 @@ def ensure_placeholder_clip(
             "aac",
             str(path),
         ]
-        run(command)
+        try:
+            run(command)
+        except subprocess.CalledProcessError:
+            # Minimal FFmpeg builds may omit drawtext. Retain the distinct
+            # channel color rather than falling back to another brand's outro.
+            fallback = command[:]
+            fallback[fallback.index("-vf") + 1] = "format=yuv420p"
+            run(fallback)
 
 
 def normalize_clip(
@@ -367,14 +383,30 @@ def stitch_episode(
     if not manifests:
         raise FileNotFoundError(f"No story manifests found for episode: {episode_id}")
 
-    outro = PROJECT_ROOT / "assets" / "brand" / "outro.mp4"
+    episode_manifest_path = episode / "episode.json"
+    episode_data = (
+        read_manifest(episode_manifest_path)
+        if episode_manifest_path.exists()
+        else {}
+    )
+    first_story = read_manifest(manifests[0])
+    channel_id = str(
+        episode_data.get("channel_id")
+        or first_story.get("channel_id")
+        or "synthpost"
+    )
+    channel_profile = get_channel_profile(channel_id)
+    production = resolved_production(channel_profile)
+    outro = resolve_project_path(str(production["outro_path"]))
+    brand = production.get("brand") if isinstance(production.get("brand"), dict) else {}
     ensure_placeholder_clip(
         outro,
-        "SYNTHPOST",
+        channel_profile.name.upper(),
         1.2,
         width=profile.width,
         height=profile.height,
         fps=profile.fps,
+        color=str(brand.get("navy") or "#050A14"),
     )
 
     source_clips = []
@@ -425,6 +457,10 @@ def stitch_episode(
         command.append("--test-mode")
     story_inputs = [*manifests, *source_clips]
     runtime = {
+        "channel_id": channel_profile.channel_id,
+        "channel_profile_version": channel_profile.profile_version,
+        "outro_pack": channel_profile.outro_pack,
+        "outro_path": project_relative(outro),
         "render_profile": profile.name,
         "render_profile_settings": profile_record(profile),
         "test_mode": bool(test_mode),
@@ -443,7 +479,12 @@ def stitch_episode(
             test_mode=test_mode,
             render_profile=profile.name,
             command=command,
-            flags={"force": force},
+            flags={"force": force, "channel_id": channel_profile.channel_id},
+            metadata={
+                "channel_profile_version": channel_profile.profile_version,
+                "outro_pack": channel_profile.outro_pack,
+                "outro_path": project_relative(outro),
+            },
         ),
         runtime=runtime,
     )

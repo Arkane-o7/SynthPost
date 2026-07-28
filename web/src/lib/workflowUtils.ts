@@ -156,7 +156,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Script generation is running",
         description:
-          "SynthPost is waiting for the configured structured script generator. Provider failures are reported directly and never switch providers implicitly.",
+          "Synthea is waiting for the configured structured script generator. Provider failures are reported directly and never switch providers implicitly.",
         ctaLabel: "Open Draft Desk",
         ctaType: "navigate",
         stageKey: "draft",
@@ -192,7 +192,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Review visuals or continue with fallback",
         description:
-          "Review any staged media and rights tiers. If no local visuals are available, continue to Timeline and SynthPost will use approved fallback anchor visuals.",
+          "Review any staged media and rights tiers. If no local visuals are available, continue to Timeline and Synthea will use approved fallback anchor visuals.",
         ctaLabel: "Open Visuals",
         ctaType: "navigate",
         stageKey: "visuals",
@@ -219,7 +219,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Final video queued",
         description:
-          "The approved timeline is rendering at production quality. SynthPost will append the outro and publish the assembled episode automatically.",
+          "The approved timeline is rendering at production quality. Synthea will append the channel outro and publish the assembled episode automatically.",
         ctaLabel: "Track Final Video",
         ctaType: "navigate",
         stageKey: "final",
@@ -237,7 +237,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Generating the final video",
         description:
-          "SynthPost is rendering the approved timeline at production quality, then it will attach the brand outro.",
+          "Synthea is rendering the approved timeline at production quality, then it will attach the channel outro.",
         ctaLabel: "Track Final Video",
         ctaType: "navigate",
         stageKey: "final",
@@ -246,7 +246,7 @@ export function getNextAction(workflowState?: string): NextAction {
       return {
         title: "Finishing the final episode",
         description:
-          "The production render is complete. SynthPost is appending the outro and writing the final episode file.",
+          "The production render is complete. Synthea is appending the channel outro and writing the final episode file.",
         ctaLabel: "Track Final Video",
         ctaType: "navigate",
         stageKey: "final",

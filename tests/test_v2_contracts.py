@@ -134,7 +134,8 @@ class V2ContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('@router.get("/job-events")', jobs_api)
-        self.assertIn('new EventSource("/api/job-events")', studio)
+        self.assertIn("new EventSource(", studio)
+        self.assertIn("/api/job-events?channel_id=", studio)
         self.assertNotIn('new EventSource("/api/jobs/events")', studio)
 
     def test_render_job_contract_exposes_queue_lane_and_retry_state(self) -> None:

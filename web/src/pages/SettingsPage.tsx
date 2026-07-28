@@ -1,12 +1,20 @@
 import React from "react";
 import { StatusBadge } from "../components/StatusBadge";
 import { SourceSettings } from "../components/SourceSettings";
+import { ChannelSettings } from "../components/ChannelSettings";
+import { channelPresentation } from "../channels";
+import { useStudio } from "../state/useStudio";
 
 export const SettingsPage: React.FC<{
   onClose: () => void;
   closeButtonRef: React.RefObject<HTMLButtonElement>;
 }> = ({ onClose, closeButtonRef }) => {
-  const [section, setSection] = React.useState<"general" | "sources">("general");
+  const studio = useStudio();
+  const channel = channelPresentation(
+    studio.selectedChannelId,
+    studio.selectedChannelProfile,
+  );
+  const [section, setSection] = React.useState<"general" | "channel" | "sources">("general");
   const supported = "Notification" in window;
   const [permission, setPermission] = React.useState<NotificationPermission | "unsupported">(
     supported ? Notification.permission : "unsupported",
@@ -19,14 +27,14 @@ export const SettingsPage: React.FC<{
     if (next === "granted") {
       localStorage.setItem("synthpost.notifications", "enabled");
       const options = {
-        body: "This phone will report completed and failed laptop jobs while the Studio is open.",
+        body: `This phone will report completed and failed ${channel.name} jobs while Synthea Studio is open.`,
         icon: "/synthpost-icon.svg",
       };
       if ("serviceWorker" in navigator) {
         const registration = await navigator.serviceWorker.ready;
-        await registration.showNotification("SynthPost remote notifications enabled", options);
+        await registration.showNotification("Synthea notifications enabled", options);
       } else {
-        new Notification("SynthPost remote notifications enabled", options);
+        new Notification("Synthea notifications enabled", options);
       }
     }
   };
@@ -35,7 +43,7 @@ export const SettingsPage: React.FC<{
     <div className="settings-modal-content">
       <div className="topbar settings-modal-header">
         <div>
-          <div className="topbar-kicker">SynthPost Studio</div>
+          <div className="topbar-kicker">Synthea Studio · {channel.name}</div>
           <h1 id="settings-modal-title">Settings</h1>
         </div>
         <button
@@ -75,6 +83,17 @@ export const SettingsPage: React.FC<{
         </button>
         <button
           type="button"
+          id="settings-tab-channel"
+          role="tab"
+          aria-selected={section === "channel"}
+          aria-controls="settings-panel-channel"
+          className={section === "channel" ? "active" : ""}
+          onClick={() => setSection("channel")}
+        >
+          Channel
+        </button>
+        <button
+          type="button"
           id="settings-tab-sources"
           role="tab"
           aria-selected={section === "sources"}
@@ -88,6 +107,8 @@ export const SettingsPage: React.FC<{
 
       {section === "sources" ? (
         <SourceSettings />
+      ) : section === "channel" ? (
+        <ChannelSettings />
       ) : (
         <div
           className="grid grid-2 animate-fade-in"
@@ -101,7 +122,7 @@ export const SettingsPage: React.FC<{
           <h2>Remote Notifications</h2>
           <p className="text-muted" style={{ fontSize: 13 }}>
             Get a device notification when a laptop job completes or needs intervention.
-            On iPhone, add SynthPost to the Home Screen before enabling notifications.
+            On iPhone, add Synthea to the Home Screen before enabling notifications.
           </p>
           <div className="row-between">
             <StatusBadge status={permission === "granted" ? "completed" : permission}>
@@ -178,7 +199,7 @@ export const SettingsPage: React.FC<{
         <div className="card stack">
           <h2>dots.tts Narration</h2>
           <p className="text-muted" style={{ fontSize: 13 }}>
-            SynthPost generates the canonical voice track before Avatar Engine.
+            {channel.name} generates the canonical voice track before Avatar Engine.
             Voice identity and delivery come from an authorized enrolled profile.
           </p>
           <div className="stack" style={{ gap: 8 }}>
