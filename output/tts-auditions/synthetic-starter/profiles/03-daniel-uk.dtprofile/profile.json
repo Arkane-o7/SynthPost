@@ -1,0 +1,12 @@
+{
+  "compat_hash": "2f68d22ce3451cd551e8110e2e20c8f826930d063007f391250be686b57dc0a8",
+  "dtype": "bfloat16",
+  "hop_size": 1920,
+  "latent_dim": 128,
+  "patch_size": 4,
+  "prompt_patch_count": 37,
+  "prompt_text": "Every morning brings a new story, a fresh perspective, and another chance to understand the world around us.",
+  "sample_rate": 48000,
+  "schema_version": 2,
+  "speaker_scale": 1.5
+}

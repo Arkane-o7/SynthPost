@@ -1,0 +1,29 @@
+{
+  "model": "dots.tts-soar",
+  "language": "EN",
+  "reference_transcript": "Every morning brings a new story, a fresh perspective, and another chance to understand the world around us.",
+  "audition_text": "Welcome to SynthPost. Clear stories, natural rhythm, confident delivery, and warmth, every single day.",
+  "generation": {
+    "num_steps": 10,
+    "guidance_scale": 1.2,
+    "seed": 42,
+    "normalize_text": false
+  },
+  "mastering": {
+    "sample_rate_hz": 48000,
+    "channels": 1,
+    "integrated_lufs": -17,
+    "true_peak_dbtp": -1.5,
+    "loudness_range_lu": 7
+  },
+  "voices": [
+    {"id": "01-samantha-us", "name": "Samantha", "locale": "en_US", "source": "macOS Samantha"},
+    {"id": "02-reed-us", "name": "Reed", "locale": "en_US", "source": "macOS Reed (English (US))"},
+    {"id": "03-daniel-uk", "name": "Daniel", "locale": "en_GB", "source": "macOS Daniel"},
+    {"id": "04-flo-uk", "name": "Flo", "locale": "en_GB", "source": "macOS Flo (English (UK))"},
+    {"id": "05-aman-india", "name": "Aman", "locale": "en_IN", "source": "macOS Aman"},
+    {"id": "06-tara-india", "name": "Tara", "locale": "en_IN", "source": "macOS Tara"},
+    {"id": "07-karen-australia", "name": "Karen", "locale": "en_AU", "source": "macOS Karen"},
+    {"id": "08-moira-ireland", "name": "Moira", "locale": "en_IE", "source": "macOS Moira"}
+  ]
+}
