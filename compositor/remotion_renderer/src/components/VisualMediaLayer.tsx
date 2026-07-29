@@ -123,7 +123,7 @@ export const VisualMediaLayer: React.FC<{
         willChange: "transform",
       }}
     >
-      <Img src={src} style={style} />
+      <Img src={src} style={style} from={-17} />
     </AbsoluteFill>
   );
 };

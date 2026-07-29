@@ -117,16 +117,20 @@ def _prepare_png_puppet(
     if not isinstance(poses, dict):
         raise ValueError("PNG presenter pack requires a poses object")
     pose_paths: dict[str, str] = {}
-    for name in ("neutral", "speaking"):
-        configured_pose = str(poses.get(name) or "").strip()
-        if not configured_pose:
-            raise ValueError(f"PNG presenter pack requires poses.{name}")
+    for raw_name, raw_path in poses.items():
+        name = str(raw_name).strip()
+        configured_pose = str(raw_path or "").strip()
+        if not name or not configured_pose:
+            continue
         pose_path = resolve_project_path(configured_pose)
         if not pose_path.is_file() or pose_path.suffix.lower() != ".png":
             raise FileNotFoundError(
                 f"PNG presenter pose {name!r} is missing or not a PNG: {pose_path}"
             )
         pose_paths[name] = project_relative(pose_path)
+    if "neutral" not in pose_paths:
+        raise ValueError("PNG presenter pack requires poses.neutral")
+    pose_paths.setdefault("speaking", pose_paths["neutral"])
 
     narration = (
         manifest.get("narration")
@@ -169,6 +173,7 @@ def _prepare_png_puppet(
         "presenter_manifest_path": project_relative(character_path),
         "presenter_neutral_path": pose_paths["neutral"],
         "presenter_speaking_path": pose_paths["speaking"],
+        "presenter_pose_paths": pose_paths,
         "narration_audio_path": project_relative(narration_path),
         "estimated_duration_seconds": duration,
         "duration_source": "canonical_narration",

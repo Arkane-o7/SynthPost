@@ -60,7 +60,10 @@ class ChannelPackageTests(unittest.TestCase):
         self.assertIn("what each side says", script_prompt_context(beyond))
         self.assertIn("fewer, longer analytical sections", segmentation_prompt_context(meridian))
         self.assertIn("original event footage", visual_prompt_context(beyond))
-        self.assertEqual(prompt_identity(meridian, "narrative-script"), "meridian.narrative-script.prompts-v1")
+        self.assertEqual(
+            prompt_identity(meridian, "narrative-script"),
+            "meridian.narrative-script.prompts-v3",
+        )
 
     def test_narration_request_uses_channel_voice_not_global_voice(self) -> None:
         meridian = get_channel_profile("meridian")
@@ -210,6 +213,10 @@ class ChannelPackageTests(unittest.TestCase):
 
             self.assertEqual(direction["presenter_provider"], "png_puppet")
             self.assertEqual(direction["duration_source"], "canonical_narration")
+            self.assertEqual(
+                set(direction["presenter_pose_paths"]),
+                {"neutral", "speaking"},
+            )
             self.assertEqual(
                 Path(direction["presenter_manifest_path"]).resolve(),
                 character.resolve(),

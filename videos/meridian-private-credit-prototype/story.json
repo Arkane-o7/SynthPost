@@ -1,0 +1,638 @@
+{
+  "story_id": "story_meridian_private_credit_prototype",
+  "episode_id": "episode_meridian_private_credit_prototype",
+  "channel_id": "meridian",
+  "channel": {
+    "channel_id": "meridian",
+    "name": "Meridian",
+    "tagline": "Follow the money",
+    "production": {
+      "composition_template": "timeline_story_meridian",
+      "template_policy": "meridian_editorial_canvas_v2",
+      "presenter_provider": "png_puppet",
+      "brand": {
+        "navy": "#0D1012",
+        "deep_blue": "#171B1E",
+        "accent": "#D5A94E",
+        "accent_secondary": "#8FB7A1",
+        "danger": "#C65D52",
+        "white": "#F5F7FA",
+        "muted": "#AEB4B0",
+        "ink": "#080A0B"
+      }
+    }
+  },
+  "raw": {
+    "headline_source": "The bank loan that left the bank",
+    "source_name": "Meridian research desk",
+    "published_at": "2026-07-29T00:00:00+05:30",
+    "category": "private credit"
+  },
+  "script": {
+    "headline": "The bank loan that left the bank",
+    "category": "financial system"
+  },
+  "direction": {
+    "fps": 24,
+    "estimated_duration_seconds": 106.23458715596331,
+    "presenter_provider": "png_puppet",
+    "presenter_manifest_path": "assets/channels/meridian/presenter/character.json",
+    "narration_audio_path": "videos/meridian-private-credit-prototype/narration-preview-silence.wav"
+  },
+  "narration": {
+    "audio_path": "videos/meridian-private-credit-prototype/narration-preview-silence.wav",
+    "provider": "dots_tts",
+    "model": "dots.tts-soar-mlx-int4",
+    "voice_id": "meridian_narrator",
+    "timing_source": "word_count_preview",
+    "preview_audio": true,
+    "duration_seconds": 106.23458715596331,
+    "beats": [
+      {
+        "beat_id": "pc001",
+        "section_id": "headline",
+        "start_time": 0.0,
+        "speech_end_time": 9.633027522935778,
+        "end_time": 9.723027522935778
+      },
+      {
+        "beat_id": "pc002",
+        "section_id": "fed_scale",
+        "start_time": 9.723027522935778,
+        "speech_end_time": 22.567064220183482,
+        "end_time": 22.657064220183482
+      },
+      {
+        "beat_id": "pc003",
+        "section_id": "narrator_reaction",
+        "start_time": 22.657064220183482,
+        "speech_end_time": 32.748807339449534,
+        "end_time": 32.848807339449536
+      },
+      {
+        "beat_id": "pc004",
+        "section_id": "mechanism",
+        "start_time": 32.848807339449536,
+        "speech_end_time": 44.316697247706415,
+        "end_time": 44.40669724770642
+      },
+      {
+        "beat_id": "pc005",
+        "section_id": "imf_document",
+        "start_time": 44.40669724770642,
+        "speech_end_time": 58.16816513761467,
+        "end_time": 58.258165137614675
+      },
+      {
+        "beat_id": "pc006",
+        "section_id": "social_twist",
+        "start_time": 58.258165137614675,
+        "speech_end_time": 71.10220183486238,
+        "end_time": 71.19220183486239
+      },
+      {
+        "beat_id": "pc007",
+        "section_id": "capital_chain",
+        "start_time": 71.19220183486239,
+        "speech_end_time": 84.95366972477065,
+        "end_time": 85.04366972477065
+      },
+      {
+        "beat_id": "pc008",
+        "section_id": "footage",
+        "start_time": 85.04366972477065,
+        "speech_end_time": 96.97027522935781,
+        "end_time": 97.06027522935781
+      },
+      {
+        "beat_id": "pc009",
+        "section_id": "thesis",
+        "start_time": 97.06027522935781,
+        "speech_end_time": 106.23458715596331,
+        "end_time": 106.23458715596331
+      }
+    ]
+  },
+  "runtime": {
+    "render_profile_settings": {
+      "fps": 24,
+      "width": 1920,
+      "height": 1080
+    }
+  },
+  "approved_timeline": {
+    "timeline_id": "timeline_meridian_private_credit_prototype",
+    "story_id": "story_meridian_private_credit_prototype",
+    "version": 1,
+    "status": "approved",
+    "segments": [
+      {
+        "segment_id": "segment_pc001",
+        "beat_id": "pc001",
+        "scene_id": "private_credit_headline",
+        "section_id": "headline",
+        "start_time": 0.0,
+        "end_time": 9.723027522935778,
+        "duration": 9.723027522935778,
+        "narrative_function": "open_with_paradox",
+        "visual_role": "hook_and_frame",
+        "transition_in": "paper_sweep",
+        "transition_out": "hard_cut",
+        "script_text": "Corporate lending did not leave banking. It changed clothes. More loans now arrive through private credit funds, away from public markets.",
+        "internal_events": [],
+        "scene_assets": {},
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "asset_id": "fed-private-credit-page",
+          "path": "videos/meridian-private-credit-prototype/media/fed-private-credit-page.png",
+          "media_type": "document",
+          "content_role": "evidence",
+          "source": "Federal Reserve \u00b7 Financial Stability Report \u00b7 May 2026",
+          "source_url": "https://www.federalreserve.gov/publications/files/financial-stability-report-20260508.pdf",
+          "attribution_text": "Federal Reserve \u00b7 Financial Stability Report \u00b7 May 2026",
+          "rights_tier": "green",
+          "review_status": "approved"
+        },
+        "template": {
+          "template_id": "meridian_clipping_board"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "clipping_kind": "headline",
+            "source": "THE MERIDIAN LEDGER",
+            "date": "JULY 29, 2026",
+            "headline": "The bank loan that left the bank",
+            "deck": "Private credit moved lending outside banks. The risk did not travel quite as far."
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc002",
+        "beat_id": "pc002",
+        "scene_id": "fed_scale",
+        "section_id": "fed_scale",
+        "start_time": 9.723027522935778,
+        "end_time": 22.657064220183482,
+        "duration": 12.934036697247704,
+        "narrative_function": "establish_scale",
+        "visual_role": "prove_with_primary_source",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "By late 2025, the Federal Reserve estimated private credit at 1.4 trillion dollars: 10 percent of U.S. corporate debt and roughly one-third of speculative-grade debt outside bank loans.",
+        "internal_events": [],
+        "scene_assets": {},
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "asset_id": "fed-private-credit-figure",
+          "path": "videos/meridian-private-credit-prototype/media/fed-private-credit-figure.png",
+          "media_type": "document",
+          "content_role": "evidence",
+          "source": "Federal Reserve \u00b7 private-credit market estimates",
+          "source_url": "https://www.federalreserve.gov/publications/files/financial-stability-report-20260508.pdf",
+          "attribution_text": "Federal Reserve \u00b7 private-credit market estimates",
+          "rights_tier": "green",
+          "review_status": "approved"
+        },
+        "template": {
+          "template_id": "meridian_data_board"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {}
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc003",
+        "beat_id": "pc003",
+        "scene_id": "liquidity_correction",
+        "section_id": "narrator_reaction",
+        "start_time": 22.657064220183482,
+        "end_time": 32.848807339449536,
+        "duration": 10.191743119266054,
+        "narrative_function": "correct_intuition",
+        "visual_role": "presenter_reaction",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "That sounds like shadow banking. The awkward correction: many funds lock money up for years. No traditional deposit run\u2014at least in theory.",
+        "internal_events": [],
+        "scene_assets": {},
+        "anchor": {
+          "visible": true,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_narrator_evidence"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "quote_headline": "Shadow banking.\nBut not a bank run.",
+            "quote_body": "Long-duration capital removes the classic deposit-run mechanism\u2014while leaving other risks intact.",
+            "bubble_text": "A comforting distinction. Mostly.",
+            "meridian_presenter": {
+              "pose": "shrug",
+              "placement": "lower_right",
+              "motion": "pop",
+              "width": 1210
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc004",
+        "beat_id": "pc004",
+        "scene_id": "borrower_mechanism",
+        "section_id": "mechanism",
+        "start_time": 32.848807339449536,
+        "end_time": 44.40669724770642,
+        "duration": 11.557889908256882,
+        "narrative_function": "explain_demand",
+        "visual_role": "mechanism_diagram",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Borrowers pay for certainty, speed, and custom covenants. One large loan can be negotiated with one lender instead of marketed to hundreds of bond investors.",
+        "internal_events": [],
+        "scene_assets": {},
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_mechanism"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "heading": "Why borrowers pay for private credit",
+            "mechanism_nodes": [
+              {
+                "number": "1",
+                "title": "Certainty",
+                "body": "One negotiated lender instead of a marketed bond"
+              },
+              {
+                "number": "2",
+                "title": "Speed",
+                "body": "Fewer syndication steps and faster execution"
+              },
+              {
+                "number": "3",
+                "title": "Custom terms",
+                "body": "Covenants shaped around one transaction"
+              }
+            ]
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc005",
+        "beat_id": "pc005",
+        "scene_id": "imf_risk_document",
+        "section_id": "imf_document",
+        "start_time": 44.40669724770642,
+        "end_time": 58.258165137614675,
+        "duration": 13.851467889908257,
+        "narrative_function": "introduce_risk",
+        "visual_role": "document_evidence",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "The IMF says immediate stability risks look contained, but the structure is opaque. Borrowers are leveraged, rates float, and losses can hide because private loans lack a continuous market price.",
+        "internal_events": [],
+        "scene_assets": {
+          "document": {
+            "asset_id": "imf-private-credit-page",
+            "path": "videos/meridian-private-credit-prototype/media/imf-private-credit-page.png",
+            "media_type": "document",
+            "content_role": "evidence",
+            "source": "IMF \u00b7 Global Financial Stability Report \u00b7 April 2024",
+            "source_url": "https://www.imf.org/-/media/files/publications/gfsr/2024/april/english/ch2.pdf",
+            "attribution_text": "IMF \u00b7 Global Financial Stability Report \u00b7 April 2024",
+            "rights_tier": "green",
+            "review_status": "approved"
+          }
+        },
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_document_highlight"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "document_quote": "Near-term risks may be contained, while opacity, floating rates, subjective valuations, and interconnected leverage make losses harder to observe.",
+            "document_source": "IMF \u00b7 GLOBAL FINANCIAL STABILITY REPORT \u00b7 APRIL 2024"
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc006",
+        "beat_id": "pc006",
+        "scene_id": "banks_did_not_vanish",
+        "section_id": "social_twist",
+        "start_time": 58.258165137614675,
+        "end_time": 71.19220183486239,
+        "duration": 12.934036697247713,
+        "narrative_function": "reveal_twist",
+        "visual_role": "social_clipping",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Here is the twist: banks did not vanish. They lend to funds, provide subscription lines, and finance portfolios. Credit left the bank balance sheet; bank exposure remained connected.",
+        "internal_events": [],
+        "scene_assets": {},
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_clipping_board"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "clipping_kind": "social",
+            "display_name": "Meridian Research Desk",
+            "handle": "@meridianresearch",
+            "post": "The loan left the bank balance sheet. The financing chain did not. Banks still lend to funds, provide subscription lines, and finance portfolios.",
+            "context": "Credit moved. Exposure remained connected.",
+            "source": "FEDERAL RESERVE \u00b7 MAY 2026",
+            "date": "RESEARCH NOTE",
+            "replies": "38",
+            "reposts": "214",
+            "likes": "1.8K"
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc007",
+        "beat_id": "pc007",
+        "scene_id": "capital_chain",
+        "section_id": "capital_chain",
+        "start_time": 71.19220183486239,
+        "end_time": 85.04366972477065,
+        "duration": 13.851467889908264,
+        "narrative_function": "map_interconnection",
+        "visual_role": "presenter_corkboard",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Now retail money is entering semi-liquid vehicles. The Fed counted 425 billion dollars in gross assets. Redemption windows bring liquidity pressure back into an asset class designed to avoid it.",
+        "internal_events": [
+          {
+            "event_id": "bank",
+            "type": "add_token",
+            "at": 0.5,
+            "payload": {
+              "label": "BANK LINES"
+            }
+          },
+          {
+            "event_id": "fund",
+            "type": "add_token",
+            "at": 1.8,
+            "payload": {
+              "label": "CREDIT FUNDS"
+            }
+          },
+          {
+            "event_id": "borrower",
+            "type": "add_token",
+            "at": 3.1,
+            "payload": {
+              "label": "BORROWERS"
+            }
+          },
+          {
+            "event_id": "retail",
+            "type": "add_token",
+            "at": 4.4,
+            "payload": {
+              "label": "RETAIL VEHICLES"
+            }
+          },
+          {
+            "event_id": "redemptions",
+            "type": "add_token",
+            "at": 5.7,
+            "payload": {
+              "label": "REDEMPTIONS"
+            }
+          }
+        ],
+        "scene_assets": {},
+        "anchor": {
+          "visible": true,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_narrator_tokens"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "heading": "Liquidity risk returns through\nthe access products.",
+            "hub_label": "PRIVATE CREDIT",
+            "meridian_presenter": {
+              "pose": "pointing",
+              "placement": "lower_right",
+              "motion": "slide",
+              "width": 1210
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc008",
+        "beat_id": "pc008",
+        "scene_id": "quiet_lending_machine",
+        "section_id": "footage",
+        "start_time": 85.04366972477065,
+        "end_time": 97.06027522935781,
+        "duration": 12.016605504587162,
+        "narrative_function": "synthesize",
+        "visual_role": "footage_breath",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Private credit is neither a safer bank replacement nor a hidden time bomb. It is a faster, quieter lending machine whose risks are harder to see.",
+        "internal_events": [],
+        "scene_assets": {
+          "datacenter": {
+            "asset_id": "fed-system",
+            "path": "videos/meridian-private-credit-prototype/media/fed-system.mp4",
+            "media_type": "video",
+            "content_role": "evidence",
+            "source": "Federal Reserve \u00b7 public information footage",
+            "source_url": "https://www.federalreserve.gov/",
+            "attribution_text": "Federal Reserve \u00b7 public information footage",
+            "rights_tier": "green",
+            "review_status": "approved"
+          },
+          "developer": {
+            "asset_id": "roof-workers",
+            "path": "videos/meridian-private-credit-prototype/media/roof-workers.mp4",
+            "media_type": "video",
+            "content_role": "evidence",
+            "source": "Pexels \u00b7 construction business footage",
+            "source_url": "https://www.pexels.com/",
+            "attribution_text": "Pexels \u00b7 construction business footage",
+            "rights_tier": "green",
+            "review_status": "approved"
+          }
+        },
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_footage_montage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "first_headline": "A quieter lending machine.",
+            "second_headline": "The borrowers are still real businesses.",
+            "first_source": "FEDERAL RESERVE \u00b7 PUBLIC INFORMATION FOOTAGE",
+            "second_source": "PEXELS \u00b7 LICENSED STOCK FOOTAGE",
+            "switch_at": 6.248634862385324
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_pc009",
+        "beat_id": "pc009",
+        "scene_id": "visibility_trade",
+        "section_id": "thesis",
+        "start_time": 97.06027522935781,
+        "end_time": 106.23458715596331,
+        "duration": 9.174311926605498,
+        "narrative_function": "close_with_tension",
+        "visual_role": "thesis",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "The trade is visibility for flexibility. That works beautifully\u2014until everyone asks what the loan is worth at the same time.",
+        "internal_events": [],
+        "scene_assets": {},
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "editorial_canvas"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "meridian_sparse_thesis"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1,
+          "source_volume": 0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "thesis_lead": "The real trade is\nvisibility for flexibility.",
+            "thesis_support": "That works beautifully\u2014until everyone asks",
+            "thesis_keyword": "WHAT IS IT WORTH?",
+            "thesis_final": "An illiquid loan only looks calm while nobody needs a public price."
+          }
+        },
+        "status": "approved"
+      }
+    ]
+  },
+  "composition": {
+    "template": "timeline_story_meridian",
+    "duration_seconds": 106.23458715596331,
+    "output_path": "videos/meridian-private-credit-prototype/review.mp4",
+    "preview_path": "videos/meridian-private-credit-prototype/preview.png"
+  }
+}

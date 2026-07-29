@@ -66,6 +66,7 @@ if (!argPath) {
 }
 
 const force = process.argv.includes("--force");
+const prepareStudio = process.argv.includes("--prepare-studio");
 
 const readJson = async <T>(filePath: string): Promise<T> => {
   return JSON.parse(await fs.readFile(filePath, "utf-8")) as T;
@@ -488,13 +489,86 @@ const timelineSegmentProps = async (
           trimEnd,
         }
       : undefined;
+    const sceneAssets: Record<string, TimedVisual> = {};
+    const rawSceneAssets =
+      segment.scene_assets &&
+      typeof segment.scene_assets === "object" &&
+      !Array.isArray(segment.scene_assets)
+        ? segment.scene_assets
+        : {};
+    for (const [name, rawAsset] of Object.entries(rawSceneAssets)) {
+      const asset =
+        rawAsset && typeof rawAsset === "object" && !Array.isArray(rawAsset)
+          ? (rawAsset as Record<string, any>)
+          : {};
+      const assetPath = String(asset.path ?? "");
+      if (!assetPath) {
+        continue;
+      }
+      const stagedAsset = await stageMedia(
+        assetPath,
+        generatedDir,
+        undefined,
+        true,
+      );
+      sceneAssets[name] = {
+        ...stagedAsset,
+        start,
+        end,
+        fit: asset.fit ?? "cover",
+        sourceLabel: visualSourceLabel(
+          asset.attribution_text,
+          asset.source,
+          asset.source_domain,
+        ),
+        mediaType: asset.media_type,
+        contentRole: asset.content_role,
+        sourceUrl: asset.source_url,
+        sourceDomain: asset.source_domain,
+        provider: asset.provider,
+        license: asset.license,
+        attributionText: asset.attribution_text,
+        trimStart: optionalFiniteNumber(asset.trim_start),
+        trimEnd: optionalFiniteNumber(asset.trim_end),
+      };
+    }
     segments.push({
       segmentId: String(segment.segment_id),
+      beatId: segment.beat_id ? String(segment.beat_id) : undefined,
+      sceneId: segment.scene_id ? String(segment.scene_id) : undefined,
       sectionId: String(segment.section_id),
       start,
       end,
       duration: Math.max(0.01, Number(segment.duration ?? end - start)),
       narrationStart,
+      narrativeFunction: segment.narrative_function
+        ? String(segment.narrative_function)
+        : undefined,
+      visualRole: segment.visual_role ? String(segment.visual_role) : undefined,
+      transitionIn: segment.transition_in
+        ? String(segment.transition_in)
+        : undefined,
+      transitionOut: segment.transition_out
+        ? String(segment.transition_out)
+        : undefined,
+      internalEvents: Array.isArray(segment.internal_events)
+        ? segment.internal_events.map(
+            (event: Record<string, any>, index: number) => ({
+              eventId: String(event.event_id ?? `event_${index + 1}`),
+              type: String(event.type ?? ""),
+              at: Number(event.at ?? 0),
+              until: optionalFiniteNumber(event.until),
+              target: event.target ? String(event.target) : undefined,
+              payload:
+                event.payload &&
+                typeof event.payload === "object" &&
+                !Array.isArray(event.payload)
+                  ? event.payload
+                  : undefined,
+            }),
+          )
+        : [],
+      sceneAssets,
       scriptText: String(segment.script_text ?? ""),
       anchor: {
         visible: Boolean(segment.anchor?.visible),
@@ -595,29 +669,57 @@ const main = async () => {
     ) {
       throw new Error("Unsupported PNG presenter character contract.");
     }
-    const neutral = await stageMedia(
-      String(
-        direction.presenter_neutral_path ??
-          presenterManifest.poses?.neutral ??
-          "",
-      ),
-      generatedDir,
-      undefined,
-      true,
-    );
-    const speaking = await stageMedia(
-      String(
-        direction.presenter_speaking_path ??
-          presenterManifest.poses?.speaking ??
-          "",
-      ),
-      generatedDir,
-      undefined,
-      true,
-    );
+    const rawPoses =
+      presenterManifest.poses &&
+      typeof presenterManifest.poses === "object" &&
+      !Array.isArray(presenterManifest.poses)
+        ? presenterManifest.poses
+        : {};
+    const directionPoses =
+      direction.presenter_pose_paths &&
+      typeof direction.presenter_pose_paths === "object" &&
+      !Array.isArray(direction.presenter_pose_paths)
+        ? direction.presenter_pose_paths
+        : {};
+    const poses: Record<string, PublicMedia> = {};
+    for (const [name, posePath] of Object.entries({
+      ...rawPoses,
+      ...directionPoses,
+    })) {
+      const staged = await stageMedia(
+        String(posePath ?? ""),
+        generatedDir,
+        undefined,
+        true,
+      );
+      if (staged.kind !== "image") {
+        throw new Error(`PNG presenter pose ${name} must be an image.`);
+      }
+      poses[name] = staged;
+    }
+    const neutral =
+      poses.neutral ??
+      (await stageMedia(
+        String(direction.presenter_neutral_path ?? ""),
+        generatedDir,
+        undefined,
+        true,
+      ));
+    const speaking =
+      poses.speaking ??
+      (direction.presenter_speaking_path
+        ? await stageMedia(
+            String(direction.presenter_speaking_path),
+            generatedDir,
+            undefined,
+            true,
+          )
+        : neutral);
     if (neutral.kind !== "image" || speaking.kind !== "image") {
       throw new Error("PNG presenter neutral and speaking poses must be images.");
     }
+    poses.neutral = neutral;
+    poses.speaking = speaking;
     narrationAudio = await stageMedia(
       String(
         direction.narration_audio_path ??
@@ -644,6 +746,7 @@ const main = async () => {
       ),
       neutral,
       speaking,
+      poses,
       speechWindows: beats
         .map((beat: Record<string, unknown>) => ({
           start: Number(beat.start_time),
@@ -662,11 +765,56 @@ const main = async () => {
       breathCycleSeconds: Number(animation.breath_cycle_seconds ?? 4.8),
       breathScale: Number(animation.breath_scale ?? 0.006),
       entrySeconds: Number(animation.entry_seconds ?? 0.45),
+      editorialMotion: {
+        defaultPose: String(animation.default_pose ?? "neutral"),
+        defaultPlacement: animation.default_placement ?? "lower_right",
+        defaultMotion: animation.default_motion ?? "pop",
+        width: Number(animation.default_width ?? 1320),
+        shadow: animation.shadow !== false,
+      },
       layout: presenterManifest.layout ?? {},
     };
     if (!presenter.speechWindows.length) {
       throw new Error("PNG presenter requires exact narration beat windows.");
     }
+  }
+
+  const backgroundMusicPath = String(
+    direction.background_music_path ?? "",
+  ).trim();
+  const backgroundMusic = backgroundMusicPath
+    ? await stageMedia(
+        backgroundMusicPath,
+        generatedDir,
+        undefined,
+        true,
+      )
+    : undefined;
+  if (backgroundMusic && backgroundMusic.kind !== "audio") {
+    throw new Error("Background music must be an audio file.");
+  }
+  const soundEffects = [];
+  for (const rawEffect of Array.isArray(direction.sound_effects)
+    ? direction.sound_effects
+    : []) {
+    const effectPath = String(rawEffect?.path ?? "").trim();
+    if (!effectPath) {
+      continue;
+    }
+    const media = await stageMedia(
+      effectPath,
+      generatedDir,
+      undefined,
+      true,
+    );
+    if (media.kind !== "audio") {
+      throw new Error(`Sound effect must be audio: ${effectPath}`);
+    }
+    soundEffects.push({
+      media,
+      start: Number(rawEffect.start ?? 0),
+      volume: optionalFiniteNumber(rawEffect.volume),
+    });
   }
 
   const visuals: TimedVisual[] = [];
@@ -809,6 +957,11 @@ const main = async () => {
       String(direction.avatar_render_background ?? "").toLowerCase() ===
       "chroma_green",
     narrationAudio,
+    backgroundMusic,
+    backgroundMusicVolume: optionalFiniteNumber(
+      direction.background_music_volume,
+    ),
+    soundEffects,
     presenter,
     visuals,
     timelineSegments,
@@ -834,6 +987,23 @@ const main = async () => {
     compositionManifest.preview_path,
   );
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  const studioPropsPath = path.join(generatedDir, "studio-props.json");
+  await writeJson(studioPropsPath, props);
+
+  if (prepareStudio) {
+    console.log(
+      JSON.stringify(
+        {
+          composition_id: compositionId,
+          studio_props_path: studioPropsPath,
+          public_dir: publicDir,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
 
   const serveUrl = await bundle({
     entryPoint: path.join(rendererRoot, "src", "Root.tsx"),

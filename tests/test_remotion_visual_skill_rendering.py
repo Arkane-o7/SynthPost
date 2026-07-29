@@ -204,6 +204,9 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
             self.assertIn(f"timeline_story_{channel}", render_story)
         self.assertIn("production.brand?.accent", render_story)
         self.assertIn("--synthea-accent", brand)
+        self.assertIn('component={MeridianStory}', root)
+        self.assertIn('id="timeline-story-synthpost"', root)
+        self.assertIn('component={TimelineStory}', root)
 
 
 if __name__ == "__main__":

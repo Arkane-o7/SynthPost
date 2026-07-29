@@ -5,7 +5,7 @@ from .base import BrandTheme, ChannelProductionProfile, ChannelProfile, ChannelP
 
 PROFILE = ChannelProfile(
     channel_id="meridian",
-    profile_version="1.0.0",
+    profile_version="1.2.0",
     name="Meridian",
     short_name="ME",
     tagline="Follow the money",
@@ -21,15 +21,21 @@ PROFILE = ChannelProfile(
     research_style="Data-led analysis grounded in filings and primary financial sources.",
     script_style="Patient analytical explanations that connect incentives to outcomes.",
     narration_style="Measured, authoritative, and skeptical.",
-    visual_style="Charts, filings, economic data, maps, and restrained b-roll.",
-    timeline_style="Deliberate pacing with space for charts and causal explanation.",
-    template_pack="meridian_v1",
+    visual_style=(
+        "Full-frame evidence, charts, filings, cutouts, diagrams, and restrained "
+        "editorial collage; the PNG narrator appears only when useful."
+    ),
+    timeline_style=(
+        "Editorial motion-graphics pacing with full-canvas scenes and sparse, "
+        "mobile narrator appearances instead of broadcast boxes."
+    ),
+    template_pack="meridian_editorial_v3",
     brand_pack="meridian_v1",
     anchor_profile="meridian_anchor_v1",
     voice_profile="meridian_voice_v1",
     outro_pack="meridian_v1",
     prompts=ChannelPromptPack(
-        version="prompts-v1",
+        version="prompts-v3",
         script="""
 Write a financial-systems investigation in the spirit of following incentives,
 not repeating market commentary. Begin with the surprising transaction,
@@ -42,24 +48,34 @@ advice or predict a price. End with a measurable filing, policy decision,
 funding condition, or market signal that could confirm or break the thesis.
 """,
         segmentation="""
-Use fewer, longer analytical sections. Let one causal idea develop before
-changing treatment. Prefer the presenter beside filings, charts, maps, and
-company evidence; reserve full-screen material for a decisive chart, document,
-facility, or primary event. The opening states the economic puzzle and the
-closing returns to the unresolved incentive or financial test.
+Use fewer, longer analytical sections, divided into purposeful visual beats.
+Choose only from Meridian's scene grammar: evidence reel for full-frame source
+footage and photography; document desk for filings and reports; clipping board
+for article evidence; data board for charts, maps, and quantitative proof;
+explainer stage for mechanisms, people, and comparisons; presenter canvas only
+when the narrator itself advances the explanation. Never request a split screen,
+lower third, headline bar, chyron, news desk, persistent presenter box, or any
+SynthPost template. The PNG narrator is a movable editorial layer, not an
+anchor: use it sparingly for a hook, explanation reset, skeptical reaction,
+transition, or conclusion, and let evidence hold the frame by itself the rest
+of the time. Vary pose, scale, side, and entrance only when the motion clarifies
+the idea. The opening states the economic puzzle and the closing returns to the
+unresolved incentive or measurable financial test.
 """,
         visual_search="""
 Prioritize regulatory filings, annual reports, investor presentations, central
-bank and statistics-agency data, court records, company facilities, maps, and
-properly sourced charts. Search with the exact company, instrument, metric,
-reporting period, regulator, or policy named in the script. Avoid trading-floor
-stock footage, falling coins, cash-counting hands, generic skyscrapers, and
-unsourced social-media charts.
+bank and statistics-agency data, court records, company facilities, maps,
+properly sourced charts, and primary-source video. Search with the exact
+company, instrument, metric, reporting period, regulator, or policy named in the
+script. A useful result must be strong enough to occupy one of Meridian's
+evidence-first scenes; do not search for decorative filler. Avoid trading-floor
+stock footage, falling coins, cash-counting hands, generic skyscrapers, generic
+AI animations, and unsourced social-media charts.
 """,
     ),
     production=ChannelProductionProfile(
         composition_template="timeline_story_meridian",
-        template_policy="meridian_financial_analysis_v1",
+        template_policy="meridian_editorial_v3",
         logo_path="brand/meridian_bug.svg",
         outro_path="assets/channels/meridian/outro.mp4",
         presenter_provider="png_puppet",

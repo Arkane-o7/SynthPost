@@ -3620,6 +3620,68 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 choose_template("context", visual, 1), "split_anchor_visual"
             )
 
+    def test_meridian_uses_native_scene_grammar_without_changing_synthpost(self) -> None:
+        evidence = VisualCandidate(
+            story_id="story_channel_templates",
+            provider="unit",
+            media_type=MediaType.image,
+            content_role=ContentRole.evidence,
+            rights_tier=RightsTier.green,
+            review_status="approved",
+        )
+        self.assertEqual(
+            choose_template(
+                "context",
+                evidence,
+                1,
+                template_policy="meridian_editorial_v3",
+            ),
+            "meridian_clipping_board",
+        )
+        self.assertEqual(
+            choose_template(
+                "context",
+                None,
+                1,
+                template_policy="meridian_editorial_v3",
+            ),
+            "meridian_presenter_canvas",
+        )
+        self.assertEqual(
+            choose_template(
+                "context",
+                evidence,
+                1,
+                template_policy="synthpost_fast_explainer_v1",
+            ),
+            "split_anchor_visual",
+        )
+
+        expected = {
+            (MediaType.video, ContentRole.primary_footage): "meridian_evidence_reel",
+            (MediaType.document, ContentRole.document): "meridian_document_desk",
+            (MediaType.chart, ContentRole.data): "meridian_data_board",
+            (MediaType.image, ContentRole.person): "meridian_explainer_stage",
+        }
+        for (media_type, content_role), template_id in expected.items():
+            visual = VisualCandidate(
+                story_id="story_channel_templates",
+                provider="unit",
+                media_type=media_type,
+                content_role=content_role,
+                rights_tier=RightsTier.green,
+                review_status="approved",
+            )
+            self.assertEqual(
+                choose_template(
+                    "context",
+                    visual,
+                    1,
+                    template_policy="meridian_editorial_v3",
+                ),
+                template_id,
+            )
+
     def test_validation_rejects_blacklisted_card_templates(self) -> None:
         plan = TimelinePlan(
             story_id="story_blacklisted_template",

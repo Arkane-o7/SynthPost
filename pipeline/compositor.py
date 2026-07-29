@@ -72,9 +72,24 @@ def render_story(
         "presenter_neutral_path",
         "presenter_speaking_path",
         "narration_audio_path",
+        "background_music_path",
     ):
         if direction.get(key):
             inputs.append(str(direction[key]))
+    pose_paths = direction.get("presenter_pose_paths")
+    if isinstance(pose_paths, dict):
+        inputs.extend(
+            str(value)
+            for value in pose_paths.values()
+            if str(value or "").strip()
+        )
+    sound_effects = direction.get("sound_effects")
+    if isinstance(sound_effects, list):
+        inputs.extend(
+            str(effect.get("path"))
+            for effect in sound_effects
+            if isinstance(effect, dict) and str(effect.get("path") or "").strip()
+        )
     inputs.extend(_visual_input_paths(manifest))
 
     if output_is_fresh(output_path, inputs) and not force:

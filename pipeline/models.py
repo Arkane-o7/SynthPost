@@ -853,10 +853,18 @@ class SegmentOverlays(StrictModel):
 
 class TimelineSegment(StrictModel):
     segment_id: str
+    beat_id: str | None = None
+    scene_id: str | None = None
     section_id: str
     start_time: float
     end_time: float
     duration: float
+    narrative_function: str | None = None
+    visual_role: str | None = None
+    transition_in: str | None = None
+    transition_out: str | None = None
+    internal_events: list[dict[str, Any]] = Field(default_factory=list)
+    scene_assets: dict[str, SegmentVisual] = Field(default_factory=dict)
     script_text: str = ""
     claim_ids: list[str] = Field(default_factory=list)
     anchor: SegmentAnchor = Field(default_factory=SegmentAnchor)

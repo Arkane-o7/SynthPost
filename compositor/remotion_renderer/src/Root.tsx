@@ -5,6 +5,7 @@ import { FullScreenAnchor } from "./templates/FullScreenAnchor";
 import { FullScreenNewsVisuals } from "./templates/FullScreenNewsVisuals";
 import { SplitMain } from "./templates/SplitMain";
 import { TimelineStory } from "./templates/TimelineStory";
+import { MeridianStory } from "./templates/MeridianStory";
 
 import type { StoryProps } from "./types";
 
@@ -133,7 +134,7 @@ export const RemotionRoot: React.FC = () => {
       />
       <Composition
         id="timeline-story-meridian"
-        component={TimelineStory}
+        component={MeridianStory}
         width={1920}
         height={1080}
         fps={24}

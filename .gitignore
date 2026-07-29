@@ -55,3 +55,32 @@ avatar-engine/assets/avatars/**/source_project/
 
 # Misc
 .playwright-mcp/
+
+# Local channel voice enrollments and generated profiles. These may encode a
+# private speaker identity and are provisioned outside Git.
+assets/channels/*/voice/*.dtprofile/
+
+# Downloaded design-study source material and derived frame corpora. Keep the
+# written reconstruction report and compact metrics in Git, not copied videos.
+design_references/**/videos/
+design_references/**/frames/
+design_references/**/analysis/audio/
+design_references/**/analysis/keyframes/
+design_references/**/analysis/motion-strips/
+design_references/**/analysis/sequence-sheets/
+design_references/**/analysis/download.log
+design_references/**/metadata/
+design_references/local-how-money-works/
+
+# Meridian prototype render outputs and raw narration are reproducible local
+# artifacts. The story manifests, scripts, QA sheets, and compact source media
+# remain trackable.
+videos/meridian-open-models-demo/
+videos/meridian-presenter-demo/
+videos/meridian-open-models-prototype/*
+!videos/meridian-open-models-prototype/story.json
+videos/meridian-private-credit-prototype/narration-*.wav
+videos/meridian-private-credit-prototype/narration-segments/
+videos/meridian-private-credit-prototype/visual-review.mp4
+videos/meridian-private-credit-prototype/media/*-source.webm
+videos/meridian-private-credit-prototype/media/*.pdf

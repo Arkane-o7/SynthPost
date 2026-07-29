@@ -93,11 +93,19 @@ export type PngPresenter = {
   characterId: string;
   neutral: PublicMedia;
   speaking: PublicMedia;
+  poses: Record<string, PublicMedia>;
   speechWindows: PresenterSpeechWindow[];
   talkCadenceFps: number;
   breathCycleSeconds: number;
   breathScale: number;
   entrySeconds: number;
+  editorialMotion?: {
+    defaultPose?: string;
+    defaultPlacement?: MeridianPresenterPlacement;
+    defaultMotion?: MeridianPresenterMotion;
+    width?: number;
+    shadow?: boolean;
+  };
   layout: {
     split?: {
       width?: number;
@@ -114,13 +122,71 @@ export type PngPresenter = {
   };
 };
 
+export type MeridianPresenterPlacement =
+  | "left"
+  | "right"
+  | "center"
+  | "lower_left"
+  | "lower_right"
+  | "edge_left"
+  | "edge_right";
+
+export type MeridianPresenterMotion =
+  | "pop"
+  | "slide"
+  | "drift"
+  | "peek"
+  | "hop";
+
+export type MeridianPresenterCue = {
+  pose?: string;
+  previousPose?: string;
+  poseChangeAt?: number;
+  poseTransitionSeconds?: number;
+  poseTransition?: "cut" | "blur" | "whip";
+  placement?: MeridianPresenterPlacement;
+  motion?: MeridianPresenterMotion;
+  width?: number;
+  x?: number;
+  y?: number;
+  scale?: number;
+  rotate?: number;
+};
+
+export type MeridianInternalEvent = {
+  eventId: string;
+  type:
+    | "add_evidence"
+    | "replace_evidence"
+    | "highlight_document"
+    | "draw_chart"
+    | "add_label"
+    | "add_token"
+    | "change_pose"
+    | "reveal_prop"
+    | "camera"
+    | string;
+  at: number;
+  until?: number;
+  target?: string;
+  payload?: Record<string, unknown>;
+};
+
 export type TimelineSegmentProps = {
   segmentId: string;
+  beatId?: string;
+  sceneId?: string;
   sectionId: string;
   start: number;
   end: number;
   duration: number;
   narrationStart?: number;
+  narrativeFunction?: string;
+  visualRole?: string;
+  transitionIn?: string;
+  transitionOut?: string;
+  internalEvents?: MeridianInternalEvent[];
+  sceneAssets?: Record<string, TimedVisual>;
   scriptText: string;
   anchor: {
     visible: boolean;
@@ -176,6 +242,13 @@ export type StoryProps = {
   anchor?: PublicMedia;
   anchorChromaKey?: boolean;
   narrationAudio?: PublicMedia;
+  backgroundMusic?: PublicMedia;
+  backgroundMusicVolume?: number;
+  soundEffects?: Array<{
+    media: PublicMedia;
+    start: number;
+    volume?: number;
+  }>;
   presenter?: PngPresenter;
   visuals: TimedVisual[];
   points: NewsPoint[];

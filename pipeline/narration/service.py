@@ -252,11 +252,28 @@ def generate_narration(
         profile_path = request.get("voice_profile_path")
         reference_path = request.get("reference_audio_path")
         reference_text = str(request.get("reference_text") or "").strip()
-        if profile_path and not Path(str(profile_path)).is_file():
-            raise FileNotFoundError(
-                f"{channel_profile.name} narrator profile is missing: {profile_path}. "
-                f"Configure SYNTHEA_{channel_profile.channel_id.upper()}_TTS_VOICE_PROFILE_PATH."
+        if profile_path:
+            profile = Path(str(profile_path))
+            missing_profile_files = (
+                [
+                    name
+                    for name in ("profile.json", "cond.safetensors")
+                    if not (profile / name).is_file()
+                ]
+                if profile.is_dir()
+                else []
             )
+            if not profile.exists() or missing_profile_files:
+                detail = (
+                    f" Missing {', '.join(missing_profile_files)}."
+                    if missing_profile_files
+                    else ""
+                )
+                raise FileNotFoundError(
+                    f"{channel_profile.name} narrator profile is missing or incomplete: "
+                    f"{profile_path}.{detail} Configure "
+                    f"SYNTHEA_{channel_profile.channel_id.upper()}_TTS_VOICE_PROFILE_PATH."
+                )
         if not profile_path and (
             not reference_path
             or not Path(str(reference_path)).is_file()
