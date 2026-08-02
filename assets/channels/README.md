@@ -7,6 +7,8 @@ Expected defaults:
 
 ```text
 assets/channels/
+  synthpost/
+    voice/loveena-kamath-subtle-deep-v2.dtprofile
   meridian/
     presenter/
       character.json
