@@ -1,4 +1,14 @@
 import React from "react";
+import {
+  AbsoluteFill,
+  Img,
+  interpolate,
+  staticFile,
+  useCurrentFrame,
+} from "remotion";
+
+const materialAsset = (name: string): string =>
+  staticFile(`meridian/materials/${name}`);
 
 export const meridianPalette = {
   forest: "#488050",
@@ -14,17 +24,148 @@ export const meridianPalette = {
   thread: "#a73f34",
 };
 
+export const CrumpledPaperTexture: React.FC<{
+  opacity?: number;
+  animated?: boolean;
+  blendMode?: React.CSSProperties["mixBlendMode"];
+}> = ({ opacity = 0.34, animated = true, blendMode = "multiply" }) => {
+  const frame = useCurrentFrame();
+  const driftX = animated ? Math.sin(frame / 83) * 3.5 : 0;
+  const driftY = animated ? Math.cos(frame / 97) * 2.5 : 0;
+  const scale = animated ? 1.035 + Math.sin(frame / 121) * 0.004 : 1.035;
+  return (
+    <Img
+      src={materialAsset("paper-crumpled-ivory.webp")}
+      style={{
+        position: "absolute",
+        inset: -24,
+        width: "calc(100% + 48px)",
+        height: "calc(100% + 48px)",
+        objectFit: "cover",
+        opacity,
+        mixBlendMode: blendMode,
+        filter: "grayscale(.18) sepia(.12) contrast(1.08)",
+        transform: `translate3d(${driftX}px, ${driftY}px, 0) scale(${scale})`,
+        pointerEvents: "none",
+      }}
+    />
+  );
+};
+
+export const MeridianDeskSurface: React.FC<{
+  children?: React.ReactNode;
+  shade?: number;
+}> = ({ children, shade = 0.12 }) => {
+  const frame = useCurrentFrame();
+  const cameraX = interpolate(frame, [0, 150], [-9, 5], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const cameraY = interpolate(frame, [0, 150], [5, -3], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  const cameraScale = interpolate(frame, [0, 180], [1.035, 1.055], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
+  return (
+    <AbsoluteFill style={{ overflow: "hidden", background: "#312218" }}>
+      <Img
+        src={materialAsset("editorial-desk-wide.webp")}
+        style={{
+          position: "absolute",
+          inset: -28,
+          width: "calc(100% + 56px)",
+          height: "calc(100% + 56px)",
+          objectFit: "cover",
+          transform: `translate3d(${cameraX}px, ${cameraY}px, 0) scale(${cameraScale})`,
+          filter: "saturate(.82) contrast(1.08) brightness(.9)",
+        }}
+      />
+      <AbsoluteFill
+        style={{
+          background: `radial-gradient(circle at 50% 47%, transparent 34%, rgba(7,5,4,${shade + 0.13}) 100%), linear-gradient(118deg, rgba(65,106,82,.08), rgba(0,0,0,${shade}))`,
+          pointerEvents: "none",
+        }}
+      />
+      {children}
+    </AbsoluteFill>
+  );
+};
+
+export const MaskingTape: React.FC<{
+  left: number | string;
+  top: number | string;
+  width?: number;
+  height?: number;
+  rotate?: number;
+  opacity?: number;
+  zIndex?: number;
+}> = ({
+  left,
+  top,
+  width = 168,
+  height = 48,
+  rotate = -3,
+  opacity = 0.86,
+  zIndex = 28,
+}) => (
+  <div
+    style={{
+      position: "absolute",
+      left,
+      top,
+      zIndex,
+      width,
+      height,
+      overflow: "hidden",
+      background: "rgba(224,211,177,.88)",
+      backgroundImage: `url(${materialAsset("paper-crumpled-ivory.webp")})`,
+      backgroundSize: "cover",
+      backgroundBlendMode: "multiply",
+      clipPath:
+        "polygon(1% 8%,7% 1%,14% 8%,22% 2%,31% 7%,40% 1%,50% 8%,60% 2%,70% 7%,80% 1%,90% 8%,99% 2%,97% 91%,90% 98%,82% 91%,72% 99%,63% 92%,53% 99%,43% 91%,34% 98%,24% 92%,14% 99%,2% 91%)",
+      boxShadow: "0 8px 13px rgba(15,10,7,.25)",
+      opacity,
+      transform: `rotate(${rotate}deg)`,
+      filter: "sepia(.24) contrast(.94)",
+      pointerEvents: "none",
+    }}
+  />
+);
+
 export const CorkBoard: React.FC = () => (
   <div
     style={{
       position: "absolute",
       inset: 0,
       overflow: "hidden",
-      background:
-        "radial-gradient(circle at 14% 21%,rgba(255,238,185,.25) 0 1px,transparent 2px),radial-gradient(circle at 72% 61%,rgba(72,39,19,.22) 0 1px,transparent 2px),radial-gradient(circle at 42% 86%,rgba(255,244,205,.2) 0 1.5px,transparent 2.5px),linear-gradient(135deg,#bd8b56 0%,#a97243 48%,#c0905a 100%)",
-      backgroundSize: "17px 19px,23px 29px,31px 27px,100% 100%",
+      background: "#9c693f",
     }}
   >
+    <Img
+      src={materialAsset("cork-natural.webp")}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        filter: "saturate(.78) contrast(1.1) brightness(.82)",
+      }}
+    />
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        opacity: 0.34,
+        background:
+          "radial-gradient(circle at 14% 21%,rgba(255,238,185,.35) 0 1px,transparent 2px),radial-gradient(circle at 72% 61%,rgba(72,39,19,.3) 0 1px,transparent 2px),radial-gradient(circle at 42% 86%,rgba(255,244,205,.28) 0 1.5px,transparent 2.5px)",
+        backgroundSize: "17px 19px,23px 29px,31px 27px",
+        mixBlendMode: "soft-light",
+      }}
+    />
     <div
       style={{
         position: "absolute",
@@ -40,7 +181,8 @@ export const CorkBoard: React.FC = () => (
       style={{
         position: "absolute",
         inset: 44,
-        boxShadow: "inset 0 0 64px rgba(55,28,13,.24)",
+        boxShadow:
+          "inset 0 0 76px rgba(40,21,11,.34), inset 0 0 3px rgba(255,223,177,.32)",
         pointerEvents: "none",
       }}
     />
@@ -159,6 +301,7 @@ export const TornPaper: React.FC<{
         ...innerStyle,
       }}
     >
+      <CrumpledPaperTexture />
       {children}
     </div>
     {pin ? (

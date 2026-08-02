@@ -117,8 +117,9 @@ class MeridianPersistentSceneTests(unittest.TestCase):
         self.assertIn("presenterCue={presenterCue}", story)
         self.assertIn("isRightPlacement(presenterCue?.placement)", scene)
         self.assertIn("presenterVisible", scene)
-        self.assertIn("position.left + position.width / 2", scene)
-        self.assertIn("end={{ x: hub.x, y: hub.y - 49 }}", scene)
+        self.assertIn("position.left + position.width * position.pinX", scene)
+        self.assertIn("y: position.top + position.pinY", scene)
+        self.assertIn("end={{ x: hub.x, y: hub.y - 68 }}", scene)
         self.assertIn("const hub = presenterRight", scene)
 
     def test_clipping_board_uses_structured_headline_and_social_layouts(self) -> None:

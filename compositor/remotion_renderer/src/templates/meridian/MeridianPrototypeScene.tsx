@@ -19,7 +19,10 @@ import { mediaSrc } from "../../components/media";
 import {
   BoardPin,
   CorkBoard,
+  CrumpledPaperTexture,
+  MaskingTape,
   MarkerHighlight,
+  MeridianDeskSurface,
   ThreadConnector,
   TornPaper,
   isRightPlacement,
@@ -146,6 +149,10 @@ const PaperTexture: React.FC<{ tone?: "green" | "cream" }> = ({
         mixBlendMode: "overlay",
       }}
     />
+    <CrumpledPaperTexture
+      opacity={tone === "green" ? 0.16 : 0.34}
+      blendMode={tone === "green" ? "soft-light" : "multiply"}
+    />
   </AbsoluteFill>
 );
 
@@ -204,13 +211,14 @@ const TornHeadline: React.FC<Props> = ({ sceneSegments }) => {
     extrapolateRight: "clamp",
   });
   return (
-    <AbsoluteFill style={{ background: C.forestDark }}>
-      <PaperTexture />
+    <MeridianDeskSurface shade={0.18}>
+      <MaskingTape left={236} top={82} width={214} rotate={-7} zIndex={42} />
+      <MaskingTape left={1466} top={83} width={208} rotate={6} zIndex={42} />
       {screenshot ? (
         <div
           style={{
             position: "absolute",
-            inset: "72px 104px 76px",
+            inset: "108px 154px 112px",
             overflow: "hidden",
             background: C.paperBright,
             transform: `translateY(${(1 - enter) * 96}px) rotate(${-(1 - enter) * 3 - 0.65}deg) scale(${cameraPush})`,
@@ -229,6 +237,7 @@ const TornHeadline: React.FC<Props> = ({ sceneSegments }) => {
               filter: "saturate(.82) contrast(1.04) brightness(.88)",
             }}
           />
+          <CrumpledPaperTexture opacity={0.13} blendMode="soft-light" />
           <div
             style={{
               position: "absolute",
@@ -281,11 +290,8 @@ const TornHeadline: React.FC<Props> = ({ sceneSegments }) => {
           </div>
         </div>
       ) : null}
-      {screenshot ? (
-        <BoardPin x="78%" y={89} color="coral" size={42} rotate={3} />
-      ) : null}
       <SourceTag dark>{sourceTag}</SourceTag>
-    </AbsoluteFill>
+    </MeridianDeskSurface>
   );
 };
 
@@ -414,19 +420,19 @@ const NarratorEvidence: React.FC<Props> = ({
       pinColor="brass"
       pinX={presenterRight ? "74%" : "26%"}
       style={{
-        left: presenterRight ? 72 : 1108,
-        top: 54,
-        width: 740,
-        height: 360,
+        left: presenterRight ? 82 : 1038,
+        top: 132,
+        width: 800,
+        height: 420,
         transform: `rotate(${presenterRight ? -1 : 1}deg)`,
         filter: "drop-shadow(0 34px 48px rgba(3,17,13,.38))",
       }}
       innerStyle={{ background: C.paper }}
     >
-      <div style={{ position: "absolute", inset: "46px 54px", color: C.ink }}>
+      <div style={{ position: "absolute", inset: "50px 58px", color: C.ink }}>
       <div
         style={{
-          font: `800 ${meridianHeadlineFontSize(headline, [64, 55, 48])}px/.98 Georgia, 'Times New Roman', serif`,
+          font: `800 ${meridianHeadlineFontSize(headline, [70, 60, 52])}px/.98 Georgia, 'Times New Roman', serif`,
           letterSpacing: "-.04em",
         }}
       >
@@ -450,7 +456,7 @@ const NarratorEvidence: React.FC<Props> = ({
         style={{
           marginTop: 28,
           color: C.inkMuted,
-          font: "600 26px/1.3 Inter, ui-sans-serif, system-ui",
+          font: "600 28px/1.3 Inter, ui-sans-serif, system-ui",
           display: "-webkit-box",
           WebkitBoxOrient: "vertical",
           WebkitLineClamp: 3,
@@ -464,8 +470,8 @@ const NarratorEvidence: React.FC<Props> = ({
     <div
       style={{
         position: "absolute",
-        left: presenterRight ? 1050 : 414,
-        top: 58,
+        left: presenterRight ? 1110 : 355,
+        top: 238,
         zIndex: 36,
         width: 455,
         padding: "29px 38px 31px",
@@ -730,7 +736,8 @@ const Mechanism: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => {
         style={{
           position: "absolute",
           left: 124,
-          top: 82,
+          top: 92,
+          width: 1660,
           color: C.ink,
           font: "800 70px/.98 Georgia, 'Times New Roman', serif",
           letterSpacing: "-.04em",
@@ -747,10 +754,10 @@ const Mechanism: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => {
           return (
             <line
               key={index}
-              x1={570 + index * 570}
-              x2={800 + index * 570}
-              y1="570"
-              y2="570"
+              x1={632 + index * 590}
+              x2={760 + index * 590}
+              y1="550"
+              y2="550"
               stroke={C.coral}
               strokeWidth="13"
               strokeLinecap="round"
@@ -767,11 +774,11 @@ const Mechanism: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => {
             key={number}
             style={{
               position: "absolute",
-              left: 112 + index * 575,
-              top: 350 + (1 - reveal) * 44,
-              width: 510,
-              minHeight: 390,
-              padding: "46px 44px",
+              left: 102 + index * 590,
+              top: 340 + (1 - reveal) * 44,
+              width: 530,
+              minHeight: 410,
+              padding: "48px 46px",
               boxSizing: "border-box",
               background: index === 2 ? C.forest : C.paperBright,
               color: index === 2 ? C.paperBright : C.ink,
@@ -802,7 +809,7 @@ const Mechanism: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => {
               style={{
                 marginTop: 22,
                 color: index === 2 ? "rgba(255,250,240,.76)" : C.inkMuted,
-                font: "600 27px/1.3 Inter, ui-sans-serif, system-ui",
+                font: "600 29px/1.32 Inter, ui-sans-serif, system-ui",
               }}
             >
               {body}
@@ -834,6 +841,7 @@ const DocumentHighlight: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => 
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+  const quoteFontSize = quote.length > 165 ? 29 : quote.length > 110 ? 32 : 36;
   return (
     <AbsoluteFill
       style={{
@@ -879,10 +887,10 @@ const DocumentHighlight: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => 
         <div
           style={{
             position: "absolute",
-            left: 105,
-            right: 100,
-            bottom: 104,
-            padding: "34px 43px 39px",
+            left: 116,
+            right: 116,
+            bottom: 70,
+            padding: "25px 36px 28px",
             background: "rgba(255,250,240,.96)",
             color: C.ink,
             boxShadow: "0 16px 40px rgba(15,28,23,.22)",
@@ -891,14 +899,14 @@ const DocumentHighlight: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => 
           <div
             style={{
               position: "relative",
-              font: "700 39px/1.32 Georgia, 'Times New Roman', serif",
+              font: `700 ${quoteFontSize}px/1.28 Georgia, 'Times New Roman', serif`,
             }}
           >
             <MarkerHighlight progress={highlight}>{quote}</MarkerHighlight>
           </div>
           <div
             style={{
-              marginTop: 20,
+              marginTop: 15,
               color: C.inkMuted,
               font: "700 23px/1 Inter, ui-sans-serif, system-ui",
               letterSpacing: ".05em",
@@ -911,11 +919,11 @@ const DocumentHighlight: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => 
       <div
         style={{
           position: "absolute",
-          right: 88,
-          top: 186,
-          width: 34,
-          height: 520,
-          borderRadius: 17,
+          right: 96,
+          top: 262,
+          width: 25,
+          height: 350,
+          borderRadius: 13,
           background: `linear-gradient(90deg,#b5312d 0 72%,#e6c58c 72% 88%,${C.ink} 88%)`,
           boxShadow: "0 18px 24px rgba(28,15,8,.38)",
           transform: `rotate(14deg) translateY(${(1 - settle) * -90}px)`,
@@ -941,87 +949,163 @@ const NarratorTokens: React.FC<Props> = ({
     "Competition moves from models\nto everything around them.",
   );
   const hubLabel = dataText(data, "hub_label", "THE NEW MOAT");
+  const rightSafePositions = [
+    {
+      left: 72,
+      top: 330,
+      width: 340,
+      accent: C.coral,
+      rotate: -1.4,
+      pinX: 0.94,
+      pinY: 68,
+    },
+    {
+      left: 478,
+      top: 284,
+      width: 360,
+      accent: C.brass,
+      rotate: 1.1,
+      pinX: 0.82,
+      pinY: 112,
+    },
+    {
+      left: 92,
+      top: 606,
+      width: 350,
+      accent: C.brass,
+      rotate: 0.8,
+      pinX: 0.94,
+      pinY: 64,
+    },
+    {
+      left: 470,
+      top: 560,
+      width: 360,
+      accent: C.forest,
+      rotate: -0.9,
+      pinX: 0.97,
+      pinY: 66,
+    },
+    {
+      left: 300,
+      top: 838,
+      width: 380,
+      accent: C.coral,
+      rotate: 1.2,
+      pinX: 0.88,
+      pinY: 30,
+    },
+  ];
   const positions = presenterRight
-    ? [
-        { left: 54, top: 270, width: 300 },
-        { left: 414, top: 238, width: 300 },
-        { left: 84, top: 516, width: 300 },
-        { left: 444, top: 502, width: 300 },
-        { left: 234, top: 750, width: 350 },
-      ]
-    : [
-        { left: 1566, top: 270, width: 300 },
-        { left: 1206, top: 238, width: 300 },
-        { left: 1536, top: 516, width: 300 },
-        { left: 1176, top: 502, width: 300 },
-        { left: 1336, top: 750, width: 350 },
-      ];
-  const hub = presenterRight ? { x: 790, y: 690 } : { x: 1130, y: 690 };
+    ? rightSafePositions
+    : rightSafePositions.map((position) => ({
+        ...position,
+        left: 1920 - position.left - position.width,
+        rotate: -position.rotate,
+        pinX: 1 - position.pinX,
+      }));
+  const hub = presenterRight ? { x: 1030, y: 830 } : { x: 890, y: 830 };
+  const titleLeft = presenterRight ? 68 : 982;
+  const titleLines = heading.split("\n");
   return (
     <AbsoluteFill>
       <CorkBoard />
-      <div
+      <MaskingTape
+        left={titleLeft + 334}
+        top={47}
+        width={210}
+        rotate={presenterRight ? -2 : 2}
+      />
+      <TornPaper
         style={{
-          position: "absolute",
-          left: presenterRight ? 54 : 1066,
-          top: 55,
-          width: 800,
-          color: C.paper,
-          font: "800 56px/.98 Georgia, 'Times New Roman', serif",
-          letterSpacing: "-.03em",
+          zIndex: 8,
+          left: titleLeft,
+          top: 68,
+          width: 890,
+          height: 174,
+          transform: `rotate(${presenterRight ? -0.55 : 0.55}deg)`,
+          filter: "drop-shadow(0 22px 34px rgba(4,18,14,.28))",
         }}
+        innerStyle={{ background: C.paperBright }}
       >
-        {heading.split("\n").map((line, index) => (
-          <React.Fragment key={`${line}-${index}`}>
-            {line}
-            {index < heading.split("\n").length - 1 ? <br /> : null}
-          </React.Fragment>
-        ))}
-      </div>
+        <div
+          style={{
+            position: "absolute",
+            inset: "25px 38px 24px",
+            color: C.ink,
+          }}
+        >
+          <div
+            style={{
+              color: C.coral,
+              font: "850 20px/1 Inter, ui-sans-serif, system-ui",
+              letterSpacing: ".16em",
+              textTransform: "uppercase",
+            }}
+          >
+            Liquidity map
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              font: "800 47px/.98 Georgia, 'Times New Roman', serif",
+              letterSpacing: "-.035em",
+            }}
+          >
+            {titleLines.map((line, index) => (
+              <React.Fragment key={`${line}-${index}`}>
+                {line}
+                {index < titleLines.length - 1 ? <br /> : null}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </TornPaper>
       {events.slice(0, 5).map((event, index) => {
         const reveal = eventProgress(sceneElapsed, event.at + 0.16, 0.42);
         const position = positions[index] ?? positions[positions.length - 1];
         const start = {
-          x: position.left + position.width / 2,
-          y: position.top + 16,
+          x: position.left + position.width * position.pinX,
+          y: position.top + position.pinY,
         };
         return (
           <ThreadConnector
             key={`${event.eventId}-thread`}
             start={start}
-            end={{ x: hub.x, y: hub.y - 49 }}
+            end={{ x: hub.x, y: hub.y - 68 }}
             progress={reveal}
-            bend={(index % 2 ? 1 : -1) * (28 + index * 5)}
+            bend={[44, -34, -42, 34, 52][index] ?? 36}
           />
         );
       })}
-      <div
+      <TornPaper
         style={{
-          position: "absolute",
-          left: hub.x - 93,
-          top: hub.y - 54,
+          left: hub.x - 158,
+          top: hub.y - 70,
           zIndex: 16,
-          width: 186,
-          minHeight: 108,
-          padding: "23px 18px",
-          boxSizing: "border-box",
+          width: 316,
+          height: 146,
+          transform: `rotate(${presenterRight ? -1.2 : 1.2}deg)`,
+          filter: "drop-shadow(0 22px 34px rgba(4,18,14,.36))",
+        }}
+        innerStyle={{
           display: "grid",
           placeItems: "center",
+          padding: "26px 34px",
+          boxSizing: "border-box",
           background: C.forestDark,
           color: C.paperBright,
           border: `5px solid ${C.brass}`,
-          borderRadius: "50%",
-          boxShadow: "0 18px 34px rgba(4,18,14,.38)",
-          font: "850 21px/1.05 Inter, ui-sans-serif, system-ui",
+          font: "850 27px/1.02 Inter, ui-sans-serif, system-ui",
           letterSpacing: ".08em",
           textAlign: "center",
         }}
       >
         {hubLabel}
-      </div>
+      </TornPaper>
       <BoardPin
         x={hub.x}
-        y={hub.y - 49}
+        y={hub.y - 68}
         color="green"
         size={38}
         rotate={1}
@@ -1034,8 +1118,8 @@ const NarratorTokens: React.FC<Props> = ({
             key={event.eventId}
             pin
             pinColor={index % 2 ? "brass" : "coral"}
-            pinX="50%"
-            pinY={16}
+            pinX={`${position.pinX * 100}%`}
+            pinY={position.pinY}
             pinSize={32}
             pinRotate={[-4, 3, -2, 4, -3][index]}
             style={{
@@ -1043,21 +1127,40 @@ const NarratorTokens: React.FC<Props> = ({
               left: position.left,
               top: position.top + (1 - reveal) * 35,
               width: position.width,
-              height: 112,
+              height: 128,
               opacity: reveal,
-              transform: `rotate(${[-2, 1.5, -1, 2, -1.4][index]}deg) scale(${0.8 + reveal * 0.2})`,
+              transform: `rotate(${position.rotate}deg) scale(${0.8 + reveal * 0.2})`,
               filter: "drop-shadow(0 20px 28px rgba(4,18,14,.32))",
             }}
             innerStyle={{
-              display: "grid",
-              placeItems: "center",
-              background: index % 2 ? C.paperBright : C.brass,
+              display: "flex",
+              alignItems: "center",
+              gap: 18,
+              padding: "24px 28px",
+              boxSizing: "border-box",
+              background: index === 3 ? "#E8E6DA" : C.paperBright,
               color: C.ink,
-              font: "850 28px/1 Inter, ui-sans-serif, system-ui",
-              textAlign: "center",
+              boxShadow: `inset 9px 0 0 ${position.accent}`,
             }}
           >
-            {payloadText(event, "label", "COMPANY")}
+            <span
+              style={{
+                color: position.accent,
+                font: "900 25px/1 Inter, ui-sans-serif, system-ui",
+                letterSpacing: ".04em",
+              }}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span
+              style={{
+                font: "850 25px/1.02 Inter, ui-sans-serif, system-ui",
+                letterSpacing: ".015em",
+                textAlign: "left",
+              }}
+            >
+              {payloadText(event, "label", "COMPANY")}
+            </span>
           </TornPaper>
         );
       })}
@@ -1090,6 +1193,8 @@ const FootageMontage: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => {
     "second_source",
     "FRIBBLEDOM · CC BY 3.0 · WIKIMEDIA COMMONS",
   );
+  const headlinePlacement = dataText(data, "headline_placement", "top_right");
+  const headlineOnRight = headlinePlacement !== "top_left";
   const switchAt = Number(data.switch_at ?? 4.45);
   const { fps } = useVideoConfig();
   const switchFrame = Math.round(switchAt * fps);
@@ -1157,22 +1262,40 @@ const FootageMontage: React.FC<Props> = ({ sceneSegments, sceneElapsed }) => {
       <AbsoluteFill
         style={{
           background:
-            "linear-gradient(90deg,rgba(5,12,9,.52),transparent 55%),linear-gradient(180deg,transparent 60%,rgba(5,12,9,.68))",
+            "linear-gradient(180deg,rgba(5,12,9,.16),transparent 38%,rgba(5,12,9,.7))",
         }}
       />
-      <div
+      <MaskingTape
+        left={headlineOnRight ? 1184 : 186}
+        top={63}
+        width={176}
+        rotate={headlineOnRight ? 5 : -5}
+      />
+      <TornPaper
         style={{
-          position: "absolute",
-          left: 82,
-          top: 78,
-          maxWidth: 930,
-          color: C.paperBright,
-          font: "800 71px/.98 Georgia, 'Times New Roman', serif",
-          letterSpacing: "-.04em",
+          left: headlineOnRight ? 1010 : 74,
+          top: 84,
+          width: 820,
+          height: 188,
+          transform: `rotate(${headlineOnRight ? 0.8 : -0.8}deg)`,
+          filter: "drop-shadow(0 22px 40px rgba(3,12,9,.42))",
         }}
+        innerStyle={{ background: "rgba(255,250,240,.94)" }}
       >
-        {showDeveloper ? secondHeadline : firstHeadline}
-      </div>
+        <div
+          style={{
+            position: "absolute",
+            inset: "30px 40px",
+            display: "flex",
+            alignItems: "center",
+            color: C.ink,
+            font: `800 ${meridianHeadlineFontSize(showDeveloper ? secondHeadline : firstHeadline, [54, 48, 43])}px/.98 Georgia, 'Times New Roman', serif`,
+            letterSpacing: "-.038em",
+          }}
+        >
+          {showDeveloper ? secondHeadline : firstHeadline}
+        </div>
+      </TornPaper>
       <SourceTag dark>
         {showDeveloper ? secondSource : firstSource}
       </SourceTag>

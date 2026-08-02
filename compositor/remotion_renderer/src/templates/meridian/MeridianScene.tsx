@@ -16,8 +16,11 @@ import {
   prototypeTemplateIds,
 } from "./MeridianPrototypeScene";
 import {
+  CrumpledPaperTexture,
+  MaskingTape,
   MarkerHighlight,
   MarkerStroke,
+  MeridianDeskSurface,
   TornPaper,
   isRightPlacement,
 } from "./MeridianEditorialPrimitives";
@@ -136,6 +139,10 @@ const GraphPaper: React.FC<{
         mixBlendMode: "overlay",
       }}
     />
+    <CrumpledPaperTexture
+      opacity={tone === "forest" ? 0.13 : 0.32}
+      blendMode={tone === "forest" ? "soft-light" : "multiply"}
+    />
     {children}
   </AbsoluteFill>
 );
@@ -201,19 +208,7 @@ const DocumentDesk: React.FC<MeridianSceneProps> = ({
     extrapolateRight: "clamp",
   });
   return (
-    <AbsoluteFill
-      style={{
-        background:
-          "linear-gradient(112deg, rgba(255,255,255,.1), transparent 23%), repeating-linear-gradient(92deg, #73563F 0 5px, #7E6047 5px 12px, #87684F 12px 22px)",
-      }}
-    >
-      <AbsoluteFill
-        style={{
-          opacity: 0.22,
-          background:
-            "radial-gradient(circle at 18% 20%, rgba(0,0,0,.28), transparent 25%), radial-gradient(circle at 84% 82%, rgba(255,255,255,.14), transparent 26%)",
-        }}
-      />
+    <MeridianDeskSurface shade={0.08}>
       <div
         style={{
           position: "absolute",
@@ -253,10 +248,10 @@ const DocumentDesk: React.FC<MeridianSceneProps> = ({
           borderRadius: 20,
           border: "7px solid rgba(35,38,34,.5)",
           borderBottom: 0,
-          transform: "rotate(-3deg)",
-        }}
+        transform: "rotate(-3deg)",
+      }}
       />
-    </AbsoluteFill>
+    </MeridianDeskSurface>
   );
 };
 
@@ -301,12 +296,14 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
     const replies = dataText(segment, "replies", "184");
     const reposts = dataText(segment, "reposts", "1.2K");
     const likes = dataText(segment, "likes", "6.8K");
-    const socialWidth = presenterVisible ? 910 : 1260;
+    const socialWidth = presenterVisible ? 900 : 1320;
     const socialLeft = presenterVisible
       ? presenterRight
         ? 72
         : 938
-      : 214;
+      : 300;
+    const socialTop = 210;
+    const socialHeight = 620;
     const socialFontSize = meridianClippingFontSize(post, "social");
     const initials = displayName
       .split(/\s+/)
@@ -315,19 +312,25 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
       .map((part) => part[0]?.toUpperCase())
       .join("") || "M";
     return (
-      <GraphPaper>
+      <MeridianDeskSurface shade={0.16}>
+        <MaskingTape
+          left={socialLeft + 78}
+          top={socialTop - 23 + titleY}
+          width={188}
+          rotate={-8}
+        />
+        <MaskingTape
+          left={socialLeft + socialWidth - 250}
+          top={socialTop - 22 + titleY}
+          width={184}
+          rotate={6}
+        />
         <TornPaper
-          pin
-          pinColor="brass"
-          pinX="54%"
-          pinY={17}
-          pinSize={38}
-          pinRotate={2}
           style={{
             left: socialLeft,
-            top: 132 + titleY,
+            top: socialTop + titleY,
             width: socialWidth,
-            height: 758,
+            height: socialHeight,
             transform: "rotate(-1.15deg)",
             filter: "drop-shadow(0 38px 56px rgba(5,21,17,.38))",
           }}
@@ -336,7 +339,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
           <div
             style={{
               position: "absolute",
-              inset: "52px 58px 50px",
+              inset: "46px 58px 42px",
               color: palette.ink,
               fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
             }}
@@ -400,7 +403,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
             </div>
             <div
               style={{
-                marginTop: 38,
+                marginTop: 30,
                 maxWidth: socialWidth - 120,
                 fontSize: socialFontSize,
                 lineHeight: 1.12,
@@ -418,7 +421,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
             {context ? (
               <div
                 style={{
-                  marginTop: 24,
+                  marginTop: 20,
                   paddingLeft: 26,
                   borderLeft: `8px solid ${palette.brass}`,
                   fontSize: 27,
@@ -472,7 +475,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
           style={{
             position: "absolute",
             left: socialLeft + 32,
-            bottom: 96,
+            top: socialTop + socialHeight + 18,
             padding: "12px 18px",
             background: "rgba(255,250,240,.9)",
             color: palette.mutedInk,
@@ -482,31 +485,39 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
         >
           {[source, date].filter(Boolean).join(" · ") || "MERIDIAN DESK"}
         </div>
-      </GraphPaper>
+      </MeridianDeskSurface>
     );
   }
 
-  const headlineWidth = presenterVisible ? 860 : 1120;
+  const headlineWidth = presenterVisible ? 860 : 1080;
   const headlineLeft = presenterVisible
     ? presenterRight
       ? 72
       : 988
-    : 108;
+    : 104;
+  const headlineTop = 194;
+  const headlineHeight = 600;
   const headlineFontSize = meridianClippingFontSize(title, "headline");
   return (
-    <GraphPaper>
+    <MeridianDeskSurface shade={0.14}>
+      <MaskingTape
+        left={headlineLeft + 74}
+        top={headlineTop - 22 + titleY}
+        width={196}
+        rotate={-7}
+      />
+      <MaskingTape
+        left={headlineLeft + headlineWidth - 248}
+        top={headlineTop - 24 + titleY}
+        width={184}
+        rotate={5}
+      />
       <TornPaper
-        pin
-        pinColor="coral"
-        pinX="72%"
-        pinY={17}
-        pinSize={40}
-        pinRotate={-3}
         style={{
           left: headlineLeft,
-          top: 152 + titleY,
+          top: headlineTop + titleY,
           width: headlineWidth,
-          height: 766,
+          height: headlineHeight,
           transform: "rotate(-1.1deg)",
           filter: "drop-shadow(0 38px 60px rgba(5,21,17,.4))",
         }}
@@ -514,7 +525,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
         <div
           style={{
             position: "absolute",
-            inset: "54px 64px 58px",
+            inset: "46px 58px 48px",
             color: palette.ink,
             fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
           }}
@@ -553,7 +564,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
           </div>
           <div
             style={{
-              marginTop: 42,
+              marginTop: 34,
               fontFamily: "Georgia, 'Times New Roman', serif",
               fontSize: headlineFontSize,
               lineHeight: 0.98,
@@ -573,7 +584,7 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
           {deck ? (
             <div
               style={{
-                marginTop: 34,
+                marginTop: 28,
                 maxWidth: 880,
                 color: palette.mutedInk,
                 fontSize: 31,
@@ -592,38 +603,39 @@ const ClippingBoard: React.FC<MeridianSceneProps> = ({
         </div>
       </TornPaper>
       {!presenterVisible ? (
-        <TornPaper
-          pin
-          pinColor="brass"
-          pinX="48%"
-          pinY={17}
-          pinSize={37}
-          pinRotate={3}
-          style={{
-            left: 1280,
-            top: 245,
-            width: 530,
-            height: 590,
-            transform: "rotate(2.2deg)",
-            filter: "drop-shadow(0 32px 52px rgba(5,21,17,.38))",
-          }}
-        >
-          <SceneVisual
-            visual={visual}
-            progress={progress}
-            muted={muted}
-            volume={volume}
+        <>
+          <MaskingTape left={1432} top={222} width={178} rotate={4} />
+          <TornPaper
             style={{
-              objectFit: visual.mediaType === "document" ? "contain" : "cover",
-              objectPosition: "50% 18%",
-              padding: visual.mediaType === "document" ? 26 : 0,
-              boxSizing: "border-box",
-              filter: "saturate(.78) contrast(1.04)",
+              left: 1228,
+              top: 242,
+              width: 604,
+              height: 548,
+              transform: "rotate(2.2deg)",
+              filter: "drop-shadow(0 32px 52px rgba(5,21,17,.38))",
             }}
-          />
-        </TornPaper>
+          >
+            <SceneVisual
+              visual={visual}
+              progress={progress}
+              muted={muted}
+              volume={volume}
+              style={{
+                objectFit: "cover",
+                objectPosition:
+                  visual.mediaType === "document" ? "50% 22%" : "50% 18%",
+                transform:
+                  visual.mediaType === "document" ? "scale(1.18)" : undefined,
+                transformOrigin: "50% 22%",
+                padding: 0,
+                boxSizing: "border-box",
+                filter: "saturate(.78) contrast(1.04)",
+              }}
+            />
+          </TornPaper>
+        </>
       ) : null}
-    </GraphPaper>
+    </MeridianDeskSurface>
   );
 };
 
@@ -639,15 +651,21 @@ const DataBoard: React.FC<MeridianSceneProps> = ({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+  const source = (
+    visual.attributionText ||
+    visual.sourceLabel ||
+    visual.sourceDomain ||
+    "MERIDIAN RESEARCH DESK"
+  ).trim();
   return (
     <GraphPaper>
       <div
         style={{
           position: "absolute",
-          left: 220,
-          top: 112,
-          width: 1480,
-          height: 850,
+          left: 170,
+          top: 94,
+          width: 1580,
+          height: 884,
           padding: 28,
           boxSizing: "border-box",
           background: "#B77A52",
@@ -666,32 +684,58 @@ const DataBoard: React.FC<MeridianSceneProps> = ({
           }}
         >
           <SceneVisual
-            visual={{ ...visual, fit: "contain" }}
+            visual={{ ...visual, fit: "cover" }}
             progress={progress}
             muted={muted}
             volume={volume}
             style={{
-              objectFit: "contain",
-              padding: 26,
-              boxSizing: "border-box",
+              objectFit: "cover",
+              objectPosition:
+                visual.mediaType === "document" ? "50% 31%" : "50% 50%",
+              transform:
+                visual.mediaType === "document" ? "scale(1.5)" : undefined,
+              transformOrigin: "50% 31%",
               filter: "saturate(.88) contrast(1.04)",
             }}
           />
+          <div
+            style={{
+              position: "absolute",
+              left: 28,
+              right: 28,
+              bottom: 24,
+              zIndex: 5,
+              padding: "16px 22px",
+              background: "#213B32",
+              color: palette.paperBright,
+              font: "650 23px/1.24 Inter, ui-sans-serif, system-ui",
+              boxShadow: "0 10px 28px rgba(5,18,14,.22)",
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+              overflow: "hidden",
+            }}
+          >
+            {firstThought(segment)}
+          </div>
         </div>
-      </div>
-      <div
-        style={{
-          position: "absolute",
-          left: 258,
-          bottom: 38,
-          maxWidth: 1160,
-          color: "rgba(244,239,223,.8)",
-          fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-          fontSize: 24,
-          letterSpacing: ".02em",
-        }}
-      >
-        {firstThought(segment)}
+        <div
+          style={{
+            position: "absolute",
+            left: 42,
+            top: -22,
+            zIndex: 6,
+            padding: "10px 15px",
+            background: "rgba(255,250,240,.96)",
+            color: palette.mutedInk,
+            font: "800 20px/1 Inter, ui-sans-serif, system-ui",
+            letterSpacing: ".07em",
+            textTransform: "uppercase",
+            boxShadow: "0 9px 22px rgba(12,28,22,.2)",
+          }}
+        >
+          {source}
+        </div>
       </div>
     </GraphPaper>
   );

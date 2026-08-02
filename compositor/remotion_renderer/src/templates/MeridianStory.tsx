@@ -97,6 +97,38 @@ const cueForScene = (
   };
 };
 
+const constrainPresenterCue = (
+  templateId: string,
+  cue: MeridianPresenterCue,
+): MeridianPresenterCue => {
+  const placement = cue.placement ?? "lower_right";
+  const onRight = placement.includes("right");
+  if (templateId === "meridian_narrator_tokens") {
+    return {
+      ...cue,
+      width: Math.min(cue.width ?? 920, 920),
+      x: (cue.x ?? 0) + (onRight ? 190 : -190),
+      y: (cue.y ?? 0) + 28,
+    };
+  }
+  if (templateId === "meridian_narrator_evidence") {
+    return {
+      ...cue,
+      width: Math.min(cue.width ?? 1120, 1120),
+      x: (cue.x ?? 0) + (onRight ? 48 : -48),
+    };
+  }
+  return cue;
+};
+
+const selfAttributingTemplates = new Set([
+  "meridian_clipping_board",
+  "meridian_data_board",
+  "meridian_document_desk",
+  "meridian_document_highlight",
+  "meridian_footage_montage",
+]);
+
 const hasRealVisual = (visual?: TimedVisual): visual is TimedVisual =>
   Boolean(
     visual &&
@@ -238,7 +270,10 @@ const MeridianCanvas: React.FC<{
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const presenterCue = cueForScene(run.segments, elapsedSeconds, segment);
+  const presenterCue = constrainPresenterCue(
+    firstSegment.template.templateId,
+    cueForScene(run.segments, elapsedSeconds, segment),
+  );
 
   return (
     <AbsoluteFill
@@ -286,7 +321,9 @@ const MeridianCanvas: React.FC<{
         />
       ) : null}
 
-      {source && realVisual ? (
+      {source &&
+      realVisual &&
+      !selfAttributingTemplates.has(firstSegment.template.templateId) ? (
         <div
           style={{
             position: "absolute",
