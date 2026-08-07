@@ -2,7 +2,7 @@
 
 ## Overview
 
-SynthPost calls Avatar-Engine to render the anchor avatar clip for each story. The current production-practical path is a local browser/Three.js renderer for a CC4/Reallusion GLB avatar. It is still selected with the legacy renderer key `rocketbox` for compatibility.
+SynthPost calls Avatar-Engine to render the anchor avatar clip for each story. Preview renders use the local browser/Three.js CC4 runtime (the legacy `rocketbox` key), while production and final-master renders use the same CC asset through Blender EEVEE (`blender_cc`). Both paths receive the same deterministic `performance_v2` timing and external motion-library clip IDs.
 
 High-level flow:
 
@@ -26,6 +26,8 @@ Recommended SynthPost settings:
 ```bash
 # Current fast 3D CC4 renderer. Name is legacy; implementation is custom Three.js.
 SYNTHPOST_AVATAR_RENDERER=rocketbox
+SYNTHEA_SYNTHPOST_PRESENTER_PREVIEW_RENDERER=rocketbox
+SYNTHEA_SYNTHPOST_PRESENTER_FINAL_RENDERER=blender_cc
 
 # Absolute path to the desk-avatar-engine repository
 SYNTHPOST_AVATAR_ENGINE_PATH=/path/to/desk-avatar-engine

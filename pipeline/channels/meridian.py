@@ -80,6 +80,8 @@ AI animations, and unsourced social-media charts.
         outro_path="assets/channels/meridian/outro.mp4",
         presenter_provider="png_puppet",
         presenter_renderer="remotion",
+        presenter_preview_renderer="remotion",
+        presenter_final_renderer="remotion",
         presenter_asset_path="assets/channels/meridian/presenter/character.json",
         presenter_metadata_path=None,
         presenter_style="meridian_editorial_analyst",

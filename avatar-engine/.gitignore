@@ -48,6 +48,13 @@ assets/avatars/version*/
 assets/avatars/*(broken)/
 !assets/avatars/**/.gitkeep
 
+# Licensed/local motion sources and generated retargeted libraries.
+assets/motions/**/*.fbx
+assets/motions/**/*.bvh
+assets/motions/**/*.blend
+assets/motions/**/*.glb
+!assets/motions/**/motions.json
+
 # Generated smoke / benchmark outputs
 *.json.bak
 smoke_report.json

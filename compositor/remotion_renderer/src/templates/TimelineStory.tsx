@@ -175,17 +175,13 @@ const AnchorNarrationTrack: React.FC<{
   );
 };
 
-const PngNarrationTrack: React.FC<{
+const NarrationTrack: React.FC<{
   story: StoryProps;
   startFrom: number;
   enabled: boolean;
   volume: number;
 }> = ({ story, startFrom, enabled, volume }) => {
-  if (
-    story.presenter?.provider !== "png_puppet" ||
-    !story.narrationAudio ||
-    !enabled
-  ) {
+  if (!story.narrationAudio || !enabled) {
     return null;
   }
   return (
@@ -195,6 +191,36 @@ const PngNarrationTrack: React.FC<{
       volume={volume}
     />
   );
+};
+
+const anchorPlaybackForSegment = (
+  story: StoryProps,
+  segment: TimelineSegmentProps,
+  fps: number,
+): { enabled: boolean; startFrom: number } => {
+  if (!segment.anchor.visible) {
+    return { enabled: false, startFrom: 0 };
+  }
+  const sourceTime = segment.narrationStart ?? segment.start;
+  const windows = story.anchorRenderWindows ?? [];
+  if (!windows.length) {
+    return { enabled: true, startFrom: Math.round(sourceTime * fps) };
+  }
+  const window = windows.find(
+    (candidate) =>
+      candidate.segmentIds?.includes(segment.segmentId) ||
+      (sourceTime >= candidate.sourceStart - 0.03 &&
+        sourceTime < candidate.sourceEnd - 0.001),
+  );
+  if (!window) {
+    return { enabled: false, startFrom: 0 };
+  }
+  return {
+    enabled: true,
+    startFrom: Math.round(
+      (window.clipStart + Math.max(0, sourceTime - window.sourceStart)) * fps,
+    ),
+  };
 };
 
 const RetainedSplitSegment: React.FC<{
@@ -266,6 +292,7 @@ const RetainedFullScreenVisualSegment: React.FC<{
       anchor={story.anchor}
       startFrom={startFrom}
       enabled={
+        !story.narrationAudio &&
         segment.audio?.mode !== "source" &&
         segment.audio?.mode !== "silent"
       }
@@ -831,6 +858,7 @@ const Segment: React.FC<{
     segment.template.templateId,
   ).template_id;
   const muteAnchor =
+    Boolean(story.narrationAudio) ||
     !segment.anchor.speaking ||
     segment.audio?.mode === "source" ||
     segment.audio?.mode === "silent";
@@ -841,6 +869,10 @@ const Segment: React.FC<{
     visual,
     progress,
   };
+  const anchorPlayback = anchorPlaybackForSegment(story, segment, fps);
+  const presenterStory = anchorPlayback.enabled
+    ? story
+    : { ...story, anchor: undefined };
 
   return (
     <DesignCanvas background={`linear-gradient(115deg, ${brand.ink}, ${brand.deepBlue} 52%, ${brand.navy})`}>
@@ -860,7 +892,7 @@ const Segment: React.FC<{
           }}
         />
 
-        <PngNarrationTrack
+        <NarrationTrack
           story={story}
           startFrom={Math.round(
             (segment.narrationStart ?? segment.start) * fps,
@@ -903,12 +935,10 @@ const Segment: React.FC<{
         {template === "split_anchor_visual" ? (
           <RetainedSplitSegment
             segment={segment}
-            story={story}
+            story={presenterStory}
             visual={visual}
             mutedAnchor={muteAnchor}
-            startFrom={Math.round(
-              (segment.narrationStart ?? segment.start) * fps,
-            )}
+            startFrom={anchorPlayback.startFrom}
           />
         ) : null}
 
@@ -918,20 +948,16 @@ const Segment: React.FC<{
             story={story}
             visual={visual}
             progress={progress}
-            startFrom={Math.round(
-              (segment.narrationStart ?? segment.start) * fps,
-            )}
+            startFrom={anchorPlayback.startFrom}
           />
         ) : null}
 
         {template === "fullscreen_anchor" || template === "fallback_anchor" ? (
           <RetainedFullScreenAnchorSegment
             segment={segment}
-            story={story}
+            story={presenterStory}
             mutedAnchor={muteAnchor}
-            startFrom={Math.round(
-              (segment.narrationStart ?? segment.start) * fps,
-            )}
+            startFrom={anchorPlayback.startFrom}
           />
         ) : null}
 

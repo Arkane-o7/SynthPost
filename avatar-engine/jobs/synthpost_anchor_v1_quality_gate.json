@@ -1,0 +1,91 @@
+{
+  "renderer": "rocketbox",
+  "episode_id": "ep_synthpost_anchor_v1_quality_gate",
+  "story_id": "story_synthpost_anchor_v1_quality_gate_001",
+  "script_text": "Good evening. Bright markets moved forward, then paused. This report covers broad growth, vivid details, and one final point.",
+  "audio_path": "assets/output/tts/synthpost_anchor_v1_af_bella_s100.wav",
+  "viseme_path": "assets/output/tts/synthpost_anchor_v1_af_bella_s100_rhubarb.json",
+  "avatar": {
+    "asset_path": "assets/avatars/synthpost_anchor_v1/anchor.glb",
+    "metadata_path": "assets/avatars/synthpost_anchor_v1/avatar.json",
+    "style": "professional_news_anchor",
+    "face_type": "3d",
+    "body_form": "F",
+    "requires_3d_lips": true
+  },
+  "camera": {
+    "name": "front_close",
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "duration_seconds": 8.0
+  },
+  "avatar_transform": {
+    "rotation_y_degrees": -3
+  },
+  "camera_overrides": {
+    "distance_multiplier": 3.5,
+    "target_height_factor": 0.84,
+    "height_factor": 0.86
+  },
+  "render": {
+    "background": "charcoal",
+    "quality_profile": "legacy_control",
+    "output_path": "assets/output/avatar_bakeoff/candidate_a_control/run_1/video.mp4",
+    "preview_png_path": "assets/output/avatar_bakeoff/candidate_a_control/run_1/preview.png"
+  },
+  "animation": {
+    "idle_loop": "procedural_anchor",
+    "gesture_events": [
+      {
+        "time": 4.8,
+        "type": "explain_small",
+        "duration": 0.9
+      }
+    ]
+  },
+  "face": {
+    "mode": "3d_viseme",
+    "viseme_source": "rhubarb",
+    "blendshape_profile": "reallusion_viseme",
+    "fallback_mode": "legacy_2d",
+    "allow_fallback": false
+  },
+  "quality_gate": {
+    "version": "avatar_quality_gate_v1",
+    "seed": 48291,
+    "allow_live_tts": false,
+    "review_features": [
+      "neutral_rest",
+      "direct_gaze",
+      "bilabial_closure",
+      "dental_sounds",
+      "wide_vowels",
+      "rounded_vowels",
+      "blink",
+      "pause",
+      "emphasis_gesture",
+      "conclusion_settle"
+    ],
+    "review_times_seconds": [0.2, 1.8, 2.55, 3.85, 4.9, 6.9, 7.8]
+  },
+  "performance": {
+    "version": "performance_v2",
+    "seed": 48291,
+    "visemes": [],
+    "speech_envelope": [],
+    "blink_events": [
+      {"time": 3.35, "duration": 0.15, "strength": 1.0}
+    ],
+    "gaze_events": [
+      {"start": 0.0, "end": 8.0, "target": "camera"}
+    ],
+    "expression_events": [
+      {"start": 0.0, "end": 8.0, "preset": "attentive", "weight": 0.18}
+    ],
+    "body_events": [
+      {"time": 4.8, "type": "explain_small", "duration": 0.9, "weight": 0.55},
+      {"time": 7.25, "type": "conclusion_settle", "duration": 0.65, "weight": 1.0}
+    ]
+  }
+}

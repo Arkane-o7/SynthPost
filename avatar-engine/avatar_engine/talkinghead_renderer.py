@@ -50,9 +50,15 @@ from typing import Any
 from avatar_engine.avatar_validator import (
     AvatarValidationError,
     load_avatar_metadata,
+    validate_material_profile,
     validate_avatar_for_talkinghead,
 )
 from avatar_engine.renderer_base import AvatarJob, AvatarRenderer, AvatarRenderResult
+from avatar_engine.quality_gate import (
+    quality_gate_diagnostics,
+    validate_quality_gate_job,
+)
+from avatar_engine.motion_library import browser_motion_library, load_motion_library
 from avatar_engine.renderer_factory import allow_2d_face_fallback
 from avatar_engine.viseme_mapping import (
     convert_rhubarb_json_to_talkinghead,
@@ -141,6 +147,39 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
             )
         warnings: list[str] = list(validation.get("warnings", []))
 
+        material_validation = validate_material_profile(
+            avatar_meta, avatar_meta_path.parent
+        )
+        if material_validation["status"] == "fail":
+            details = material_validation.get("errors") or [material_validation.get("error")]
+            return AvatarRenderResult(
+                renderer=self.name,
+                status="fail",
+                error="Invalid avatar material profile: " + "; ".join(str(item) for item in details),
+            )
+        warnings.extend(material_validation.get("warnings", []))
+
+        try:
+            motion_library = load_motion_library(root, avatar_meta)
+        except (ValueError, json.JSONDecodeError) as exc:
+            return AvatarRenderResult(
+                renderer=self.name,
+                status="fail",
+                error=f"Invalid avatar motion library: {exc}",
+            )
+        warnings.extend((motion_library or {}).get("warnings", []))
+
+        quality_diagnostics: dict[str, Any] | None = None
+        if "quality_gate" in job.raw:
+            quality_errors = validate_quality_gate_job(job.raw)
+            if quality_errors:
+                return AvatarRenderResult(
+                    renderer=self.name,
+                    status="fail",
+                    error="Invalid avatar quality-gate job: " + "; ".join(quality_errors),
+                )
+            quality_diagnostics = quality_gate_diagnostics(job.raw, root)
+
         duration_s = job.camera_duration or _estimate_duration(root / job.audio_path)
         target_fps = job.camera_fps or 24
         estimated_temp_bytes = max(
@@ -220,7 +259,17 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
                 "background": job.raw.get("render", {}).get(
                     "background", "chroma_green"
                 ),
+                "quality_profile": job.raw.get("render", {}).get(
+                    "quality_profile", "legacy_control"
+                ),
+                "tone_mapping": job.raw.get("render", {}).get(
+                    "tone_mapping", "aces"
+                ),
             },
+            "material_profile": avatar_meta.get("material_profile"),
+            "quality_gate": job.raw.get("quality_gate"),
+            "performance": job.raw.get("performance"),
+            "motion_library": browser_motion_library(motion_library),
             "precomputed_visemes": {
                 "visemes": visemes,
                 "vtimes": vtimes,
@@ -254,6 +303,8 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
                 validation=validation,
                 warnings=warnings,
                 browser_job=browser_job,
+                quality_diagnostics=quality_diagnostics,
+                material_validation=material_validation,
             )
         finally:
             server.shutdown()
@@ -284,6 +335,8 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
         validation: dict[str, Any],
         warnings: list[str],
         browser_job: dict[str, Any],
+        quality_diagnostics: dict[str, Any] | None,
+        material_validation: dict[str, Any],
     ) -> AvatarRenderResult:
         try:
             from playwright.sync_api import sync_playwright
@@ -385,6 +438,9 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
                 "() => window.__renderWarnings || []"
             )
             warnings.extend(browser_warnings)
+            renderer_diagnostics: dict[str, Any] = page.evaluate(
+                "() => window.__rendererDiagnostics || {}"
+            )
 
             if canvas_frame_count > 0:
                 frame_sequence_pattern = canvas_frame_dir / "frame_%06d.png"
@@ -509,6 +565,7 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
             "story_id": job.story_id,
             "face_mode": job.face_mode,
             "avatar_validation": validation,
+            "material_validation": material_validation,
             "camera": browser_job["camera"],
             "viseme_mapping_source": "rhubarb",
             "output_path": str(output_mp4),
@@ -520,6 +577,12 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
             "frame_count": frame_count,
             "resolution": f"{job.camera_width}x{job.camera_height}",
             "warnings": warnings,
+            "renderer_diagnostics": renderer_diagnostics,
+            "quality_gate": quality_diagnostics,
+            "output_size_bytes": output_mp4.stat().st_size,
+            "temporary_disk_bytes": sum(
+                path.stat().st_size for path in temp_dir.rglob("*") if path.is_file()
+            ),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -538,6 +601,9 @@ class TalkingHeadAvatarRenderer(AvatarRenderer):
                     "realtime_factor": round(realtime_factor, 3),
                     "output_path": str(output_mp4),
                     "status": "pass",
+                    "output_size_bytes": output_mp4.stat().st_size,
+                    "renderer_diagnostics": renderer_diagnostics,
+                    "quality_gate": quality_diagnostics,
                 },
                 indent=2,
             ),

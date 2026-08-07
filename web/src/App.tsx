@@ -5,7 +5,9 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { SettingsModal } from "./components/SettingsModal";
 import type { Page } from "./components/LeftRail";
 import { CommandCenter } from "./pages/CommandCenter";
+import { ThemeProvider } from "./components/theme-provider";
 import "./styles/studio.css";
+import "./styles/shadcn.css";
 
 const Main: React.FC = () => {
   const [page, setPage] = React.useState<Page>("command");
@@ -37,9 +39,11 @@ const Main: React.FC = () => {
 export default function App() {
   return (
     <AppErrorBoundary>
-      <StudioProvider>
-        <Main />
-      </StudioProvider>
+      <ThemeProvider defaultTheme="system" storageKey="synthea-ui-theme">
+        <StudioProvider>
+          <Main />
+        </StudioProvider>
+      </ThemeProvider>
     </AppErrorBoundary>
   );
 }

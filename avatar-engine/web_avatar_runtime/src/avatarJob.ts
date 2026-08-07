@@ -40,6 +40,7 @@ export interface BrowserJob {
 
   animation: {
     idle_loop?: string;
+    require_motion_library?: boolean;
     gesture_style?: string;
     gesture_events?: Array<{
       time: number;
@@ -64,6 +65,66 @@ export interface BrowserJob {
 
   render: {
     background: string;
+    quality_profile?: "legacy_control" | "studio_v2";
+    tone_mapping?: "aces" | "agx" | "neutral";
+  };
+
+  material_profile?: import("./rendering/materialProfile.js").MaterialProfile;
+
+  quality_gate?: {
+    version: "avatar_quality_gate_v1";
+    seed: number;
+    allow_live_tts: false;
+    review_features: string[];
+    review_times_seconds: number[];
+  };
+
+  performance?: {
+    version: "performance_v2";
+    seed: number;
+    visemes: unknown[];
+    speech_envelope: unknown[];
+    blink_events: Array<{ time: number; duration: number; strength?: number }>;
+    gaze_events: Array<{
+      start?: number;
+      end?: number;
+      time?: number;
+      duration?: number;
+      target: "camera" | "left" | "right" | "down";
+      weight?: number;
+    }>;
+    expression_events: Array<{
+      start?: number;
+      end?: number;
+      time?: number;
+      duration?: number;
+      preset: "attentive" | "serious" | "warm" | "concerned";
+      weight?: number;
+    }>;
+    body_events: Array<{
+      time: number;
+      type: string;
+      duration: number;
+      weight?: number;
+      clip?: string;
+      blend_in?: number;
+      blend_out?: number;
+    }>;
+  };
+
+  motion_library?: {
+    version: "cc_motion_library_v1";
+    default_idle?: string;
+    aliases: Record<string, string>;
+    clips: Record<
+      string,
+      {
+        url?: string | null;
+        available: boolean;
+        kind: string;
+        loop: boolean;
+      }
+    >;
   };
 
   precomputed_visemes: {

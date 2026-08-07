@@ -34,7 +34,7 @@ from avatar_engine.renderer_factory import (
     resolve_renderer_name,
 )
 
-BROWSER_RENDERERS = {"talkinghead", "rocketbox"}
+MODERN_CC_RENDERERS = {"talkinghead", "rocketbox", "blender_cc"}
 
 
 def _load_config(config_path: Path) -> dict[str, Any]:
@@ -65,7 +65,7 @@ def _merge_missing(base: dict[str, Any], defaults: dict[str, Any]) -> dict[str, 
 def apply_config_defaults(
     raw_job: dict[str, Any], config: dict[str, Any]
 ) -> dict[str, Any]:
-    """Fill missing browser-render job fields from config/default.yaml.
+    """Fill missing modern CC-render job fields from config/default.yaml.
 
     Job JSON remains the highest-priority source. This only supplies defaults so
     new jobs do not have to rediscover camera framing, background, or voice
@@ -77,7 +77,7 @@ def apply_config_defaults(
         .strip()
         .lower()
     )
-    if renderer and renderer not in BROWSER_RENDERERS:
+    if renderer and renderer not in MODERN_CC_RENDERERS:
         return job
 
     browser_config = (
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--renderer",
-        choices=["talkinghead", "rocketbox", "blender"],
+        choices=["talkinghead", "rocketbox", "blender", "blender_cc"],
         default=None,
         help="Override the renderer (default: from job or AVATAR_ENGINE_RENDERER env var).",
     )

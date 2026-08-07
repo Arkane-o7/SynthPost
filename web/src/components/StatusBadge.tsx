@@ -1,4 +1,5 @@
 import React from 'react';
+import { Badge, type BadgeProps } from './ui/badge';
 
 export type BadgeTone = 'green' | 'amber' | 'red' | 'blue' | 'neutral';
 
@@ -34,12 +35,12 @@ function toneForStatus(status: string): BadgeTone {
   }
 }
 
-const toneClass: Record<BadgeTone, string> = {
-  green: 'badge-green',
-  amber: 'badge-amber',
-  red: 'badge-red',
-  blue: 'badge-blue',
-  neutral: '',
+const toneVariant: Record<BadgeTone, BadgeProps['variant']> = {
+  green: 'success',
+  amber: 'warning',
+  red: 'destructive',
+  blue: 'info',
+  neutral: 'outline',
 };
 
 export const StatusBadge: React.FC<{
@@ -49,5 +50,9 @@ export const StatusBadge: React.FC<{
   status?: string;
 }> = ({ children, tone, status }) => {
   const resolved = tone ?? (status ? toneForStatus(status) : 'neutral');
-  return <span className={`badge ${toneClass[resolved]}`}>{children}</span>;
+  return (
+    <Badge className="badge" variant={toneVariant[resolved]}>
+      {children}
+    </Badge>
+  );
 };

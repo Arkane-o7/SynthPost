@@ -34,7 +34,163 @@
     "Jaw_Open",
     "Mouth_Close"
   ],
+  "material_profile": {
+    "version": "material_profile_v1",
+    "broken_meshes": [],
+    "defringe_hair": false,
+    "materials": {
+      "Canvas_shoes.001": {
+        "class": "cloth",
+        "textures": {
+          "roughness": "textures/Anchor/Canvas_shoes/Canvas_shoes/Canvas_shoes/Canvas_shoes_roughness.jpg",
+          "ao": "textures/Anchor/Canvas_shoes/Canvas_shoes/Canvas_shoes/Canvas_shoes_ao.jpg"
+        }
+      },
+      "Std_Skin_Head.001": {
+        "class": "skin",
+        "textures": {
+          "roughness": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Head/Std_Skin_Head_roughness.jpg",
+          "ao": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Head/Std_Skin_Head_ao.jpg",
+          "specular": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Head/Std_Skin_Head_SpecMask.jpg",
+          "micro_normal": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Head/Std_Skin_Head_NBMap.jpg",
+          "sss": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Head/Std_Skin_Head_SSSMap.jpg",
+          "transmission": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Head/Std_Skin_Head_TransMap.png"
+        }
+      },
+      "Std_Skin_Body.001": {
+        "class": "skin",
+        "textures": {
+          "roughness": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Body/Std_Skin_Body_roughness.jpg",
+          "ao": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Body/Std_Skin_Body_ao.jpg",
+          "sss": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Body/Std_Skin_Body_SSSMap.png",
+          "transmission": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Body/Std_Skin_Body_TransMap.png"
+        }
+      },
+      "Std_Skin_Arm.001": {
+        "class": "skin",
+        "textures": {
+          "roughness": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Arm/Std_Skin_Arm_roughness.jpg",
+          "ao": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Arm/Std_Skin_Arm_ao.jpg",
+          "sss": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Arm/Std_Skin_Arm_SSSMap.png",
+          "transmission": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Arm/Std_Skin_Arm_TransMap.png"
+        }
+      },
+      "Std_Skin_Leg.001": {
+        "class": "skin",
+        "textures": {
+          "roughness": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Leg/Std_Skin_Leg_roughness.jpg",
+          "ao": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Leg/Std_Skin_Leg_ao.jpg",
+          "sss": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Leg/Std_Skin_Leg_SSSMap.png",
+          "transmission": "textures/Anchor/Anchor/CC_Base_Body/Std_Skin_Leg/Std_Skin_Leg_TransMap.png"
+        }
+      },
+      "Std_Nails.001": {
+        "class": "nails",
+        "textures": {
+          "roughness": "textures/Anchor/Anchor/CC_Base_Body/Std_Nails/Std_Nails_roughness.jpg",
+          "ao": "textures/Anchor/Anchor/CC_Base_Body/Std_Nails/Std_Nails_ao.jpg"
+        }
+      },
+      "Std_Eyelash.001": {"class": "eyelash"},
+      "Std_Eye_R.001": {
+        "class": "eye",
+        "textures": {"roughness": "textures/Anchor/CC_Base_Eye/CC_Base_Eye/Std_Eye_R/Std_Eye_R_roughness.jpg"}
+      },
+      "Std_Cornea_R.001": {
+        "class": "cornea",
+        "textures": {
+          "roughness": "textures/Anchor/CC_Base_Eye/CC_Base_Eye/Std_Cornea_R/Std_Cornea_R_roughness.jpg",
+          "ao": "textures/Anchor/CC_Base_Eye/CC_Base_Eye/Std_Cornea_R/Std_Cornea_R_ao.jpg"
+        }
+      },
+      "Std_Eye_L.001": {
+        "class": "eye",
+        "textures": {"roughness": "textures/Anchor/CC_Base_Eye/CC_Base_Eye/Std_Eye_L/Std_Eye_L_roughness.jpg"}
+      },
+      "Std_Cornea_L.001": {
+        "class": "cornea",
+        "textures": {
+          "roughness": "textures/Anchor/CC_Base_Eye/CC_Base_Eye/Std_Cornea_L/Std_Cornea_L_roughness.jpg",
+          "ao": "textures/Anchor/CC_Base_Eye/CC_Base_Eye/Std_Cornea_L/Std_Cornea_L_ao.jpg"
+        }
+      },
+      "Std_Eye_Occlusion_R.001": {
+        "class": "eye_occlusion",
+        "textures": {"roughness": "textures/Anchor/CC_Base_EyeOcclusion/CC_Base_EyeOcclusion/Std_Eye_Occlusion_R/Std_Eye_Occlusion_R_roughness.jpg"}
+      },
+      "Std_Eye_Occlusion_L.001": {
+        "class": "eye_occlusion",
+        "textures": {"roughness": "textures/Anchor/CC_Base_EyeOcclusion/CC_Base_EyeOcclusion/Std_Eye_Occlusion_L/Std_Eye_Occlusion_L_roughness.jpg"}
+      },
+      "Std_Tearline_R.001": {
+        "class": "tearline",
+        "textures": {"roughness": "textures/Anchor/CC_Base_TearLine/CC_Base_TearLine/Std_Tearline_R/Std_Tearline_R_roughness.jpg"}
+      },
+      "Std_Tearline_L.001": {
+        "class": "tearline",
+        "textures": {"roughness": "textures/Anchor/CC_Base_TearLine/CC_Base_TearLine/Std_Tearline_L/Std_Tearline_L_roughness.jpg"}
+      },
+      "Std_Upper_Teeth.001": {
+        "class": "teeth",
+        "textures": {
+          "roughness": "textures/Anchor/CC_Base_Teeth/CC_Base_Teeth/Std_Upper_Teeth/Std_Upper_Teeth_roughness.jpg",
+          "ao": "textures/Anchor/CC_Base_Teeth/CC_Base_Teeth/Std_Upper_Teeth/Std_Upper_Teeth_ao.jpg"
+        }
+      },
+      "Std_Lower_Teeth.001": {
+        "class": "teeth",
+        "textures": {
+          "roughness": "textures/Anchor/CC_Base_Teeth/CC_Base_Teeth/Std_Lower_Teeth/Std_Lower_Teeth_roughness.jpg",
+          "ao": "textures/Anchor/CC_Base_Teeth/CC_Base_Teeth/Std_Lower_Teeth/Std_Lower_Teeth_ao.jpg"
+        }
+      },
+      "Std_Tongue.001": {
+        "class": "tongue",
+        "textures": {
+          "roughness": "textures/Anchor/Anchor/CC_Base_Tongue/Std_Tongue/Std_Tongue_roughness.png",
+          "ao": "textures/Anchor/Anchor/CC_Base_Tongue/Std_Tongue/Std_Tongue_ao.png"
+        }
+      },
+      "Female_Angled_Transparency.001": {
+        "class": "hair",
+        "textures": {"roughness": "textures/Anchor/Female_Angled/Female_Angled/Female_Angled_Transparency/Female_Angled_Transparency_roughness.png"}
+      },
+      "Female_Angled_Base_Transparency.001": {
+        "class": "hair",
+        "textures": {"roughness": "textures/Anchor/Female_Angled/Female_Angled/Female_Angled_Base_Transparency/Female_Angled_Base_Transparency_roughness.png"}
+      },
+      "Scalp_Transparency.001": {
+        "class": "hair",
+        "textures": {"roughness": "textures/Anchor/Side_part_wavy/Side_part_wavy/Scalp_Transparency/Scalp_Transparency_roughness.png"}
+      },
+      "Hair_Transparency.001": {
+        "class": "hair",
+        "textures": {
+          "roughness": "textures/Anchor/Side_part_wavy/Side_part_wavy/Hair_Transparency/Hair_Transparency_roughness.png",
+          "ao": "textures/Anchor/Side_part_wavy/Side_part_wavy/Hair_Transparency/Hair_Transparency_ao.jpg"
+        }
+      },
+      "Slim_fit_pants.001": {
+        "class": "cloth",
+        "textures": {
+          "roughness": "textures/Anchor/Slim_fit_pants/Slim_fit_pants/Slim_fit_pants/Slim_fit_pants_roughness.jpg",
+          "ao": "textures/Anchor/Slim_fit_pants/Slim_fit_pants/Slim_fit_pants/Slim_fit_pants_ao.jpg"
+        }
+      },
+      "Turtleneck_sweater.001": {
+        "class": "cloth",
+        "textures": {
+          "roughness": "textures/Anchor/Turtleneck_sweater/Turtleneck_sweater/Turtleneck_sweater/Turtleneck_sweater_roughness.jpg",
+          "ao": "textures/Anchor/Turtleneck_sweater/Turtleneck_sweater/Turtleneck_sweater/Turtleneck_sweater_ao.jpg"
+        }
+      }
+    }
+  },
   "legacy_2d_face_supported": false,
   "runtime": "custom_threejs_morph_driver",
+  "motion_library": {
+    "version": "cc_motion_library_v1",
+    "manifest_path": "assets/motions/synthpost_anchor_v1/motions.json"
+  },
   "notes": "New Character Creator export in anchor.glb. Facial morphs are on CC_Base_Body.001 and related face meshes. Hair mesh is Side_part_wavy.001. Runtime maps Rhubarb/Oculus visemes to Reallusion V_* targets."
 }

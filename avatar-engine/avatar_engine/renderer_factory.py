@@ -20,6 +20,7 @@ from avatar_engine.renderer_base import AvatarJob, AvatarRenderer
 # Registered renderer names → import paths (lazy to avoid hard deps at import time)
 _RENDERER_REGISTRY: dict[str, str] = {
     "blender": "avatar_engine.blender_renderer.BlenderAvatarRenderer",
+    "blender_cc": "avatar_engine.blender_cc_renderer.BlenderCCAvatarRenderer",
     "talkinghead": "avatar_engine.talkinghead_renderer.TalkingHeadAvatarRenderer",
     "rocketbox": "avatar_engine.rocketbox_renderer.RocketboxAvatarRenderer",
 }
@@ -67,7 +68,7 @@ def get_renderer(
     module = importlib.import_module(module_name)
     cls = getattr(module, class_name)
 
-    if name == "blender":
+    if name in {"blender", "blender_cc"}:
         return cls(config_path=config_path)
     if name in {"talkinghead", "rocketbox"}:
         return cls(config_path=config_path)

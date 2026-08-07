@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import type {
+  AnchorRenderWindow,
   HeadlineItem,
   PngPresenter,
   PublicMedia,
@@ -644,8 +645,13 @@ const main = async () => {
     direction.presenter_provider ?? "avatar_engine",
   );
   const anchorPath = String(direction.anchor_output_path ?? "");
+  const timelineNeedsAnchor =
+    timelineSegments.length === 0 ||
+    timelineSegments.some((segment) => segment.anchor.visible);
   const anchor =
-    presenterProvider !== "png_puppet" && (anchorPath || !visualOnlyTemplate)
+    presenterProvider !== "png_puppet" &&
+    timelineNeedsAnchor &&
+    (anchorPath || !visualOnlyTemplate)
       ? await stageMedia(anchorPath, generatedDir, undefined, true)
       : undefined;
 
@@ -777,7 +783,49 @@ const main = async () => {
     if (!presenter.speechWindows.length) {
       throw new Error("PNG presenter requires exact narration beat windows.");
     }
+  } else if (timelineSegments.length) {
+    const narrationPath = String(
+      direction.avatar_audio_path ?? manifest.narration?.audio_path ?? "",
+    ).trim();
+    if (narrationPath) {
+      narrationAudio = await stageMedia(
+        narrationPath,
+        generatedDir,
+        undefined,
+        true,
+      );
+      if (narrationAudio.kind !== "audio") {
+        throw new Error("Avatar narration must be a standalone audio file.");
+      }
+    }
   }
+
+  const anchorRenderWindows: AnchorRenderWindow[] = Array.isArray(
+    direction.avatar_render_windows,
+  )
+    ? direction.avatar_render_windows
+        .map((window: Record<string, unknown>) => ({
+          timelineStart: Number(window.timeline_start),
+          timelineEnd: Number(window.timeline_end),
+          sourceStart: Number(window.source_start),
+          sourceEnd: Number(window.source_end),
+          clipStart: Number(window.clip_start),
+          clipEnd: Number(window.clip_end),
+          camera: window.camera ? String(window.camera) : undefined,
+          segmentIds: Array.isArray(window.segment_ids)
+            ? window.segment_ids.map(String)
+            : undefined,
+        }))
+        .filter(
+          (window: AnchorRenderWindow) =>
+            Number.isFinite(window.sourceStart) &&
+            Number.isFinite(window.sourceEnd) &&
+            Number.isFinite(window.clipStart) &&
+            Number.isFinite(window.clipEnd) &&
+            window.sourceEnd > window.sourceStart &&
+            window.clipEnd > window.clipStart,
+        )
+    : [];
 
   const backgroundMusicPath = String(
     direction.background_music_path ?? "",
@@ -953,6 +1001,7 @@ const main = async () => {
     sourceLabel: String(raw.source_name ?? channelManifest.name ?? "SYNTHEA").toUpperCase(),
     sourceDate: formatDate(raw.published_at),
     anchor,
+    anchorRenderWindows,
     anchorChromaKey:
       String(direction.avatar_render_background ?? "").toLowerCase() ===
       "chroma_green",

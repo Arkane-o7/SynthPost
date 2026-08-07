@@ -2,6 +2,7 @@ import React from 'react';
 import type { StoryCandidate } from '../contracts';
 import { useStudio } from '../state/useStudio';
 import { StatusBadge } from './StatusBadge';
+import { ChevronRight } from 'lucide-react';
 
 export const EpisodeHeader: React.FC<{
   story?: StoryCandidate | null;
@@ -20,11 +21,11 @@ export const EpisodeHeader: React.FC<{
       <div className="episode-header-context">
         <div className="episode-breadcrumb">
           <span>{project?.title ?? 'No project'}</span>
-          <span className="sep">›</span>
+          <ChevronRight className="sep" size={13} aria-hidden="true" />
           <span>{episode?.title ?? 'No episode'}</span>
           {story && (
             <>
-              <span className="sep">›</span>
+              <ChevronRight className="sep" size={13} aria-hidden="true" />
               <span style={{ color: 'var(--text)' }}>Story</span>
             </>
           )}

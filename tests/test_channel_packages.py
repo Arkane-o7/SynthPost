@@ -83,6 +83,11 @@ class ChannelPackageTests(unittest.TestCase):
             production["presenter_asset_path"],
         )
 
+    def test_synthpost_owns_separate_preview_and_final_renderers(self) -> None:
+        production = resolved_production(get_channel_profile("synthpost"))
+        self.assertEqual(production["presenter_preview_renderer"], "rocketbox")
+        self.assertEqual(production["presenter_final_renderer"], "blender_cc")
+
     def test_avatar_job_uses_manifest_presenter_package(self) -> None:
         profile = get_channel_profile("beyond")
         production = resolved_production(profile)

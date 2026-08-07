@@ -7,11 +7,14 @@ import unittest
 from unittest.mock import patch
 
 from pipeline.direction.avatar import (
+    anchor_render_windows,
     avatar_job_from_manifest,
+    avatar_renderer,
     camera_cuts_for,
     camera_for_template,
     native_segment_export,
     template_requires_avatar,
+    timeline_has_visible_anchor,
 )
 from pipeline.storage import PROJECT_ROOT
 
@@ -147,6 +150,191 @@ class DirectionTemplateTests(unittest.TestCase):
         self.assertEqual(job["face_mode"], "2d")
         self.assertEqual(job["camera_cuts"][0]["camera"], "landscape_intro")
         self.assertIn("output_path", job)
+
+    def test_synthpost_uses_web_preview_and_eevee_final(self) -> None:
+        presenter = {
+            "presenter_provider": "avatar_engine",
+            "presenter_renderer": "rocketbox",
+            "presenter_preview_renderer": "rocketbox",
+            "presenter_final_renderer": "blender_cc",
+        }
+        manifest = {"channel": {"production": presenter}}
+
+        self.assertEqual(avatar_renderer(manifest, "preview"), "rocketbox")
+        self.assertEqual(avatar_renderer(manifest, "production"), "blender_cc")
+        self.assertEqual(avatar_renderer(manifest, "final_master"), "blender_cc")
+
+        legacy_manifest = {
+            "channel_id": "synthpost",
+            "channel": {
+                "production": {
+                    "presenter_provider": "avatar_engine",
+                    "presenter_renderer": "rocketbox",
+                }
+            },
+        }
+        self.assertEqual(
+            avatar_renderer(legacy_manifest, "production"), "blender_cc"
+        )
+
+    def test_blender_cc_job_uses_shared_performance_and_fast_profile(self) -> None:
+        manifest = {
+            "episode_id": "ep_unit_direction",
+            "story_id": "story_001",
+            "script": {"text": "First point. Second point. Final point."},
+            "composition": {"template": "split_main"},
+        }
+
+        job = avatar_job_from_manifest(
+            manifest, 12.0, render_profile="production", renderer="blender_cc"
+        )
+
+        self.assertEqual(job["renderer"], "blender_cc")
+        self.assertEqual(job["render"]["blender_profile"], "production")
+        self.assertEqual(job["performance"]["version"], "performance_v2")
+        self.assertTrue(job["performance"]["blink_events"])
+        self.assertEqual(
+            job["performance"]["body_events"][-1]["type"],
+            "conclusion_settle",
+        )
+
+    def test_blender_cc_job_renders_only_visible_anchor_windows(self) -> None:
+        manifest = {
+            "episode_id": "ep_unit_direction",
+            "story_id": "story_001",
+            "script": {"text": "Visible. Hidden material. Visible again."},
+            "composition": {"template": "timeline_story_synthpost"},
+            "approved_timeline": {
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 2.0,
+                        "anchor": {"visible": True},
+                        "audio": {"mode": "narration"},
+                    },
+                    {
+                        "segment_id": "seg_002",
+                        "start_time": 2.0,
+                        "end_time": 6.0,
+                        "anchor": {"visible": False},
+                        "audio": {"mode": "narration"},
+                    },
+                    {
+                        "segment_id": "seg_003",
+                        "start_time": 6.0,
+                        "end_time": 8.0,
+                        "anchor": {"visible": True},
+                        "audio": {"mode": "narration"},
+                    },
+                ]
+            },
+        }
+
+        job = avatar_job_from_manifest(
+            manifest, 8.0, render_profile="production", renderer="blender_cc"
+        )
+
+        self.assertTrue(job["render"]["sparse_timeline"])
+        self.assertEqual(len(job["render"]["render_windows"]), 2)
+        self.assertEqual(job["render"]["render_windows"][1]["source_start"], 6.0)
+        self.assertNotIn(
+            "render_windows",
+            avatar_job_from_manifest(
+                manifest, 8.0, render_profile="preview", renderer="rocketbox"
+            )["render"],
+        )
+
+    def test_anchor_render_windows_skip_hidden_timeline_segments(self) -> None:
+        manifest = {
+            "approved_timeline": {
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 3.0,
+                        "anchor": {"visible": True, "camera": "front_close"},
+                        "audio": {"mode": "narration"},
+                    },
+                    {
+                        "segment_id": "seg_002",
+                        "start_time": 3.0,
+                        "end_time": 8.0,
+                        "anchor": {"visible": False, "camera": "front_close"},
+                        "audio": {"mode": "narration"},
+                    },
+                    {
+                        "segment_id": "seg_003",
+                        "start_time": 8.0,
+                        "end_time": 10.0,
+                        "anchor": {"visible": True, "camera": "front_close"},
+                        "audio": {"mode": "narration"},
+                    },
+                ]
+            }
+        }
+
+        windows = anchor_render_windows(manifest, 10.0)
+
+        self.assertEqual(len(windows), 2)
+        self.assertEqual(windows[0]["source_start"], 0.0)
+        self.assertEqual(windows[0]["clip_end"], 3.0)
+        self.assertEqual(windows[1]["source_start"], 8.0)
+        self.assertEqual(windows[1]["clip_start"], 3.0)
+        self.assertEqual(windows[1]["clip_end"], 5.0)
+
+    def test_source_audio_insert_does_not_advance_avatar_clock(self) -> None:
+        manifest = {
+            "approved_timeline": {
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 2.0,
+                        "anchor": {"visible": True},
+                        "audio": {"mode": "narration"},
+                    },
+                    {
+                        "segment_id": "seg_002",
+                        "start_time": 2.0,
+                        "end_time": 5.0,
+                        "anchor": {"visible": False},
+                        "audio": {"mode": "source"},
+                    },
+                    {
+                        "segment_id": "seg_003",
+                        "start_time": 5.0,
+                        "end_time": 7.0,
+                        "anchor": {"visible": True},
+                        "audio": {"mode": "narration"},
+                    },
+                ]
+            }
+        }
+
+        windows = anchor_render_windows(manifest, 4.0)
+
+        self.assertEqual(windows[1]["timeline_start"], 5.0)
+        self.assertEqual(windows[1]["source_start"], 2.0)
+        self.assertEqual(windows[1]["clip_start"], 2.0)
+
+    def test_timeline_with_no_visible_anchor_is_detected(self) -> None:
+        manifest = {
+            "approved_timeline": {
+                "segments": [
+                    {
+                        "segment_id": "seg_001",
+                        "start_time": 0.0,
+                        "end_time": 4.0,
+                        "anchor": {"visible": False},
+                        "audio": {"mode": "narration"},
+                    }
+                ]
+            }
+        }
+
+        self.assertFalse(timeline_has_visible_anchor(manifest))
+        self.assertIsNone(timeline_has_visible_anchor({}))
 
     def test_avatar_jobs_reuse_canonical_audio_and_exact_beat_clock(self) -> None:
         audio_path = (

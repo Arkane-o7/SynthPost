@@ -40,6 +40,8 @@ class ChannelProductionProfile:
     outro_path: str
     presenter_provider: str
     presenter_renderer: str
+    presenter_preview_renderer: str
+    presenter_final_renderer: str
     presenter_asset_path: str | None
     presenter_metadata_path: str | None
     presenter_style: str
@@ -197,6 +199,12 @@ def resolved_production(profile: ChannelProfile) -> dict[str, Any]:
             ),
             "presenter_renderer": text(
                 "PRESENTER_RENDERER", base.presenter_renderer
+            ),
+            "presenter_preview_renderer": text(
+                "PRESENTER_PREVIEW_RENDERER", base.presenter_preview_renderer
+            ),
+            "presenter_final_renderer": text(
+                "PRESENTER_FINAL_RENDERER", base.presenter_final_renderer
             ),
             "presenter_asset_path": text(
                 "PRESENTER_ASSET_PATH", base.presenter_asset_path

@@ -4,6 +4,16 @@ import { api } from "../api/client";
 import type { Episode } from "../contracts";
 import { useStudio } from "../state/useStudio";
 import { ChannelSwitcher } from "./ChannelSwitcher";
+import { ThemeToggle } from "./ThemeToggle";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderClosed,
+  Pin,
+  Plus,
+  Settings2,
+  Trash2,
+} from "lucide-react";
 
 export type Page = "command" | "settings";
 
@@ -14,44 +24,15 @@ type RailIconName =
   | "trash";
 
 const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
-  const common = {
-    width: 19,
-    height: 19,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-    "aria-hidden": true,
-  };
-
   switch (name) {
     case "settings":
-      return (
-        <svg {...common}>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19 14.5v-5l-2.2-.7-.7-1.6 1-2-3.6-2-1.5 1.6-1.7.2-1.5-1.6-3.6 2 1 2-.7 1.6-2.2.7v5l2.2.7.7 1.6-1 2 3.6 2 1.5-1.6 1.7.2 1.5 1.6 3.6-2-1-2 .7-1.6z" />
-        </svg>
-      );
+      return <Settings2 size={18} strokeWidth={1.8} aria-hidden="true" />;
     case "folder":
-      return (
-        <svg {...common}>
-          <path d="M3.5 7.5A2.5 2.5 0 0 1 6 5h4l2 2h6A2.5 2.5 0 0 1 20.5 9.5v7A2.5 2.5 0 0 1 18 19H6a2.5 2.5 0 0 1-2.5-2.5z" />
-        </svg>
-      );
+      return <FolderClosed size={18} strokeWidth={1.8} aria-hidden="true" />;
     case "pin":
-      return (
-        <svg {...common}>
-          <path d="m9 4 6 0-.8 5 2.8 3H7l2.8-3zM12 12v8" />
-        </svg>
-      );
+      return <Pin size={17} strokeWidth={1.8} aria-hidden="true" />;
     case "trash":
-      return (
-        <svg {...common}>
-          <path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
-        </svg>
-      );
+      return <Trash2 size={17} strokeWidth={1.8} aria-hidden="true" />;
   }
 };
 
@@ -322,7 +303,7 @@ export const LeftRail: React.FC<{
             disabled={creatingProject}
             onClick={() => void createProject()}
           >
-            {creatingProject ? <span className="rail-spinner" /> : "＋"}
+            {creatingProject ? <span className="rail-spinner" /> : <Plus size={17} aria-hidden="true" />}
           </button>
         </div>
 
@@ -334,7 +315,7 @@ export const LeftRail: React.FC<{
               disabled={creatingProject}
               onClick={() => void createProject()}
             >
-              <span>＋</span>
+              <Plus size={16} aria-hidden="true" />
               Create your first project
             </button>
           )}
@@ -366,7 +347,7 @@ export const LeftRail: React.FC<{
                     </span>
                     <span className="rail-row-label">{project.title}</span>
                     <span className="rail-project-caret" aria-hidden="true">
-                      {isExpanded ? "⌄" : "›"}
+                      {isExpanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
                     </span>
                   </button>
                   <div className="rail-row-actions">
@@ -517,7 +498,7 @@ export const LeftRail: React.FC<{
                         </>
                       ) : (
                         <>
-                          <span>＋</span>
+                          <Plus size={14} aria-hidden="true" />
                           New episode
                         </>
                       )}
@@ -531,6 +512,7 @@ export const LeftRail: React.FC<{
       </section>
 
       <div className="rail-footer">
+        <ThemeToggle />
         <button
           type="button"
           className={`nav-btn rail-settings ${page === "settings" ? "active" : ""}`}

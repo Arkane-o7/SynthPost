@@ -10,6 +10,16 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/synthpost-icon.svg" />
     <link rel="apple-touch-icon" href="/synthpost-icon.svg" />
+    <script>
+      (() => {
+        const stored = localStorage.getItem("synthea-ui-theme") || "system";
+        const dark = stored === "dark" || (stored === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+        document.documentElement.classList.toggle("light", !dark);
+        document.documentElement.style.colorScheme = dark ? "dark" : "light";
+        document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#050a11" : "#f5f7fa");
+      })();
+    </script>
     <title>Synthea Studio</title>
   </head>
   <body>

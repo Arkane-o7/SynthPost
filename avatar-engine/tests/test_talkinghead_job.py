@@ -26,6 +26,7 @@ if str(_repo) not in sys.path:
 
 from avatar_engine.avatar_validator import (
     AvatarValidationError,
+    validate_material_profile,
     validate_avatar_for_talkinghead,
 )
 from avatar_engine.renderer_base import AvatarJob
@@ -239,6 +240,42 @@ class TestAvatarMetadataValidation(unittest.TestCase):
         result = validate_avatar_for_talkinghead(meta, "test_avatar")
         # face_type will default to "unknown" which is != "3d" → fail
         self.assertEqual(result["status"], "fail")
+
+    def test_old_avatar_without_material_profile_uses_fallback(self) -> None:
+        result = validate_material_profile(_valid_avatar_meta(), _repo)
+        self.assertEqual(result["status"], "fallback")
+        self.assertTrue(result["warnings"])
+
+    def test_required_texture_path_must_exist(self) -> None:
+        meta = _valid_avatar_meta()
+        meta["material_profile"] = {
+            "version": "material_profile_v1",
+            "materials": {
+                "Skin": {
+                    "class": "skin",
+                    "textures": {"roughness": "missing/roughness.png"},
+                }
+            },
+        }
+        result = validate_material_profile(meta, _repo)
+        self.assertEqual(result["status"], "fail")
+        self.assertIn("not found", result["errors"][0])
+
+    def test_optional_missing_texture_is_warning(self) -> None:
+        meta = _valid_avatar_meta()
+        meta["material_profile"] = {
+            "version": "material_profile_v1",
+            "materials": {
+                "Skin": {
+                    "class": "skin",
+                    "textures": {"micro_normal": "missing/micro.png"},
+                    "optional_textures": ["micro_normal"],
+                }
+            },
+        }
+        result = validate_material_profile(meta, _repo)
+        self.assertEqual(result["status"], "pass")
+        self.assertTrue(result["warnings"])
 
 
 # --------------------------------------------------------------------------- #

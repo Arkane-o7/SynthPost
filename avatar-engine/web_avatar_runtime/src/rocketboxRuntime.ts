@@ -2,6 +2,15 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { BrowserJob } from "./avatarJob.js";
 import { normalizeVisemeArrays } from "./visemes.js";
+import {
+  applyMaterialProfile,
+  type MaterialApplicationReport,
+} from "./rendering/materialProfile.js";
+import {
+  addStudioLighting,
+  configureStudioRenderer,
+  type StudioToneMapping,
+} from "./rendering/studioLighting.js";
 
 declare global {
   interface Window {
@@ -9,6 +18,7 @@ declare global {
     __canvasRecordingMimeType?: string;
     __canvasFrameCaptureCount?: number;
     __pushCanvasFrame?: (dataUrl: string, frameIndex: number) => Promise<void>;
+    __rendererDiagnostics?: Record<string, unknown>;
   }
 }
 
@@ -152,6 +162,33 @@ const REALLUSION_SOFT_NEUTRAL_FACE_MORPHS: Record<string, number> = {
   Brow_Raise_Inner_R: 0.018,
   Mouth_Smile_L: 0.026,
   Mouth_Smile_R: 0.026,
+};
+
+const EXPRESSION_PRESETS: Record<string, Record<string, number>> = {
+  attentive: {
+    Brow_Raise_Inner_L: 0.09,
+    Brow_Raise_Inner_R: 0.09,
+    Eye_Squint_L: 0.035,
+    Eye_Squint_R: 0.035,
+  },
+  serious: {
+    Brow_Compress_L: 0.1,
+    Brow_Compress_R: 0.1,
+    Eye_Squint_L: 0.045,
+    Eye_Squint_R: 0.045,
+  },
+  warm: {
+    Mouth_Smile_L: 0.12,
+    Mouth_Smile_R: 0.12,
+    Eye_Squint_L: 0.035,
+    Eye_Squint_R: 0.035,
+  },
+  concerned: {
+    Brow_Raise_Inner_L: 0.12,
+    Brow_Raise_Inner_R: 0.12,
+    Brow_Drop_L: 0.035,
+    Brow_Drop_R: 0.035,
+  },
 };
 
 type MorphMesh = THREE.Mesh & {
@@ -490,7 +527,25 @@ function applySoftNeutralFace(
   }
 }
 
-function blinkStrengthAt(tMs: number): number {
+function blinkStrengthAt(
+  tMs: number,
+  events: NonNullable<BrowserJob["performance"]>["blink_events"] = [],
+): number {
+  if (events.length > 0) {
+    const tSeconds = tMs / 1000;
+    let result = 0;
+    for (const event of events) {
+      const duration = Math.max(0.001, event.duration);
+      const phase = (tSeconds - event.time) / duration;
+      if (phase >= 0 && phase <= 1) {
+        result = Math.max(
+          result,
+          Math.sin(phase * Math.PI) * (event.strength ?? 1),
+        );
+      }
+    }
+    return THREE.MathUtils.clamp(result, 0, 1);
+  }
   const phase = (tMs + BLINK_OFFSET_MS) % BLINK_PERIOD_MS;
   if (phase > BLINK_DURATION_MS) return 0;
   return Math.sin((phase / BLINK_DURATION_MS) * Math.PI);
@@ -500,11 +555,38 @@ function applyBlink(
   meshes: MorphMesh[],
   blinkMorphs: string[],
   tMs: number,
+  events: NonNullable<BrowserJob["performance"]>["blink_events"] = [],
 ): void {
   if (blinkMorphs.length === 0) return;
-  const strength = blinkStrengthAt(tMs);
+  const strength = blinkStrengthAt(tMs, events);
   if (strength <= 0) return;
   for (const morphName of blinkMorphs) applyMorph(meshes, morphName, strength);
+}
+
+function applyExpressionEvents(
+  meshes: MorphMesh[],
+  tMs: number,
+  events: NonNullable<BrowserJob["performance"]>["expression_events"] = [],
+): void {
+  const tSeconds = tMs / 1000;
+  for (const event of events) {
+    const start = event.start ?? event.time ?? 0;
+    const end = event.end ?? start + (event.duration ?? 0);
+    if (end <= start || tSeconds < start || tSeconds > end) continue;
+    const span = end - start;
+    const fade = Math.min(Math.max(span * 0.15, 0.08), 0.3);
+    const envelope = Math.min(
+      1,
+      Math.max(0, (tSeconds - start) / fade),
+      Math.max(0, (end - tSeconds) / fade),
+    );
+    const weight = THREE.MathUtils.clamp(event.weight ?? 1, 0, 1) * envelope;
+    for (const [name, value] of Object.entries(
+      EXPRESSION_PRESETS[event.preset] ?? {},
+    )) {
+      applyMorph(meshes, name, value * weight);
+    }
+  }
 }
 
 function backgroundColorForJob(job: BrowserJob): number {
@@ -529,6 +611,8 @@ function configureRenderer(
   width: number,
   height: number,
   clearColor: number,
+  qualityProfile: string,
+  toneMapping: StudioToneMapping,
 ): THREE.WebGLRenderer {
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -543,16 +627,20 @@ function configureRenderer(
   renderer.domElement.style.height = "100%";
   renderer.domElement.style.display = "block";
   renderer.setClearColor(clearColor, 1);
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
-  renderer.shadowMap.enabled = false;
+  if (qualityProfile === "studio_v2") {
+    configureStudioRenderer(renderer, toneMapping);
+  } else {
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    renderer.shadowMap.enabled = false;
+  }
   container.innerHTML = "";
   container.appendChild(renderer.domElement);
   return renderer;
 }
 
-function addLights(scene: THREE.Scene): void {
+function addLegacyLights(scene: THREE.Scene): void {
   const ambient = new THREE.AmbientLight(0xffffff, 0.55);
   scene.add(ambient);
 
@@ -574,6 +662,45 @@ function addLights(scene: THREE.Scene): void {
   const rim = new THREE.DirectionalLight(0xeaf2ff, 0.95);
   rim.position.set(-0.8, 2.8, -3.6);
   scene.add(rim);
+}
+
+function collectRendererDiagnostics(
+  renderer: THREE.WebGLRenderer,
+  scene: THREE.Scene,
+  avatarRoot: THREE.Object3D,
+  qualityProfile: string,
+  materialReport?: MaterialApplicationReport,
+): Record<string, unknown> {
+  const lightCounts: Record<string, number> = {};
+  const materialCounts: Record<string, number> = {};
+  let materialInstances = 0;
+  avatarRoot.traverse((obj) => {
+    const mesh = obj as THREE.Mesh & { isMesh?: boolean };
+    if (mesh.isMesh !== true || !mesh.material) return;
+    eachMaterial(mesh.material, (material) => {
+      materialInstances += 1;
+      materialCounts[material.type] = (materialCounts[material.type] ?? 0) + 1;
+    });
+  });
+  scene.traverse((obj) => {
+    const light = obj as THREE.Light & { isLight?: boolean };
+    if (light.isLight !== true) return;
+    lightCounts[light.type] = (lightCounts[light.type] ?? 0) + 1;
+  });
+  return {
+    profile: qualityProfile,
+    three_revision: THREE.REVISION,
+    output_color_space: renderer.outputColorSpace,
+    tone_mapping: renderer.toneMapping,
+    tone_mapping_exposure: renderer.toneMappingExposure,
+    shadows_enabled: renderer.shadowMap.enabled,
+    shadow_map_type: renderer.shadowMap.type,
+    environment_lighting: scene.environment !== null,
+    light_counts: lightCounts,
+    material_instances: materialInstances,
+    material_types: materialCounts,
+    material_profile: materialReport,
+  };
 }
 
 function boxFromObjects(objects: THREE.Object3D[]): THREE.Box3 {
@@ -950,6 +1077,45 @@ function findAnimationClip(
   );
 }
 
+function resolveMotionClipName(job: BrowserJob, requested: string): string {
+  return job.motion_library?.aliases?.[requested] ?? requested;
+}
+
+async function loadExternalMotionClips(
+  loader: GLTFLoader,
+  job: BrowserJob,
+): Promise<THREE.AnimationClip[]> {
+  const entries = Object.entries(job.motion_library?.clips ?? {}).filter(
+    ([, clip]) => clip.available && !!clip.url,
+  );
+  const loaded = await Promise.all(
+    entries.map(async ([clipId, clip]) => {
+      try {
+        const gltf = await loader.loadAsync(clip.url as string);
+        const source =
+          findAnimationClip(gltf.animations ?? [], clipId) ??
+          gltf.animations?.[0] ??
+          null;
+        if (!source) {
+          window.__renderWarnings.push(
+            `Motion asset contains no animation: ${clip.url}`,
+          );
+          return null;
+        }
+        const normalized = source.clone();
+        normalized.name = clipId;
+        return normalized;
+      } catch (err) {
+        window.__renderWarnings.push(
+          `Could not load motion ${clipId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return null;
+      }
+    }),
+  );
+  return loaded.filter((clip): clip is THREE.AnimationClip => clip !== null);
+}
+
 function playLoopingClip(
   mixer: THREE.AnimationMixer,
   clip: THREE.AnimationClip,
@@ -967,12 +1133,18 @@ function playLoopingClip(
 function playOneShotClip(
   mixer: THREE.AnimationMixer,
   clip: THREE.AnimationClip,
+  durationSeconds?: number,
+  weight = 1,
 ): THREE.AnimationAction {
   const action = mixer.clipAction(clip);
   action.reset();
   action.enabled = true;
   action.setLoop(THREE.LoopOnce, 1);
   action.clampWhenFinished = false;
+  action.setEffectiveWeight(THREE.MathUtils.clamp(weight, 0, 1));
+  if (durationSeconds && durationSeconds > 0) {
+    action.setDuration(durationSeconds);
+  }
   action.fadeIn(0.15);
   action.play();
   return action;
@@ -982,6 +1154,13 @@ type ProceduralRig = {
   bones: Record<string, THREE.Object3D>;
   base: Record<string, THREE.Quaternion>;
   basePosition: Record<string, THREE.Vector3>;
+};
+
+type GestureEvent = {
+  time: number;
+  type?: string;
+  clip?: string;
+  duration?: number;
 };
 
 function buildProceduralRig(morphMeshes: MorphMesh[]): ProceduralRig {
@@ -1057,7 +1236,7 @@ function pulseAt(
 }
 
 function gestureStrength(
-  gestureEvents: NonNullable<BrowserJob["animation"]["gesture_events"]>,
+  gestureEvents: GestureEvent[],
   tSeconds: number,
   names: string[],
 ): number {
@@ -1076,7 +1255,7 @@ function gestureStrength(
 function applyProceduralAnchor(
   rig: ProceduralRig,
   tMs: number,
-  gestureEvents: NonNullable<BrowserJob["animation"]["gesture_events"]>,
+  gestureEvents: GestureEvent[],
   speechEnergy = 0,
 ): void {
   const t = tMs / 1000;
@@ -1415,12 +1594,24 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
   const aspect = width / height;
 
   const backgroundMode = job.render?.background ?? "chroma_green";
+  const qualityProfile = job.render?.quality_profile ?? "legacy_control";
+  const toneMapping = job.render?.tone_mapping ?? "aces";
   const backgroundColor = backgroundColorForJob(job);
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(backgroundColor);
   const camera = new THREE.PerspectiveCamera(24, aspect, 0.01, 100);
-  const renderer = configureRenderer(container, width, height, backgroundColor);
-  addLights(scene);
+  const renderer = configureRenderer(
+    container,
+    width,
+    height,
+    backgroundColor,
+    qualityProfile,
+    toneMapping,
+  );
+  const studioLighting =
+    qualityProfile === "studio_v2"
+      ? addStudioLighting(scene, renderer)
+      : (addLegacyLights(scene), null);
 
   setStatus(`Loading Rocketbox avatar: ${job.avatar_url}`);
   const loader = new GLTFLoader();
@@ -1435,6 +1626,13 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
     });
     avatarRoot = gltf.scene;
     animationClips = gltf.animations ?? [];
+    const externalMotionClips = await loadExternalMotionClips(loader, job);
+    animationClips = [...animationClips, ...externalMotionClips];
+    if (externalMotionClips.length > 0) {
+      window.__renderWarnings.push(
+        `Loaded ${externalMotionClips.length} external CC motion clip(s).`,
+      );
+    }
   } catch (err) {
     fatal(err);
   }
@@ -1452,7 +1650,19 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
   const neutralFaceMorphs = collectNeutralFaceMorphs(morphMeshes);
   const softNeutralFaceMorphs = collectSoftNeutralFaceMorphs(morphMeshes);
 
-  if (visemeProfile.id === "reallusion_viseme") {
+  let materialReport: MaterialApplicationReport | undefined;
+  if (
+    visemeProfile.id === "reallusion_viseme" &&
+    qualityProfile === "studio_v2" &&
+    job.material_profile?.version === "material_profile_v1"
+  ) {
+    hideObviousStrayMeshes(avatarRoot);
+    materialReport = await applyMaterialProfile(
+      avatarRoot,
+      job.material_profile,
+      job.avatar_url,
+    );
+  } else if (visemeProfile.id === "reallusion_viseme") {
     // Character Creator clothing/hair often do not have morph targets; keep them.
     hideObviousStrayMeshes(avatarRoot);
     applyAvatarMaterialTweaks(avatarRoot, backgroundMode);
@@ -1461,6 +1671,14 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
     // old strict behavior for Oculus/RPM-style morph-only avatar exports.
     hideNonAvatarMeshes(avatarRoot, morphMeshes);
   }
+
+  window.__rendererDiagnostics = collectRendererDiagnostics(
+    renderer,
+    scene,
+    avatarRoot,
+    qualityProfile,
+    materialReport,
+  );
 
   if (visemeProfile.missingMorphs.length > 0) {
     window.__renderWarnings.push(
@@ -1508,22 +1726,38 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
     );
   }
 
-  const idleClipName = job.animation?.idle_loop;
-  const proceduralAnchor = idleClipName?.toLowerCase() === "procedural_anchor";
+  const configuredIdleName = job.animation?.idle_loop;
+  const libraryIdleName = job.motion_library?.default_idle;
+  const requestedIdleName =
+    !configuredIdleName || configuredIdleName.toLowerCase() === "procedural_anchor"
+      ? libraryIdleName ?? configuredIdleName
+      : configuredIdleName;
+  const resolvedIdleName = requestedIdleName
+    ? resolveMotionClipName(job, requestedIdleName)
+    : undefined;
+  const idleClip = resolvedIdleName
+    ? findAnimationClip(animationClips, resolvedIdleName)
+    : null;
+  const proceduralAnchor =
+    !idleClip && configuredIdleName?.toLowerCase() === "procedural_anchor";
   const animationDisabled =
-    !idleClipName || idleClipName.toLowerCase() === "none" || proceduralAnchor;
-  if (!animationDisabled) {
-    const idleClip = findAnimationClip(animationClips, idleClipName);
-    if (mixer && idleClip) {
-      playLoopingClip(mixer, idleClip);
-    } else if (mixer && idleClipName) {
+    !idleClip &&
+    (!configuredIdleName || configuredIdleName.toLowerCase() === "none");
+  if (idleClip && mixer) {
+    playLoopingClip(mixer, idleClip);
+  } else if (!proceduralAnchor && !animationDisabled && resolvedIdleName) {
+    if (mixer) {
       window.__renderWarnings.push(
-        `Requested idle animation not found: ${idleClipName}`,
+        `Requested idle animation not found: ${resolvedIdleName}`,
       );
     }
   }
 
-  const gestureEvents = [...(job.animation?.gesture_events ?? [])].sort(
+  const authoredBodyEvents =
+    job.performance?.body_events && job.performance.body_events.length > 0
+      ? job.performance.body_events
+      : job.animation?.gesture_events ?? [];
+  const gestureEvents = [...authoredBodyEvents].sort(
     (a, b) => a.time - b.time,
   );
   const proceduralRig = proceduralAnchor
@@ -1533,8 +1767,13 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
     window.__renderWarnings.push("Rocketbox procedural anchor motion enabled.");
   }
 
-  const clipGestureEvents = animationDisabled ? [] : gestureEvents;
+  const clipGestureEvents = proceduralAnchor ? [] : gestureEvents;
   let nextGestureIndex = 0;
+  const activeOneShots: Array<{
+    action: THREE.AnimationAction;
+    fadeOutAtMs: number;
+    faded: boolean;
+  }> = [];
 
   const audioBuffer = await decodeAudio(job);
   const clipDurationMs = Math.max(
@@ -1585,15 +1824,35 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
 
     if (mixer) mixer.update(deltaSeconds);
 
+    for (const activeAction of activeOneShots) {
+      if (!activeAction.faded && renderElapsedMs >= activeAction.fadeOutAtMs) {
+        activeAction.action.fadeOut(0.2);
+        activeAction.faded = true;
+      }
+    }
+
     while (
       nextGestureIndex < clipGestureEvents.length &&
       renderElapsedMs >= clipGestureEvents[nextGestureIndex].time * 1000
     ) {
       const event = clipGestureEvents[nextGestureIndex];
-      const clipName = event.clip ?? event.type;
+      const requestedClipName = event.clip ?? event.type ?? "";
+      const clipName = resolveMotionClipName(job, requestedClipName);
       const clip = findAnimationClip(animationClips, clipName);
       if (mixer && clip) {
-        playOneShotClip(mixer, clip);
+        const eventWeight = (event as { weight?: number }).weight ?? 1;
+        const action = playOneShotClip(
+          mixer,
+          clip,
+          event.duration,
+          eventWeight,
+        );
+        const durationMs = (event.duration ?? clip.duration) * 1000;
+        activeOneShots.push({
+          action,
+          fadeOutAtMs: renderElapsedMs + Math.max(0, durationMs - 200),
+          faded: false,
+        });
       } else if (clipName) {
         window.__renderWarnings.push(
           `Gesture animation not found: ${clipName}`,
@@ -1642,7 +1901,17 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
         }
       }
     }
-    applyBlink(morphMeshes, blinkMorphs, renderElapsedMs);
+    applyExpressionEvents(
+      morphMeshes,
+      renderElapsedMs,
+      job.performance?.expression_events ?? [],
+    );
+    applyBlink(
+      morphMeshes,
+      blinkMorphs,
+      renderElapsedMs,
+      job.performance?.blink_events ?? [],
+    );
 
     const speechSmoothingRate =
       speechGestureStrength > smoothedSpeechGestureStrength ? 3.2 : 1.9;
@@ -1693,6 +1962,7 @@ export async function runRocketboxRuntime(job: BrowserJob): Promise<void> {
         window.__renderStatus = "done";
         setStatus("Done.");
         renderer.dispose();
+        studioLighting?.dispose();
       };
 
       const recorderDone =

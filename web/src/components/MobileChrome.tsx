@@ -2,6 +2,8 @@ import React from "react";
 import { useStudio } from "../state/useStudio";
 import type { Page } from "./LeftRail";
 import { CHANNEL_IDS, channelPresentation } from "../channels";
+import { BellRing, Settings2 } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const MobileChrome: React.FC<{
   setPage: (page: Page) => void;
@@ -31,11 +33,10 @@ export const MobileChrome: React.FC<{
           <div className="mobile-logo" aria-label={`${channel.name} in Synthea Studio`}>
             {channel.initials}
           </div>
-          <div className="mobile-machine-state">
-            <span className="machine-live-dot" aria-hidden="true" />
+          <div className="mobile-machine-state mobile-studio-wordmark">
             <div>
-              <strong>{episode?.title ?? channel.name}</strong>
-              <span>Laptop online · command link active</span>
+              <strong>Synthea Studio</strong>
+              <span>{episode?.title ?? channel.name}</span>
             </div>
           </div>
           <button
@@ -44,17 +45,20 @@ export const MobileChrome: React.FC<{
             aria-label={`Open attention center${attentionCount ? `, ${attentionCount} items` : ""}`}
             onClick={onOpenAttention}
           >
-            <span aria-hidden="true">⌁</span>
+            <BellRing size={17} aria-hidden="true" />
             {attentionCount > 0 && <b>{Math.min(attentionCount, 99)}</b>}
           </button>
-          <button
-            type="button"
-            className="mobile-icon-button"
-            aria-label="Open settings"
-            onClick={() => setPage("settings")}
-          >
-            <span aria-hidden="true">⚙</span>
-          </button>
+          <div className="mobile-chrome-actions">
+            <ThemeToggle compact />
+            <button
+              type="button"
+              className="mobile-icon-button"
+              aria-label="Open settings"
+              onClick={() => setPage("settings")}
+            >
+              <Settings2 size={17} aria-hidden="true" />
+            </button>
+          </div>
         </div>
 
         <div className="mobile-context-switcher">

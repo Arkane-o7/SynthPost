@@ -94,7 +94,7 @@ export const MiniJobCard: React.FC<{
   return (
     <div className="job-card job-card-compact">
       <div className="row-between">
-        <span style={{ fontWeight: 600, fontSize: 12 }}>{job.job_type}</span>
+        <span className="mini-job-name">{job.job_type.replace(/_/g, ' ')}</span>
         <StatusBadge status={job.status}>{job.status}</StatusBadge>
       </div>
       <div className="progress-bar" style={{ marginTop: 4, marginBottom: 2 }}>
@@ -104,7 +104,7 @@ export const MiniJobCard: React.FC<{
         />
       </div>
       <div className="mini-job-controls">
-        <div className="text-muted mini-job-stage">
+        <div className="mini-job-stage">
           {job.queue_lane} · {job.stage}
           {job.status === 'queued' && job.available_at
             ? ` · retry in ${timeUntil(job.available_at)}`

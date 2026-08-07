@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -55,7 +57,8 @@ VISUAL_ONLY_TEMPLATES = {
 }
 
 BROWSER_RENDERERS = {"rocketbox", "talkinghead"}
-SUPPORTED_RENDERERS = BROWSER_RENDERERS | {"blender"}
+MODERN_CC_RENDERERS = BROWSER_RENDERERS | {"blender_cc"}
+SUPPORTED_RENDERERS = MODERN_CC_RENDERERS | {"blender"}
 DEFAULT_BROWSER_RENDERER = "rocketbox"
 DEFAULT_AVATAR_ASSET_PATH = "assets/avatars/synthpost_anchor_v1/anchor.glb"
 DEFAULT_AVATAR_METADATA_PATH = "assets/avatars/synthpost_anchor_v1/avatar.json"
@@ -80,15 +83,41 @@ def manifest_presenter(manifest: dict[str, Any] | None) -> dict[str, Any]:
     return production
 
 
-def avatar_renderer(manifest: dict[str, Any] | None = None) -> str:
+def avatar_renderer(
+    manifest: dict[str, Any] | None = None,
+    render_profile: str | None = None,
+) -> str:
     presenter = manifest_presenter(manifest)
     provider = str(presenter.get("presenter_provider") or "avatar_engine")
     if provider != "avatar_engine":
         raise ValueError(
             f"Presenter provider {provider!r} is not rendered by Avatar Engine"
         )
+    profile_renderer = None
+    if render_profile:
+        profile = resolve_profile(render_profile)
+        key = (
+            "presenter_preview_renderer"
+            if profile.name == "preview"
+            else "presenter_final_renderer"
+        )
+        profile_renderer = presenter.get(key)
+        # Stored SynthPost manifests created before the split only contain the
+        # legacy `presenter_renderer=rocketbox` field. Migrate them at read time
+        # so existing approved stories also receive the EEVEE final path.
+        if (
+            not profile_renderer
+            and str((manifest or {}).get("channel_id") or "").lower()
+            == "synthpost"
+            and str(presenter.get("presenter_renderer") or "").lower()
+            == "rocketbox"
+        ):
+            profile_renderer = (
+                "rocketbox" if profile.name == "preview" else "blender_cc"
+            )
     renderer = (
-        presenter.get("presenter_renderer")
+        profile_renderer
+        or presenter.get("presenter_renderer")
         or
         config.get_settings().avatar.renderer
         or config.env("AVATAR_ENGINE_RENDERER")
@@ -107,12 +136,18 @@ def is_browser_renderer(renderer: str | None) -> bool:
     return str(renderer or "").strip().lower() in BROWSER_RENDERERS
 
 
+def is_modern_cc_renderer(renderer: str | None) -> bool:
+    return str(renderer or "").strip().lower() in MODERN_CC_RENDERERS
+
+
 def avatar_runtime(renderer: str | None) -> str:
     normalized = str(renderer or "").strip().lower()
     if normalized == "rocketbox":
         return "custom_threejs_cc4"
     if normalized == "talkinghead":
         return "talkinghead_browser"
+    if normalized == "blender_cc":
+        return "blender_eevee_cc"
     return "legacy_blender"
 
 
@@ -254,6 +289,169 @@ def gesture_events_for(
             }
         )
     return events
+
+
+def performance_v2_for(
+    *,
+    episode_id: str,
+    story_id: str,
+    script: str,
+    duration: float,
+    narration: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Create one deterministic performance timeline shared by WebGL and Blender."""
+    seed_material = f"{episode_id}\0{story_id}\0{script}".encode("utf-8")
+    seed = int.from_bytes(hashlib.sha256(seed_material).digest()[:4], "big")
+    rng = random.Random(seed)
+
+    blink_events: list[dict[str, Any]] = []
+    blink_time = rng.uniform(2.8, 4.8)
+    while blink_time < max(0.0, duration - 0.35):
+        blink_events.append(
+            {
+                "time": round(blink_time, 2),
+                "duration": round(rng.uniform(0.12, 0.17), 3),
+                "strength": round(rng.uniform(0.88, 1.0), 2),
+            }
+        )
+        blink_time += rng.uniform(3.2, 5.6)
+
+    body_events = [
+        {
+            **event,
+            "weight": 0.6,
+            "blend_in": 0.15,
+            "blend_out": 0.2,
+        }
+        for event in gesture_events_for(script, duration, narration)
+        if float(event.get("time") or 0.0) > 0.15
+    ]
+    if duration >= 1.5:
+        body_events.append(
+            {
+                "time": round(max(0.0, duration - 0.75), 2),
+                "type": "conclusion_settle",
+                "duration": 0.65,
+                "weight": 0.8,
+                "blend_in": 0.12,
+                "blend_out": 0.18,
+            }
+        )
+
+    return {
+        "version": "performance_v2",
+        "seed": seed,
+        "visemes": [],
+        "speech_envelope": [],
+        "blink_events": blink_events,
+        "gaze_events": [
+            {"start": 0.0, "end": round(duration, 3), "target": "camera"}
+        ],
+        "expression_events": [
+            {
+                "start": 0.0,
+                "end": round(duration, 3),
+                "preset": "attentive",
+                "weight": 0.18,
+            }
+        ],
+        "body_events": body_events,
+    }
+
+
+def blender_profile_for(render_profile: str) -> str:
+    return {
+        "preview": "review",
+        "production": "production",
+        "final_master": "master",
+    }[resolve_profile(render_profile).name]
+
+
+def anchor_render_windows(
+    manifest: dict[str, Any], narration_duration: float
+) -> list[dict[str, Any]]:
+    """Return coalesced narration-clock windows where the 3D anchor is visible."""
+
+    timeline = as_dict(manifest.get("approved_timeline")) or as_dict(
+        manifest.get("timeline_plan")
+    )
+    raw_segments = timeline.get("segments")
+    if not isinstance(raw_segments, list) or not raw_segments:
+        return []
+
+    windows: list[dict[str, Any]] = []
+    narration_cursor = 0.0
+    for raw_segment in sorted(
+        (item for item in raw_segments if isinstance(item, dict)),
+        key=lambda item: float(item.get("start_time") or 0.0),
+    ):
+        timeline_start = float(raw_segment.get("start_time") or 0.0)
+        timeline_end = float(raw_segment.get("end_time") or timeline_start)
+        duration = max(0.0, timeline_end - timeline_start)
+        audio = as_dict(raw_segment.get("audio"))
+        audio_mode = str(audio.get("mode") or "narration").lower()
+        source_start = narration_cursor
+        if audio_mode != "source":
+            narration_cursor += duration
+        source_end = narration_cursor
+        anchor = as_dict(raw_segment.get("anchor"))
+        visible = bool(anchor.get("visible", True))
+        if (
+            not visible
+            or audio_mode in {"source", "silent"}
+            or source_end <= source_start
+        ):
+            continue
+        source_end = min(source_end, max(0.0, narration_duration))
+        if source_end <= source_start:
+            continue
+        camera = str(anchor.get("camera") or "front_close")
+        segment_id = str(raw_segment.get("segment_id") or "")
+        if (
+            windows
+            and abs(float(windows[-1]["timeline_end"]) - timeline_start) <= 0.05
+            and abs(float(windows[-1]["source_end"]) - source_start) <= 0.05
+            and windows[-1]["camera"] == camera
+        ):
+            windows[-1]["timeline_end"] = round(timeline_end, 3)
+            windows[-1]["source_end"] = round(source_end, 3)
+            if segment_id:
+                windows[-1]["segment_ids"].append(segment_id)
+            continue
+        windows.append(
+            {
+                "timeline_start": round(timeline_start, 3),
+                "timeline_end": round(timeline_end, 3),
+                "source_start": round(source_start, 3),
+                "source_end": round(source_end, 3),
+                "camera": camera,
+                "segment_ids": [segment_id] if segment_id else [],
+            }
+        )
+
+    clip_cursor = 0.0
+    for window in windows:
+        duration = float(window["source_end"]) - float(window["source_start"])
+        window["clip_start"] = round(clip_cursor, 3)
+        clip_cursor += duration
+        window["clip_end"] = round(clip_cursor, 3)
+    return windows
+
+
+def timeline_has_visible_anchor(manifest: dict[str, Any]) -> bool | None:
+    """Return timeline anchor visibility, or None when no timeline is present."""
+
+    timeline = as_dict(manifest.get("approved_timeline")) or as_dict(
+        manifest.get("timeline_plan")
+    )
+    raw_segments = timeline.get("segments")
+    if not isinstance(raw_segments, list) or not raw_segments:
+        return None
+    return any(
+        bool(as_dict(segment.get("anchor")).get("visible", True))
+        for segment in raw_segments
+        if isinstance(segment, dict)
+    )
 
 
 def voice_config(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -438,6 +636,21 @@ def browser_avatar_job_from_manifest(
         direction.get("avatar_camera")
         or camera_for_template(composition.get("template"))
     )
+    render_config: dict[str, Any] = {
+        "background": avatar_render_background(manifest),
+        "output_path": output_path.as_posix(),
+        "preview_png_path": preview_path.as_posix(),
+        "blender_profile": blender_profile_for(profile.name),
+    }
+    if renderer == "blender_cc":
+        windows = anchor_render_windows(manifest, duration)
+        visible_duration = sum(
+            float(window["source_end"]) - float(window["source_start"])
+            for window in windows
+        )
+        if windows and visible_duration < duration - 0.05:
+            render_config["render_windows"] = windows
+            render_config["sparse_timeline"] = True
 
     return {
         "job_id": story_id,
@@ -482,17 +695,20 @@ def browser_avatar_job_from_manifest(
             ),
         },
         "camera_overrides": browser_camera_overrides(direction),
-        "render": {
-            "background": avatar_render_background(manifest),
-            "output_path": output_path.as_posix(),
-            "preview_png_path": preview_path.as_posix(),
-        },
+        "render": render_config,
         "animation": {
             "idle_loop": "procedural_anchor",
             "gesture_events": gesture_events_for(
                 script_text, duration, narration
             ),
         },
+        "performance": performance_v2_for(
+            episode_id=episode_id,
+            story_id=story_id,
+            script=script_text,
+            duration=duration,
+            narration=narration,
+        ),
         "face": {
             "mode": "3d_viseme",
             "viseme_source": "rhubarb",
@@ -555,13 +771,15 @@ def avatar_job_from_manifest(
     render_profile: str = "production",
     renderer: str | None = None,
 ) -> dict[str, Any]:
-    selected_renderer = (renderer or avatar_renderer(manifest)).strip().lower()
+    selected_renderer = (
+        renderer or avatar_renderer(manifest, render_profile)
+    ).strip().lower()
     if selected_renderer not in SUPPORTED_RENDERERS:
         expected = ", ".join(sorted(SUPPORTED_RENDERERS))
         raise ValueError(
             f"Unsupported Avatar-Engine renderer `{selected_renderer}`. Expected one of: {expected}."
         )
-    if is_browser_renderer(selected_renderer):
+    if is_modern_cc_renderer(selected_renderer):
         return browser_avatar_job_from_manifest(
             manifest,
             duration,
@@ -716,7 +934,7 @@ def build_direction(
 ) -> dict[str, Any]:
     manifest = read_manifest(story_json_path)
     profile = resolve_profile(render_profile)
-    renderer = avatar_renderer(manifest)
+    renderer = avatar_renderer(manifest, profile.name)
     script_text = str(manifest.get("script", {}).get("text", "")).strip()
     if not script_text:
         raise ValueError("Cannot build direction because script.text is empty.")
@@ -727,7 +945,7 @@ def build_direction(
     duration_source = (
         "tts_exact_samples" if narration_duration else "words_per_minute"
     )
-    if is_browser_renderer(renderer) and not narration_duration:
+    if is_modern_cc_renderer(renderer) and not narration_duration:
         audio_duration, audio_path = existing_browser_audio_duration(
             str(manifest["episode_id"]), str(manifest["story_id"])
         )
@@ -740,7 +958,7 @@ def build_direction(
     )
     job_path = write_avatar_job(story_json_path, job)
 
-    if config.env_bool("SYNTHPOST_AVATAR_TTS_PROBE", False) and not is_browser_renderer(
+    if config.env_bool("SYNTHPOST_AVATAR_TTS_PROBE", False) and not is_modern_cc_renderer(
         renderer
     ):
         probed_duration = probe_tts_duration(job_path, test_mode=test_mode)
@@ -782,7 +1000,7 @@ def build_direction(
         "duration_source": duration_source,
     }
 
-    if is_browser_renderer(renderer):
+    if is_modern_cc_renderer(renderer):
         audio_abs = resolve_engine_path(str(job.get("audio_path", "")))
         viseme_abs = resolve_engine_path(str(job.get("viseme_path", "")))
         preview_path = avatar_job_preview_path(job)
@@ -791,7 +1009,9 @@ def build_direction(
         render = as_dict(job.get("render"))
         direction.update(
             {
-                "avatar_export_mode": "browser_mp4",
+                "avatar_export_mode": (
+                    "eevee_mp4" if renderer == "blender_cc" else "browser_mp4"
+                ),
                 "avatar_asset_id": avatar_asset_id(job),
                 "avatar_asset_path": avatar.get("asset_path"),
                 "avatar_metadata_path": avatar.get("metadata_path"),
@@ -804,6 +1024,13 @@ def build_direction(
                 else None,
             }
         )
+        render_windows = render.get("render_windows")
+        if isinstance(render_windows, list) and render_windows:
+            direction["avatar_render_windows"] = render_windows
+            direction["avatar_render_mode"] = "visible_timeline_windows"
+        if timeline_has_visible_anchor(manifest) is False:
+            direction["avatar_render_mode"] = "not_visible"
+            direction["skip_avatar_render"] = True
 
     manifest["direction"] = {
         key: value
@@ -828,7 +1055,7 @@ def build_direction(
                 "avatar_renderer": renderer,
                 "avatar_runtime": avatar_runtime(renderer),
                 "avatar_asset_id": avatar_asset_id(job)
-                if is_browser_renderer(renderer)
+                if is_modern_cc_renderer(renderer)
                 else None,
             },
         ),
@@ -1026,7 +1253,11 @@ def update_browser_direction_after_prepare(
             "duration_source": "avatar_audio",
             "avatar_renderer": job.get("renderer"),
             "avatar_runtime": avatar_runtime(str(job.get("renderer", ""))),
-            "avatar_export_mode": "browser_mp4",
+            "avatar_export_mode": (
+                "eevee_mp4"
+                if str(job.get("renderer")) == "blender_cc"
+                else "browser_mp4"
+            ),
         }
     )
     manifest["direction"] = {
@@ -1057,7 +1288,11 @@ def update_browser_direction_after_render(
             "anchor_output_path": project_relative(output_path),
             "avatar_renderer": job.get("renderer"),
             "avatar_runtime": avatar_runtime(str(job.get("renderer", ""))),
-            "avatar_export_mode": "browser_mp4",
+            "avatar_export_mode": (
+                "eevee_mp4"
+                if str(job.get("renderer")) == "blender_cc"
+                else "browser_mp4"
+            ),
             "avatar_asset_id": avatar_asset_id(job),
             "avatar_asset_path": avatar.get("asset_path"),
             "avatar_metadata_path": avatar.get("metadata_path"),
@@ -1089,6 +1324,16 @@ def update_browser_direction_after_render(
     if render_manifest:
         direction["render_wall_time_seconds"] = render_manifest.get("wall_time_seconds")
         direction["realtime_factor"] = render_manifest.get("realtime_factor")
+        render_windows = render_manifest.get("render_windows")
+        if isinstance(render_windows, list) and render_windows:
+            direction["avatar_render_windows"] = render_windows
+            direction["avatar_render_mode"] = "visible_timeline_windows"
+            direction["avatar_rendered_duration_seconds"] = render_manifest.get(
+                "rendered_duration_seconds"
+            )
+            direction["avatar_skipped_duration_seconds"] = render_manifest.get(
+                "skipped_duration_seconds"
+            )
         if render_manifest.get("fps"):
             direction["fps"] = render_manifest.get("fps")
         resolution = str(render_manifest.get("resolution") or "")
@@ -1150,6 +1395,13 @@ def browser_artifact_metadata(
                 "render_wall_time_seconds": render_manifest.get("wall_time_seconds"),
                 "realtime_factor": render_manifest.get("realtime_factor"),
                 "frame_count": render_manifest.get("frame_count"),
+                "render_windows": render_manifest.get("render_windows"),
+                "rendered_duration_seconds": render_manifest.get(
+                    "rendered_duration_seconds"
+                ),
+                "skipped_duration_seconds": render_manifest.get(
+                    "skipped_duration_seconds"
+                ),
                 "warnings": render_manifest.get("warnings"),
             }
         )
@@ -1193,7 +1445,7 @@ def run_browser_avatar_engine(
         and path_is_fresh(output_path, initial_inputs)
         and not force
     ):
-        print(safe_text(f"[direction] Reusing fresh browser avatar render: {output_path}"))
+        print(safe_text(f"[direction] Reusing fresh modern avatar render: {output_path}"))
         update_browser_direction_after_render(
             story_json_path,
             job,
@@ -1244,7 +1496,7 @@ def run_browser_avatar_engine(
         prepared["viseme_path"],
     ]
     if path_is_fresh(output_path, inputs) and not force:
-        print(safe_text(f"[direction] Reusing fresh browser avatar render: {output_path}"))
+        print(safe_text(f"[direction] Reusing fresh modern avatar render: {output_path}"))
         update_browser_direction_after_render(
             story_json_path, job, output_path, prepared
         )
@@ -1274,7 +1526,7 @@ def run_browser_avatar_engine(
 
     if test_mode:
         print(
-            "[TEST_MODE] WARNING: Avatar-Engine browser renderer is running with TEST_MODE TTS/lipsync inputs."
+            "[TEST_MODE] WARNING: Avatar-Engine modern renderer is running with TEST_MODE TTS/lipsync inputs."
         )
     command = [
         avatar_python(),
@@ -1481,10 +1733,13 @@ def run_avatar_engine(
     profile = resolve_profile(render_profile)
     voice = as_dict(direction.get("voice"))
     renderer = (
-        str(direction.get("avatar_renderer") or avatar_renderer(manifest)).strip().lower()
+        str(
+            direction.get("avatar_renderer")
+            or avatar_renderer(manifest, profile.name)
+        ).strip().lower()
     )
 
-    if is_browser_renderer(renderer):
+    if is_modern_cc_renderer(renderer):
         return run_browser_avatar_engine(
             story_json_path,
             job_path=job_path,
@@ -1519,7 +1774,8 @@ def run(
     direction = build_direction(
         story_json_path, test_mode=test_mode, render_profile=profile.name
     )
-    if render:
+    skip_invisible_anchor = bool(direction.get("skip_avatar_render"))
+    if render and not skip_invisible_anchor:
         run_avatar_engine(
             story_json_path,
             force=force,
@@ -1530,7 +1786,10 @@ def run(
         output_path = resolve_project_path(direction.get("anchor_output_path", ""))
         voice = as_dict(direction.get("voice"))
         renderer = (
-            str(direction.get("avatar_renderer") or avatar_renderer(read_manifest(story_json_path))).strip().lower()
+            str(
+                direction.get("avatar_renderer")
+                or avatar_renderer(read_manifest(story_json_path), profile.name)
+            ).strip().lower()
         )
         metadata = {
             "avatar_renderer": renderer,
@@ -1557,10 +1816,13 @@ def run(
                 render_profile=profile.name,
                 flags={
                     "skip_avatar_render": True,
+                    "anchor_not_visible": skip_invisible_anchor,
                     "force": force,
                     "avatar_renderer": renderer,
                 },
                 metadata=metadata,
             ),
         )
+        if skip_invisible_anchor:
+            print("[direction] Skipping Avatar-Engine because the approved timeline never displays the anchor.")
     return direction

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "performance_v2.schema.json",
+  "title": "SynthPost Shared Avatar Performance V2",
+  "type": "object",
+  "required": [
+    "version",
+    "seed",
+    "visemes",
+    "speech_envelope",
+    "blink_events",
+    "gaze_events",
+    "expression_events",
+    "body_events"
+  ],
+  "properties": {
+    "version": {"const": "performance_v2"},
+    "seed": {"type": "integer"},
+    "visemes": {"type": "array", "items": {"type": "object"}},
+    "speech_envelope": {"type": "array", "items": {"type": "object"}},
+    "blink_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["time", "duration"],
+        "properties": {
+          "time": {"type": "number", "minimum": 0},
+          "duration": {"type": "number", "exclusiveMinimum": 0},
+          "strength": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "gaze_events": {"type": "array", "items": {"type": "object"}},
+    "expression_events": {"type": "array", "items": {"type": "object"}},
+    "body_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["time", "type", "duration"],
+        "properties": {
+          "time": {"type": "number", "minimum": 0},
+          "type": {"type": "string", "minLength": 1},
+          "duration": {"type": "number", "exclusiveMinimum": 0},
+          "weight": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

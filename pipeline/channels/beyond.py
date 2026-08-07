@@ -64,6 +64,8 @@ unverified combat clips, generic flags, and unrelated military montages.
         outro_path="assets/channels/beyond/outro.mp4",
         presenter_provider="avatar_engine",
         presenter_renderer="rocketbox",
+        presenter_preview_renderer="rocketbox",
+        presenter_final_renderer="rocketbox",
         presenter_asset_path="assets/avatars/beyond_anchor_v1/anchor.glb",
         presenter_metadata_path="assets/avatars/beyond_anchor_v1/avatar.json",
         presenter_style="international_news_anchor",

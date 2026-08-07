@@ -5,6 +5,17 @@ export type PublicMedia = {
   remote?: boolean;
 };
 
+export type AnchorRenderWindow = {
+  timelineStart: number;
+  timelineEnd: number;
+  sourceStart: number;
+  sourceEnd: number;
+  clipStart: number;
+  clipEnd: number;
+  camera?: string;
+  segmentIds?: string[];
+};
+
 export type TimedVisual = PublicMedia & {
   start: number;
   end: number;
@@ -240,6 +251,7 @@ export type StoryProps = {
   sourceLabel: string;
   sourceDate: string;
   anchor?: PublicMedia;
+  anchorRenderWindows?: AnchorRenderWindow[];
   anchorChromaKey?: boolean;
   narrationAudio?: PublicMedia;
   backgroundMusic?: PublicMedia;

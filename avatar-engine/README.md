@@ -13,7 +13,9 @@ This is intentionally not a photorealistic MetaHuman pipeline and does not use c
 
 - The local pipeline runs end to end from a job JSON to an MP4.
 - The active 3D anchor is `assets/avatars/synthpost_anchor_v1/anchor.glb` with metadata in `assets/avatars/synthpost_anchor_v1/avatar.json`.
-- The active 3D renderer is a custom Three.js CC4/Reallusion runtime under the legacy `rocketbox` renderer name. The name is kept for compatibility; it is not using Rocketbox assets anymore.
+- SynthPost uses a two-tier 3D path: the custom Three.js CC4/Reallusion runtime under the legacy `rocketbox` name for previews, and `blender_cc` with EEVEE for production/final renders. Both consume the same motion-library and `performance_v2` timeline.
+- Production Blender jobs render only approved timeline intervals where `anchor.visible` is true. The compact anchor clip carries a source-to-clip window map so Remotion can place each interval at the correct narration time while playing the canonical narration audio continuously.
+- For interactive Blender scene development from Codex, see [`docs/BLENDER_MCP.md`](docs/BLENDER_MCP.md).
 - The 3D runtime maps Rhubarb/Oculus visemes to Reallusion `V_*` morphs and drives jaw, lower/upper teeth, tongue, blink, head/body posture, and subtle procedural speaking gestures.
 - Browser capture uses deterministic canvas PNG frames plus FFmpeg audio muxing. Do not use Playwright viewport video or canvas `MediaRecorder` for production captures.
 - Rhubarb, Blender, FFmpeg, and local Kokoro TTS defaults can be configured through `config/default.yaml`.
@@ -29,6 +31,7 @@ This is intentionally not a photorealistic MetaHuman pipeline and does not use c
 - [Current 3D Runtime Design](docs/talkinghead_runtime_design.md): custom Three.js/CC4 renderer, capture path, and job contract.
 - [SynthPost Integration Guide](docs/synthpost_integration.md): how downstream projects should call Avatar-Engine.
 - [Renderer Benchmark Notes](docs/talkinghead_benchmark.md): current browser renderer timing notes and caveats.
+- [Current-model Renderer Bake-off](docs/AVATAR_RENDERER_BAKEOFF.md): renderer decision, EEVEE profiles, sparse timeline rendering, and measured production timings.
 - [Change Log](CHANGELOG.md): migration-oriented summary since the last GitHub baseline.
 - [Blender Scene Guide](docs/BLENDER_SCENE_GUIDE.md): required objects, cameras, face setup, Actions, and scene contract.
 - [Rendering And Optimization](docs/RENDERING_AND_OPTIMIZATION.md): preview vs final quality, polygon reduction, baking, and speed tips.

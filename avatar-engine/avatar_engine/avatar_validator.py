@@ -51,6 +51,21 @@ KNOWN_BLENDSHAPE_PROFILES = {
     "auto_detect",
 }
 
+KNOWN_MATERIAL_CLASSES = {
+    "skin",
+    "eye",
+    "cornea",
+    "eye_occlusion",
+    "tearline",
+    "hair",
+    "eyelash",
+    "teeth",
+    "tongue",
+    "cloth",
+    "nails",
+    "generic",
+}
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -202,6 +217,68 @@ def load_avatar_metadata(metadata_path: Path) -> dict[str, Any]:
             f"Avatar metadata must be a JSON object: {metadata_path}"
         )
     return data
+
+
+def validate_material_profile(
+    avatar_metadata: dict[str, Any], avatar_root: Path
+) -> dict[str, Any]:
+    """Validate the optional semantic material contract and local texture paths."""
+    profile = avatar_metadata.get("material_profile")
+    if profile is None:
+        return {
+            "status": "fallback",
+            "profile_version": None,
+            "warnings": [
+                "Avatar has no material_profile; using conservative legacy material fallback."
+            ],
+        }
+    if not isinstance(profile, dict) or profile.get("version") != "material_profile_v1":
+        return {
+            "status": "fail",
+            "error": "material_profile.version must be 'material_profile_v1'.",
+        }
+    materials = profile.get("materials")
+    if not isinstance(materials, dict) or not materials:
+        return {"status": "fail", "error": "material_profile.materials must be a non-empty object."}
+
+    errors: list[str] = []
+    warnings: list[str] = []
+    texture_count = 0
+    for material_name, entry in materials.items():
+        if not isinstance(entry, dict):
+            errors.append(f"material {material_name!r} must be an object")
+            continue
+        semantic = str(entry.get("class") or "")
+        if semantic not in KNOWN_MATERIAL_CLASSES:
+            errors.append(f"material {material_name!r} has unknown class {semantic!r}")
+        optional = {str(slot) for slot in entry.get("optional_textures") or []}
+        textures = entry.get("textures") or {}
+        if not isinstance(textures, dict):
+            errors.append(f"material {material_name!r} textures must be an object")
+            continue
+        for slot, raw_path in textures.items():
+            texture_count += 1
+            relative = Path(str(raw_path))
+            if relative.is_absolute() or ".." in relative.parts:
+                errors.append(
+                    f"material {material_name!r} texture {slot!r} must be avatar-relative"
+                )
+                continue
+            if not (avatar_root / relative).is_file():
+                message = f"material {material_name!r} texture {slot!r} not found: {relative}"
+                if str(slot) in optional:
+                    warnings.append(message)
+                else:
+                    errors.append(message)
+    if errors:
+        return {"status": "fail", "errors": errors, "warnings": warnings}
+    return {
+        "status": "pass",
+        "profile_version": "material_profile_v1",
+        "material_count": len(materials),
+        "texture_path_count": texture_count,
+        "warnings": warnings,
+    }
 
 
 # ---------------------------------------------------------------------------

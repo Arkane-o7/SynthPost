@@ -1,0 +1,100 @@
+{
+  "version": "cc_motion_library_v1",
+  "avatar_id": "synthpost_anchor_v1",
+  "skeleton": "reallusion_cc",
+  "fps": 24,
+  "blender_library": "cc_anchor_actions.blend",
+  "default_idle": "IDLE_Neutral",
+  "aliases": {
+    "neutral_idle": "IDLE_Neutral",
+    "attentive_idle": "IDLE_Attentive",
+    "serious_idle": "IDLE_Serious",
+    "explain_small": "EXPLAIN_Right_Small",
+    "explain_right": "EXPLAIN_Right_Small",
+    "explain_left": "EXPLAIN_Left_Small",
+    "both_open": "EXPLAIN_Both_Open",
+    "emphasis_right": "EMPHASIS_Right",
+    "emphasis_left": "EMPHASIS_Left",
+    "nod": "NOD_Small",
+    "lean_forward": "LEAN_Forward_Small",
+    "transition_reset": "TRANSITION_Reset",
+    "conclusion_settle": "CONCLUSION_Settle"
+  },
+  "clips": {
+    "IDLE_Neutral": {
+      "action": "IDLE_Neutral",
+      "kind": "idle",
+      "loop": true,
+      "amplitude": 0.55,
+      "exclude_head": true,
+      "relative_to_first_frame": true,
+      "web_file": "web/IDLE_Neutral.glb"
+    },
+    "IDLE_Attentive": {
+      "action": "IDLE_Attentive",
+      "kind": "idle",
+      "loop": true,
+      "web_file": "web/IDLE_Attentive.glb"
+    },
+    "IDLE_Serious": {
+      "action": "IDLE_Serious",
+      "kind": "idle",
+      "loop": true,
+      "web_file": "web/IDLE_Serious.glb"
+    },
+    "EXPLAIN_Right_Small": {
+      "action": "EXPLAIN_Right_Small",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/EXPLAIN_Right_Small.glb"
+    },
+    "EXPLAIN_Left_Small": {
+      "action": "EXPLAIN_Left_Small",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/EXPLAIN_Left_Small.glb"
+    },
+    "EXPLAIN_Both_Open": {
+      "action": "EXPLAIN_Both_Open",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/EXPLAIN_Both_Open.glb"
+    },
+    "EMPHASIS_Right": {
+      "action": "EMPHASIS_Right",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/EMPHASIS_Right.glb"
+    },
+    "EMPHASIS_Left": {
+      "action": "EMPHASIS_Left",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/EMPHASIS_Left.glb"
+    },
+    "NOD_Small": {
+      "action": "NOD_Small",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/NOD_Small.glb"
+    },
+    "LEAN_Forward_Small": {
+      "action": "LEAN_Forward_Small",
+      "kind": "gesture",
+      "blend_type": "COMBINE",
+      "web_file": "web/LEAN_Forward_Small.glb"
+    },
+    "TRANSITION_Reset": {
+      "action": "TRANSITION_Reset",
+      "kind": "transition",
+      "blend_type": "COMBINE",
+      "web_file": "web/TRANSITION_Reset.glb"
+    },
+    "CONCLUSION_Settle": {
+      "action": "CONCLUSION_Settle",
+      "kind": "transition",
+      "blend_type": "COMBINE",
+      "web_file": "web/CONCLUSION_Settle.glb"
+    }
+  }
+}

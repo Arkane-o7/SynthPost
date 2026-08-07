@@ -57,6 +57,10 @@ class TestResolveRendererName(unittest.TestCase):
         job = _make_job("blender")
         self.assertEqual(resolve_renderer_name(job), "blender")
 
+    def test_blender_cc_in_job(self) -> None:
+        job = _make_job("blender_cc")
+        self.assertEqual(resolve_renderer_name(job), "blender_cc")
+
     def test_cli_override_takes_priority(self) -> None:
         job = _make_job("blender")
         result = resolve_renderer_name(job, override="talkinghead")
@@ -113,6 +117,14 @@ class TestGetRenderer(unittest.TestCase):
         renderer = get_renderer(job, override="talkinghead")
         self.assertIsInstance(renderer, TalkingHeadAvatarRenderer)
         self.assertEqual(renderer.name, "talkinghead")
+
+    def test_get_blender_cc_renderer(self) -> None:
+        from avatar_engine.blender_cc_renderer import BlenderCCAvatarRenderer
+
+        job = _make_job("blender_cc")
+        renderer = get_renderer(job, override="blender_cc")
+        self.assertIsInstance(renderer, BlenderCCAvatarRenderer)
+        self.assertEqual(renderer.name, "blender_cc")
 
     def test_renderer_name_blender(self) -> None:
         from avatar_engine.blender_renderer import BlenderAvatarRenderer

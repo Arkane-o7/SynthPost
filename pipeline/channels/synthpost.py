@@ -66,6 +66,8 @@ concerns that physical infrastructure.
         outro_path="assets/brand/outro.mp4",
         presenter_provider="avatar_engine",
         presenter_renderer="rocketbox",
+        presenter_preview_renderer="rocketbox",
+        presenter_final_renderer="blender_cc",
         presenter_asset_path="assets/avatars/synthpost_anchor_v1/anchor.glb",
         presenter_metadata_path="assets/avatars/synthpost_anchor_v1/avatar.json",
         presenter_style="professional_technology_anchor",

@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* The legacy Studio utility has semantic text meaning. Keep it from colliding
+   with Tailwind's generated `text-muted` color utility. */
+.text-muted {
+  color: var(--text-muted) !important;
+}
+
+.text-faint {
+  color: var(--text-faint) !important;
+}
+
+@layer base {
+  :root {
+    --background: 216 33% 97%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 214 32% 93%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 214 32% 93%;
+    --muted-foreground: 215 16% 43%;
+    --accent: 214 32% 91%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border-shadcn: 214 25% 85%;
+    --input: 214 25% 85%;
+    --ring: 221 83% 53%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 220 43% 5%;
+    --foreground: 210 25% 96%;
+    --card: 217 38% 10%;
+    --card-foreground: 210 25% 96%;
+    --popover: 217 38% 9%;
+    --popover-foreground: 210 25% 96%;
+    --primary: 213 94% 68%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 28% 16%;
+    --secondary-foreground: 210 25% 96%;
+    --muted: 217 28% 15%;
+    --muted-foreground: 215 18% 64%;
+    --accent: 217 28% 18%;
+    --accent-foreground: 210 25% 96%;
+    --destructive: 0 63% 43%;
+    --destructive-foreground: 210 25% 96%;
+    --border-shadcn: 217 25% 20%;
+    --input: 217 25% 20%;
+    --ring: 213 94% 68%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

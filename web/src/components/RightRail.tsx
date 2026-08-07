@@ -8,6 +8,7 @@ import type {
   ScriptDocument,
   TimelinePlan,
 } from "../contracts";
+import { Activity, History, TriangleAlert, X } from "lucide-react";
 
 export const RightRail: React.FC<{
   mobileOpen?: boolean;
@@ -153,11 +154,16 @@ export const RightRail: React.FC<{
           <div className="mobile-section-kicker">Remote watch desk</div>
           <h2>Attention center</h2>
         </div>
-        <button type="button" aria-label="Close attention center" onClick={onMobileClose}>×</button>
+        <button type="button" aria-label="Close attention center" onClick={onMobileClose}>
+          <X size={19} aria-hidden="true" />
+        </button>
       </div>
       {/* Active Jobs */}
       <div className="right-rail-section">
-        <h3>Active Jobs {activeJobs.length > 0 && `(${activeJobs.length})`}</h3>
+        <h3 className="rail-section-title">
+          <Activity size={14} aria-hidden="true" />
+          Active Jobs {activeJobs.length > 0 && `(${activeJobs.length})`}
+        </h3>
         {activeJobs.length === 0 ? (
           <p className="text-muted" style={{ fontSize: 12 }}>
             No running jobs.
@@ -179,7 +185,10 @@ export const RightRail: React.FC<{
       {/* Blockers & Warnings */}
       {blockers.length > 0 && (
         <div className="right-rail-section">
-          <h3>Blockers</h3>
+          <h3 className="rail-section-title">
+            <TriangleAlert size={14} aria-hidden="true" />
+            Blockers
+          </h3>
           <div className="stack">
             {blockers.map((b, i) => (
               <div key={i} className="validation-msg validation-warning">
@@ -192,15 +201,18 @@ export const RightRail: React.FC<{
 
       {/* Recent Activity */}
       <div className="right-rail-section">
-        <h3>Recent Jobs</h3>
+        <h3 className="rail-section-title">
+          <History size={14} aria-hidden="true" />
+          Recent Jobs
+        </h3>
         <div className="stack">
           {recentJobs.map((job) => (
-            <div key={job.job_id} className="job-card job-card-compact">
+            <div key={job.job_id} className="recent-job-card">
               <div className="row-between">
-                <span style={{ fontWeight: 600, fontSize: 12 }}>
-                  {job.job_type}
+                <span className="recent-job-name">
+                  {job.job_type.replace(/_/g, " ")}
                 </span>
-                <span className="text-muted" style={{ fontSize: 11 }}>
+                <span className="recent-job-time">
                   {relativeTime(
                     job.completed_at ??
                       job.started_at ??
@@ -209,8 +221,9 @@ export const RightRail: React.FC<{
                   )}
                 </span>
               </div>
-              <div className="text-muted" style={{ fontSize: 11 }}>
-                {job.status}
+              <div className="recent-job-status">
+                <span className={`recent-job-dot status-${job.status}`} aria-hidden="true" />
+                <span>{job.status}</span>
                 {job.error ? ` · ${job.error}` : ""}
               </div>
             </div>
