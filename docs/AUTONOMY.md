@@ -53,6 +53,13 @@ model instead of Hermes's isolated provider auto-resolution.
 
 Open an episode in Studio and choose **YOLO Produce**.
 
+Hermes chooses the episode runtime after reading the completed research. The
+adaptive window is 3–15 minutes in 30-second increments. It must explain the
+choice, then write enough grounded narration to match it; SynthPost still
+enforces the normal ±20% duration gate. Thin or repetitive research should
+produce a shorter episode, while a dense, well-supported story can run longer.
+Manual script generation remains fixed to the duration selected in Studio.
+
 - With a selected story, the run starts from that story and reuses only current,
   valid artifacts.
 - With an empty episode, discovery runs first and SynthPost selects the highest

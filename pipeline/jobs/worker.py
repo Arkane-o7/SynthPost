@@ -205,6 +205,9 @@ def handle_research(ctx: JobContext) -> dict[str, str]:
         restore_state = begin_script_generation(ctx.repository, ctx.job.story_id)
         script_payload = {
             "provider": ctx.job.payload.get("provider"),
+            "duration_mode": str(
+                ctx.job.payload.get("duration_mode") or "fixed"
+            ),
             "target_duration_seconds": int(
                 ctx.job.payload.get("target_duration_seconds") or 600
             ),
@@ -252,6 +255,7 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
         ctx.repository,
         ctx.job.story_id,
         provider_name=ctx.job.payload.get("provider"),
+        duration_mode=str(ctx.job.payload.get("duration_mode") or "fixed"),
         target_duration_seconds=int(
             ctx.job.payload.get("target_duration_seconds") or 600
         ),
@@ -261,7 +265,11 @@ def handle_script_generate(ctx: JobContext) -> dict[str, str]:
         ),
     )
     ctx.progress(100, "script ready for review")
-    return {"script_id": script.script_id}
+    return {
+        "script_id": script.script_id,
+        "duration_mode": script.duration_mode,
+        "target_duration_seconds": str(script.target_duration_seconds or ""),
+    }
 
 
 def handle_visual_search(ctx: JobContext) -> dict[str, str]:

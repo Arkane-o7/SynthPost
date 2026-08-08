@@ -448,6 +448,10 @@ class NarrativeDraft(StrictModel):
     headline: str
     dek: str = ""
     category: str = "news"
+    recommended_duration_seconds: int | None = Field(
+        default=None, ge=60, le=3600
+    )
+    duration_rationale: str = Field(default="", max_length=800)
     beats: list[NarrativeBeat]
 
     @property
@@ -534,6 +538,9 @@ class ScriptDocument(StrictModel):
     dek: str = ""
     category: str = "general"
     narration_mode: NarrationMode = NarrationMode.explained
+    duration_mode: Literal["fixed", "adaptive"] = "fixed"
+    target_duration_seconds: int | None = Field(default=None, ge=60, le=7200)
+    duration_rationale: str = Field(default="", max_length=800)
     estimated_duration_seconds: float = 0.0
     version: int = 1
     status: ScriptStatus = ScriptStatus.review
@@ -977,6 +984,7 @@ class AutonomyPolicy(StrictModel):
     """Immutable guardrails for one unattended production run."""
 
     provider: str = "hermes"
+    duration_mode: Literal["adaptive", "fixed"] = "adaptive"
     target_duration_seconds: int = Field(default=600, ge=60, le=3600)
     narration_mode: NarrationMode = NarrationMode.explained
     category: str | None = None

@@ -415,6 +415,7 @@ export const api = {
     episode_id: string;
     story_id?: string;
     provider?: string;
+    duration_mode?: "adaptive" | "fixed";
     target_duration_seconds?: number;
     narration_mode?: NarrationMode;
     category?: string;

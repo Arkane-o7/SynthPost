@@ -207,6 +207,8 @@ NARRATIVE_REPAIR_PROMPT_VERSION = "synthpost.narrative-repair.v5"
 NARRATIVE_SEGMENT_PROMPT_VERSION = "synthpost.narrative-segmentation.v2"
 NARRATIVE_SCRIPT_PROMPT_VERSION = "synthpost.narrative-script.v1"
 FULL_ARTICLE_DOCUMENT_LIMIT = 4
+ADAPTIVE_DURATION_MIN_SECONDS = 180
+ADAPTIVE_DURATION_MAX_SECONDS = 900
 
 
 def target_word_count(duration_seconds: int) -> int:
@@ -745,6 +747,10 @@ def _validate_narrative_draft(
         headline=" ".join(str(raw.get("headline") or "SynthPost Briefing").split()),
         dek=" ".join(str(raw.get("dek") or "").split()),
         category=" ".join(str(raw.get("category") or "news").split()),
+        recommended_duration_seconds=raw.get("recommended_duration_seconds"),
+        duration_rationale=" ".join(
+            str(raw.get("duration_rationale") or "").split()
+        ),
         beats=beats,
     )
     tolerance = duration_tolerance_seconds(target_duration_seconds)
@@ -1008,32 +1014,68 @@ def narrative_quality_issues(draft: NarrativeDraft) -> list[str]:
     return issues
 
 
-def narrative_script_schema() -> dict[str, Any]:
+def narrative_script_schema(*, adaptive_duration: bool = False) -> dict[str, Any]:
     """Minimal output contract for the single-pass narration writer."""
 
-    return {
-        "type": "object",
-        "required": ["headline", "dek", "category", "beats"],
-        "properties": {
-            "headline": {"type": "string"},
-            "dek": {"type": "string"},
-            "category": {"type": "string"},
-            "beats": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["text", "source_document_ids"],
-                    "properties": {
-                        "text": {"type": "string"},
-                        "source_document_ids": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
+    required = ["headline", "dek", "category", "beats"]
+    properties: dict[str, Any] = {
+        "headline": {"type": "string"},
+        "dek": {"type": "string"},
+        "category": {"type": "string"},
+        "beats": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["text", "source_document_ids"],
+                "properties": {
+                    "text": {"type": "string"},
+                    "source_document_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
                     },
                 },
             },
         },
     }
+    if adaptive_duration:
+        required.extend(["recommended_duration_seconds", "duration_rationale"])
+        properties.update(
+            {
+                "recommended_duration_seconds": {
+                    "type": "integer",
+                    "minimum": ADAPTIVE_DURATION_MIN_SECONDS,
+                    "maximum": ADAPTIVE_DURATION_MAX_SECONDS,
+                    "multipleOf": 30,
+                },
+                "duration_rationale": {"type": "string"},
+            }
+        )
+    return {
+        "type": "object",
+        "required": required,
+        "properties": properties,
+    }
+
+
+def _adaptive_duration_decision(raw: dict[str, Any]) -> tuple[int, str]:
+    value = raw.get("recommended_duration_seconds")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("adaptive narration must recommend a numeric duration")
+    duration = int(value)
+    if float(value) != float(duration):
+        raise ValueError("adaptive narration duration must be a whole number")
+    if duration % 30:
+        raise ValueError("adaptive narration duration must use 30-second increments")
+    if not ADAPTIVE_DURATION_MIN_SECONDS <= duration <= ADAPTIVE_DURATION_MAX_SECONDS:
+        raise ValueError(
+            "adaptive narration duration must be between "
+            f"{ADAPTIVE_DURATION_MIN_SECONDS} and "
+            f"{ADAPTIVE_DURATION_MAX_SECONDS} seconds"
+        )
+    rationale = " ".join(str(raw.get("duration_rationale") or "").split())
+    if len(rationale) < 12:
+        raise ValueError("adaptive narration must explain its duration recommendation")
+    return duration, rationale
 
 
 def _claim_ids_by_document(pack: dict[str, Any]) -> dict[str, list[str]]:
@@ -1068,7 +1110,13 @@ def _validate_narrative_script(
     pack: dict[str, Any],
     *,
     target_duration_seconds: int,
+    adaptive_duration: bool = False,
 ) -> NarrativeDraft:
+    effective_target = target_duration_seconds
+    if adaptive_duration:
+        effective_target, duration_rationale = _adaptive_duration_decision(raw)
+    else:
+        duration_rationale = ""
     allowed_documents = {
         str(article["document_id"])
         for article in source_articles_for_prompt(pack)
@@ -1078,6 +1126,10 @@ def _validate_narrative_script(
     if not isinstance(rows, list):
         raise ValueError("narrative script must contain a beats array")
     transformed = dict(raw)
+    transformed["recommended_duration_seconds"] = (
+        effective_target if adaptive_duration else None
+    )
+    transformed["duration_rationale"] = duration_rationale
     transformed_beats: list[dict[str, Any]] = []
     for index, item in enumerate(rows, start=1):
         if not isinstance(item, dict):
@@ -1120,7 +1172,7 @@ def _validate_narrative_script(
     draft = _validate_narrative_draft(
         transformed,
         pack,
-        target_duration_seconds=target_duration_seconds,
+        target_duration_seconds=effective_target,
     )
     issues = narrative_quality_issues(draft)
     if issues:
@@ -1135,6 +1187,7 @@ def narrative_script_prompt(
     primary_topic: str,
     narration_mode: NarrationMode | str,
     channel_profile: ChannelProfile | None = None,
+    adaptive_duration: bool = False,
 ) -> str:
     profile = channel_profile or get_channel_profile("synthpost")
     articles = source_articles_for_prompt(pack)
@@ -1152,6 +1205,34 @@ def narrative_script_prompt(
         if profile.channel_id == "synthpost"
         else narration_format_context(profile, selected_mode)
     )
+    if adaptive_duration:
+        duration_instructions = f"""
+ADAPTIVE RUNTIME: Decide the shortest duration that fully explains this story
+from the supplied research. Choose a 30-second increment between
+{ADAPTIVE_DURATION_MIN_SECONDS} and {ADAPTIVE_DURATION_MAX_SECONDS} seconds.
+Base the choice on independently supported developments, causal complexity,
+necessary context, consequences, contradictions, and uncertainty—not on article
+word count alone. Thin or repetitive evidence should produce a shorter episode;
+dense, well-supported mechanisms and timelines can justify a longer one. Never
+pad to reach a familiar format length and never truncate a supported explanation.
+
+Return recommended_duration_seconds and a concise duration_rationale alongside
+the narration. Write enough sentence-level beats to match that recommendation;
+each beat may contain no more than 65 words. SynthPost will strictly validate
+the final spoken word count against the duration you choose.
+""".strip()
+        response_fields = (
+            "the runtime recommendation, duration rationale, final headline, dek, "
+            "category, and narration beats"
+        )
+    else:
+        duration_instructions = f"""
+Target duration: {target_duration_seconds} seconds, approximately {target_words}
+spoken words. Return at least {minimum_beats} sentence-level beats, each no more
+than 65 words.
+""".strip()
+        response_fields = "the final headline, dek, category, and narration beats"
+
     return f"""
 You are {profile.name}'s senior editorial writer inside Synthea Studio. Read the supplied source
 articles, plan the story internally, and return the finished spoken narration.
@@ -1173,12 +1254,12 @@ Do not invent quotes, numbers, dates, people, organizations, motives, outcomes,
 or an India connection. Attribute disputed, predicted, or company-supplied
 claims in natural spoken language.
 
-Target duration: {target_duration_seconds} seconds, approximately {target_words}
-spoken words. Return at least {minimum_beats} sentence-level beats, each no more
-than 65 words. For every beat, return the document_id values of the articles
+{duration_instructions}
+
+For every beat, return the document_id values of the articles
 that support it. Never speak document IDs, citations, or source metadata aloud.
 
-Return only the final headline, dek, category, and narration beats as JSON
+Return only {response_fields} as JSON
 matching the response schema.
 
 SOURCE ARTICLES:
@@ -2486,6 +2567,7 @@ def generate_script(
     story_id: str,
     *,
     provider_name: str | None = None,
+    duration_mode: str = "fixed",
     target_duration_seconds: int = 600,
     narration_mode: NarrationMode | str = NarrationMode.explained,
     progress_callback: Callable[[float, str], None] | None = None,
@@ -2499,6 +2581,10 @@ def generate_script(
         raise ValueError(f"No research pack exists for story: {story_id}")
     _assert_story_can_enter_script_review(repository, story_id)
     provider = configured_provider(provider_name)
+    resolved_duration_mode = str(duration_mode or "fixed").strip().lower()
+    if resolved_duration_mode not in {"fixed", "adaptive"}:
+        raise ValueError("duration_mode must be 'fixed' or 'adaptive'")
+    adaptive_duration = resolved_duration_mode == "adaptive"
     selected_mode = NarrationMode(
         normalize_narration_mode(
             narration_mode,
@@ -2514,6 +2600,8 @@ def generate_script(
         else f"{channel_profile.channel_id}.{channel_profile.profile_version}"
     )
     script_prompt_version = prompt_identity(channel_profile, "narrative-script")
+    if adaptive_duration:
+        script_prompt_version += ".adaptive-v1"
     segment_prompt_version = prompt_identity(
         channel_profile, "narrative-segmentation"
     )
@@ -2530,6 +2618,7 @@ def generate_script(
         primary_topic=candidate.editorial_fit.primary_topic,
         narration_mode=selected_mode,
         channel_profile=channel_profile,
+        adaptive_duration=adaptive_duration,
     )
     draft, script_attempts = _run_or_reuse_audited_stage(
         repository,
@@ -2537,18 +2626,30 @@ def generate_script(
         stage="narrative_script",
         prompt_version=script_prompt_version,
         prompt=script_prompt,
-        schema=narrative_script_schema(),
+        schema=narrative_script_schema(adaptive_duration=adaptive_duration),
         validator=lambda raw: _validate_narrative_script(
             raw,
             pack,
             target_duration_seconds=target_duration_seconds,
+            adaptive_duration=adaptive_duration,
         ),
         provider=provider,
         charter_version=channel_charter_version,
         retry_with_original_prompt=True,
     )
 
-    report(0.72, "grouping the accepted narration for production")
+    effective_target_duration_seconds = (
+        draft.recommended_duration_seconds
+        if adaptive_duration
+        else target_duration_seconds
+    )
+    if effective_target_duration_seconds is None:
+        raise ValueError("adaptive script generation did not resolve a duration")
+    report(
+        0.72,
+        "grouping the accepted narration for production at "
+        f"{effective_target_duration_seconds} seconds",
+    )
     segment_prompt = narrative_segmentation_prompt(
         draft,
         source_audio_enabled=config.source_audio_inserts_enabled(),
@@ -2567,7 +2668,10 @@ def generate_script(
     )
     value = script_from_narrative(story_id, draft, segmentation, pack)
     value.narration_mode = selected_mode
-    value = enforce_target_duration(value, target_duration_seconds)
+    value.duration_mode = resolved_duration_mode
+    value.target_duration_seconds = effective_target_duration_seconds
+    value.duration_rationale = draft.duration_rationale
+    value = enforce_target_duration(value, effective_target_duration_seconds)
 
     total_attempts = len(script_attempts) + len(segment_attempts)
     generation_warnings = [
@@ -2581,7 +2685,13 @@ def generate_script(
         f"narrative_segment_prompt={segment_prompt_version}",
         "narrative_quality_gate=passed",
         f"narration_mode={selected_mode.value}",
+        f"duration_mode={resolved_duration_mode}",
+        f"target_duration_seconds={effective_target_duration_seconds}",
     ]
+    if draft.duration_rationale:
+        generation_warnings.append(
+            f"duration_rationale={draft.duration_rationale}"
+        )
     model = getattr(provider, "last_model", None)
     if model:
         generation_warnings.append(f"llm_model={model}")

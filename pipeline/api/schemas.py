@@ -156,6 +156,7 @@ class AutonomyRunCreate(APIModel):
     episode_id: str
     story_id: str | None = None
     provider: str = "hermes"
+    duration_mode: Literal["adaptive", "fixed"] = "adaptive"
     target_duration_seconds: int = Field(default=600, ge=60, le=3600)
     narration_mode: NarrationMode = NarrationMode.explained
     category: str | None = None
@@ -190,6 +191,8 @@ class AutonomyRunView(AutonomyRun):
     project_title: str
     episode_title: str
     story_title: str | None
+    selected_duration_seconds: int | None = None
+    duration_rationale: str | None = None
     qa: AutonomyQAView | None = None
 
 

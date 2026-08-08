@@ -417,6 +417,7 @@ def advance_autonomy_run(repository: Repository, run_id: str) -> AutonomyRun:
             story_id=story_id,
             payload={
                 "provider": run.policy.provider,
+                "duration_mode": run.policy.duration_mode,
                 "target_duration_seconds": run.policy.target_duration_seconds,
                 "narration_mode": run.policy.narration_mode.value,
                 "_previous_workflow_state": restore.value,
@@ -814,6 +815,19 @@ def retry_autonomy_run(repository: Repository, run_id: str) -> AutonomyRun:
         None,
     )
     if failed:
+        if failed.job_type == "script_generate":
+            # Old runs may predate adaptive duration or may have failed with a
+            # fixed 600-second payload. A checkpoint retry should use the
+            # run's current durable policy instead of replaying that stale
+            # constraint forever.
+            failed.payload.update(
+                {
+                    "provider": run.policy.provider,
+                    "duration_mode": run.policy.duration_mode,
+                    "target_duration_seconds": run.policy.target_duration_seconds,
+                    "narration_mode": run.policy.narration_mode.value,
+                }
+            )
         failed.status = JobStatus.queued
         failed.progress = 0
         failed.stage = "queued_for_autonomy_retry"
@@ -886,9 +900,15 @@ def autonomy_run_view(repository: Repository, run: AutonomyRun) -> dict[str, Any
     project = repository.get_project(run.project_id)
     episode = repository.get_episode(run.episode_id)
     story_title = None
+    selected_duration_seconds = None
+    duration_rationale = None
     if run.story_id:
         try:
             story_title = repository.candidate_for_story(run.story_id).title
+            script = repository.latest_script(run.story_id)
+            if script:
+                selected_duration_seconds = script.target_duration_seconds
+                duration_rationale = script.duration_rationale or None
         except Exception:
             story_title = None
     data = run.model_dump(mode="json")
@@ -944,6 +964,8 @@ def autonomy_run_view(repository: Repository, run: AutonomyRun) -> dict[str, Any
             "project_title": project.title,
             "episode_title": episode.title,
             "story_title": story_title,
+            "selected_duration_seconds": selected_duration_seconds,
+            "duration_rationale": duration_rationale,
         }
     )
     return data

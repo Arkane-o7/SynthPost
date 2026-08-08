@@ -38,6 +38,7 @@ def create_run(payload: AutonomyRunCreate) -> AutonomyRunView:
     try:
         policy = AutonomyPolicy(
             provider=payload.provider,
+            duration_mode=payload.duration_mode,
             target_duration_seconds=payload.target_duration_seconds,
             narration_mode=payload.narration_mode,
             category=payload.category,

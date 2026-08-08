@@ -91,6 +91,7 @@ class AutonomyOrchestrationTests(unittest.TestCase):
     ) -> None:
         episode = self._episode()
         policy = AutonomyPolicy(max_repairs_per_stage=2)
+        self.assertEqual(policy.duration_mode, "adaptive")
 
         run = start_autonomy_run(
             self.repository,
@@ -193,6 +194,36 @@ class AutonomyOrchestrationTests(unittest.TestCase):
             autonomy_run_id=run.run_id, job_type="research"
         )
         self.assertEqual(len(research), 1)
+
+    def test_retry_upgrades_a_legacy_script_job_to_adaptive_duration(self) -> None:
+        episode = self._episode("Legacy fixed script")
+        story = self._selected_story(episode.episode_id, "legacy_script")
+        run = AutonomyRun(
+            project_id=episode.project_id,
+            episode_id=episode.episode_id,
+            story_id=story.story_id,
+            candidate_id=story.candidate_id,
+            status=AutonomyRunStatus.needs_attention,
+            current_stage="writing_script",
+        )
+        self.repository.upsert_autonomy_run(run)
+        job = self.repository.create_job(
+            "script_generate",
+            episode_id=episode.episode_id,
+            story_id=story.story_id,
+            autonomy_run_id=run.run_id,
+            payload={"target_duration_seconds": 600},
+        )
+        job.status = JobStatus.failed
+        job.error = "legacy fixed-duration validation failure"
+        self.repository.upsert_job(job)
+
+        retry_autonomy_run(self.repository, run.run_id)
+
+        retried = self.repository.get_job(job.job_id)
+        self.assertEqual(retried.status, JobStatus.queued)
+        self.assertEqual(retried.payload["duration_mode"], "adaptive")
+        self.assertEqual(retried.payload["target_duration_seconds"], 600)
 
     @patch("pipeline.autonomy.provider_availability", return_value=AVAILABLE_HERMES)
     def test_cancel_stops_jobs_and_restores_editable_story_checkpoint(
@@ -829,6 +860,7 @@ class AutonomyAPITests(unittest.TestCase):
                 self.assertEqual(created.status_code, 200, created.text)
                 payload = created.json()
                 self.assertEqual(payload["engine"], "hermes")
+                self.assertEqual(payload["policy"]["duration_mode"], "adaptive")
                 self.assertEqual(payload["status"], "running")
                 self.assertEqual(payload["current_stage"], "discovering")
                 self.assertFalse(payload["policy"]["upload_enabled"])

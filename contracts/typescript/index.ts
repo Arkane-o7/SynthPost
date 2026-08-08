@@ -314,6 +314,9 @@ export type ScriptDocument = {
   dek: string;
   category: string;
   narration_mode: NarrationMode;
+  duration_mode: 'fixed' | 'adaptive';
+  target_duration_seconds: number | null;
+  duration_rationale: string;
   estimated_duration_seconds: number;
   version: number;
   status: string;
@@ -530,6 +533,7 @@ export type AutonomyQaView = AutonomyQaReport & {
 
 export type AutonomyPolicy = {
   provider: string;
+  duration_mode: 'adaptive' | 'fixed';
   target_duration_seconds: number;
   narration_mode: NarrationMode;
   category: string | null;
@@ -572,6 +576,8 @@ export type AutonomyRunView = Omit<AutonomyRun, 'qa'> & {
   project_title: string;
   episode_title: string;
   story_title: string | null;
+  selected_duration_seconds: number | null;
+  duration_rationale: string | null;
   qa: AutonomyQaView | null;
 };
 

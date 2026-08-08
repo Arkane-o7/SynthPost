@@ -232,6 +232,10 @@ class V2ContractTests(unittest.TestCase):
         self.assertEqual(set(policy["required"]), set(AutonomyPolicy.model_fields))
         self.assertFalse(policy["additionalProperties"])
         self.assertEqual(policy["properties"]["upload_enabled"]["const"], False)
+        self.assertEqual(
+            policy["properties"]["duration_mode"]["enum"],
+            ["adaptive", "fixed"],
+        )
         self.assertEqual(policy["properties"]["rights_policy"]["enum"], ["green_only"])
         self.assertEqual(
             policy["properties"]["render_profile"]["enum"],

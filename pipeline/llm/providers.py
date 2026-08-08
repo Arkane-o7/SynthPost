@@ -995,8 +995,22 @@ class MockProvider:
                 ]
                 primary_claim = claims[:1]
                 source_document_ids = []
-            target_match = re.search(r"(?:about|approximately)\s+(\d+)\s+spoken words", prompt)
-            target_words = int(target_match.group(1)) if target_match else 145
+            adaptive_duration = "ADAPTIVE RUNTIME:" in prompt
+            if adaptive_duration:
+                source_words = sum(
+                    len(str(article.get("content") or "").split())
+                    for article in articles
+                )
+                recommended_duration_seconds = (
+                    300 if source_words < 3_000 else 480 if source_words < 7_000 else 720
+                )
+                target_words = round(recommended_duration_seconds * 145 / 60)
+            else:
+                recommended_duration_seconds = None
+                target_match = re.search(
+                    r"(?:about|approximately)\s+(\d+)\s+spoken words", prompt
+                )
+                target_words = int(target_match.group(1)) if target_match else 145
             templates = [
                 "A documented Indian pilot is moving from proposal to a practical test, creating a clear question about whether implementation can match its ambition.",
                 "The available research establishes the core development without requiring speculation about results that have not yet been demonstrated.",
@@ -1190,7 +1204,7 @@ class MockProvider:
                 )
                 chosen.append(sentence)
                 word_total += len(sentence.split())
-            return {
+            response = {
                 "headline": "India-rooted systems briefing",
                 "dek": str(
                     research.get("research_summary")
@@ -1213,6 +1227,17 @@ class MockProvider:
                     for index, sentence in enumerate(chosen, start=1)
                 ],
             }
+            if adaptive_duration:
+                response.update(
+                    {
+                        "recommended_duration_seconds": recommended_duration_seconds,
+                        "duration_rationale": (
+                            "The available evidence supports a complete explanation "
+                            "at this length without padding repeated source material."
+                        ),
+                    }
+                )
+            return response
         if "narrative segmentation editor" in prompt.lower():
             marker = "INPUT JSON:\n"
             payload = json.loads(prompt.split(marker, 1)[1])

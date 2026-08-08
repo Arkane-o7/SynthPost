@@ -100,8 +100,16 @@ export const AutonomyRunControl: React.FC<{
     studio.selectedChannelProfile?.default_target_duration_seconds ?? 600;
   const narrationMode =
     studio.selectedChannelProfile?.default_narration_mode ?? "explained";
-  const displayedTargetSeconds =
-    run?.policy.target_duration_seconds ?? configuredTargetSeconds;
+  const durationMode = run?.policy.duration_mode ?? "adaptive";
+  const displayedTargetSeconds = run?.selected_duration_seconds;
+  const durationLabel =
+    durationMode === "adaptive"
+      ? displayedTargetSeconds
+        ? `Hermes chose ${Number((displayedTargetSeconds / 60).toFixed(1))} min`
+        : "Hermes chooses length"
+      : `${Math.round(
+          (run?.policy.target_duration_seconds ?? configuredTargetSeconds) / 60,
+        )} min target`;
   const launchBlocker =
     episode && episode.story_ids.length > 1
       ? "YOLO production currently supports one-story episodes only. Move the other stories to separate episodes first."
@@ -132,6 +140,7 @@ export const AutonomyRunControl: React.FC<{
       api.startAutonomyRun({
         episode_id: episode.episode_id,
         story_id: storyId || undefined,
+        duration_mode: "adaptive",
         target_duration_seconds: configuredTargetSeconds,
         narration_mode: narrationMode,
         category: project?.default_category,
@@ -172,7 +181,7 @@ export const AutonomyRunControl: React.FC<{
 
       <div className="autonomy-policy" aria-label="Autonomy policy">
         <span><ShieldCheck size={13} /> Green-only media</span>
-        <span>{Math.round(displayedTargetSeconds / 60)} min target</span>
+        <span title={run?.duration_rationale ?? undefined}>{durationLabel}</span>
         <span>{(run?.policy.render_profile ?? "production").replace(/_/g, " ")} render</span>
         <span>Never uploads</span>
       </div>

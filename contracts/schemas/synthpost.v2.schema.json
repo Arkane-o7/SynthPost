@@ -232,7 +232,7 @@
     },
     "ScriptDocument": {
       "type": "object",
-      "required": ["script_id", "story_id", "headline", "dek", "category", "narration_mode", "estimated_duration_seconds", "version", "status", "sections", "lower_thirds", "chyrons", "source_ids", "created_at", "updated_at"],
+      "required": ["script_id", "story_id", "headline", "dek", "category", "narration_mode", "duration_mode", "target_duration_seconds", "duration_rationale", "estimated_duration_seconds", "version", "status", "sections", "lower_thirds", "chyrons", "source_ids", "created_at", "updated_at"],
       "properties": {
         "script_id": {"type": "string"},
         "story_id": {"type": "string"},
@@ -240,6 +240,9 @@
         "dek": {"type": "string"},
         "category": {"type": "string"},
         "narration_mode": {"enum": ["signal", "explained", "deep_dive", "india_builds"]},
+        "duration_mode": {"enum": ["fixed", "adaptive"]},
+        "target_duration_seconds": {"type": ["integer", "null"], "minimum": 60, "maximum": 7200},
+        "duration_rationale": {"type": "string"},
         "estimated_duration_seconds": {"type": "number"},
         "version": {"type": "integer"},
         "status": {"type": "string"},
@@ -506,9 +509,10 @@
     "AutonomyPolicy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["provider", "target_duration_seconds", "narration_mode", "category", "render_profile", "rights_policy", "max_repairs_per_stage", "upload_enabled", "auto_select_story"],
+      "required": ["provider", "duration_mode", "target_duration_seconds", "narration_mode", "category", "render_profile", "rights_policy", "max_repairs_per_stage", "upload_enabled", "auto_select_story"],
       "properties": {
         "provider": {"type": "string"},
+        "duration_mode": {"enum": ["adaptive", "fixed"]},
         "target_duration_seconds": {"type": "integer", "minimum": 60, "maximum": 3600},
         "narration_mode": {"enum": ["signal", "explained", "deep_dive", "india_builds"]},
         "category": {"type": ["string", "null"]},
@@ -554,7 +558,7 @@
     "AutonomyRunView": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["run_id", "channel_id", "project_id", "episode_id", "story_id", "candidate_id", "engine", "engine_session_id", "status", "current_stage", "progress", "policy", "job_ids", "active_job_ids", "final_output_path", "final_output_sha256", "qa_report_path", "qa", "warnings", "error", "created_at", "updated_at", "started_at", "completed_at", "reviewed_at", "project_title", "episode_title", "story_title"],
+      "required": ["run_id", "channel_id", "project_id", "episode_id", "story_id", "candidate_id", "engine", "engine_session_id", "status", "current_stage", "progress", "policy", "job_ids", "active_job_ids", "final_output_path", "final_output_sha256", "qa_report_path", "qa", "warnings", "error", "created_at", "updated_at", "started_at", "completed_at", "reviewed_at", "project_title", "episode_title", "story_title", "selected_duration_seconds", "duration_rationale"],
       "properties": {
         "run_id": {"type": "string"},
         "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
@@ -588,7 +592,9 @@
         "reviewed_at": {"type": ["string", "null"]},
         "project_title": {"type": "string"},
         "episode_title": {"type": "string"},
-        "story_title": {"type": ["string", "null"]}
+        "story_title": {"type": ["string", "null"]},
+        "selected_duration_seconds": {"type": ["integer", "null"]},
+        "duration_rationale": {"type": ["string", "null"]}
       }
     },
     "GenerationAudit": {

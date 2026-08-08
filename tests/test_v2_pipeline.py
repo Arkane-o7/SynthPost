@@ -3422,6 +3422,75 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
 
+    def test_hermes_adaptive_duration_is_grounded_and_strictly_enforced(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "adaptive-duration.sqlite3")
+        try:
+            project = repository.create_project("Adaptive runtime")
+            episode = repository.create_episode(project.project_id, "Hermes runtime")
+            candidate = add_manual_story(
+                repository,
+                title="India tests a documented transport pilot",
+                body="The pilot is entering a documented operating trial.",
+                episode_id=episode.episode_id,
+            )
+            selected = repository.select_candidate(
+                candidate.candidate_id, episode.episode_id
+            )
+            assert selected.story_id
+            repository.upsert_research_pack(
+                ResearchPack(
+                    story_id=selected.story_id,
+                    claims=[
+                        Claim(
+                            claim_id="claim_001",
+                            claim_text="The pilot is entering an operating trial.",
+                            supported=True,
+                        )
+                    ],
+                    research_summary="One focused, documented transport pilot.",
+                )
+            )
+
+            script = generate_script(
+                repository,
+                selected.story_id,
+                provider_name="mock",
+                duration_mode="adaptive",
+                target_duration_seconds=600,
+                narration_mode="explained",
+            )
+
+            self.assertEqual(script.duration_mode, "adaptive")
+            self.assertEqual(script.target_duration_seconds, 300)
+            self.assertTrue(script.duration_rationale)
+            self.assertGreaterEqual(script.estimated_duration_seconds, 240)
+            self.assertLessEqual(script.estimated_duration_seconds, 360)
+            self.assertIn("duration_mode=adaptive", script.warnings)
+            audit = next(
+                item
+                for item in repository.list_generation_audits(selected.story_id)
+                if item.stage == "narrative_script"
+            )
+            self.assertIn("ADAPTIVE RUNTIME", audit.prompt_text)
+            self.assertEqual(audit.response["recommended_duration_seconds"], 300)
+
+            dishonest_response = dict(audit.response)
+            dishonest_response["recommended_duration_seconds"] = 600
+            with self.assertRaisesRegex(
+                ValueError,
+                "sentence-level beats|complete narration must contain",
+            ):
+                _validate_narrative_script(
+                    dishonest_response,
+                    repository.latest_research_pack(selected.story_id) or {},
+                    target_duration_seconds=600,
+                    adaptive_duration=True,
+                )
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_rights_validation_blocks_red_asset(self) -> None:
         with self.assertRaises(ValueError):
             VisualCandidate(
