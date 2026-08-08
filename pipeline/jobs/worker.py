@@ -1025,6 +1025,7 @@ def run_loop(
     interval: float = 1.0,
     queue_lane: JobQueueLane | str | None = None,
     slot: int | None = None,
+    supervisor_pid: int | None = None,
 ) -> None:
     with worker_process_lock(queue_lane, slot=slot) as lease:
         print(
@@ -1042,6 +1043,15 @@ def run_loop(
                 reconcile_autonomy_runs(repository)
             last_recovery = time.monotonic()
             while True:
+                if (
+                    supervisor_pid is not None
+                    and os.getppid() != supervisor_pid
+                ):
+                    print(
+                        "SynthPost worker stopped because its supervisor exited.",
+                        flush=True,
+                    )
+                    return
                 did_work = run_one(repository, queue_lane)
                 if once:
                     return
@@ -1082,12 +1092,18 @@ def main() -> None:
         type=int,
         help="Explicit 1-based worker slot. Omit to lease the first free slot.",
     )
+    parser.add_argument(
+        "--supervisor-pid",
+        type=int,
+        help="Exit automatically if the owning worker supervisor disappears.",
+    )
     args = parser.parse_args()
     run_loop(
         once=args.once,
         interval=args.interval,
         queue_lane=None if args.lane == "all" else args.lane,
         slot=args.slot,
+        supervisor_pid=args.supervisor_pid,
     )
 
 

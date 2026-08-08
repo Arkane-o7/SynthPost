@@ -39,16 +39,18 @@ def configured_worker_specs(
     )
 
 
-def worker_command(spec: WorkerSpec) -> list[str]:
-    return [
+def worker_command(
+    spec: WorkerSpec, *, supervisor_pid: int | None = None
+) -> list[str]:
+    command = [
         sys.executable,
         "-m",
         "pipeline.jobs.worker",
-        "--lane",
-        spec.lane,
-        "--slot",
-        str(spec.slot),
     ]
+    if supervisor_pid is not None:
+        command.extend(["--supervisor-pid", str(supervisor_pid)])
+    command.extend(["--lane", spec.lane, "--slot", str(spec.slot)])
+    return command
 
 
 @contextmanager
@@ -73,12 +75,37 @@ def supervisor_process_lock():
         handle.close()
 
 
-def _spawn(spec: WorkerSpec) -> tuple[subprocess.Popen[bytes], float]:
+def _spawn(
+    spec: WorkerSpec, *, supervisor_pid: int
+) -> tuple[subprocess.Popen[bytes], float]:
     print(f"[workers] starting {spec.label}", flush=True)
     return (
-        subprocess.Popen(worker_command(spec), start_new_session=True),
+        subprocess.Popen(
+            worker_command(spec, supervisor_pid=supervisor_pid),
+            start_new_session=True,
+        ),
         time.monotonic(),
     )
+
+
+def _assert_worker_slots_available(specs: tuple[WorkerSpec, ...]) -> None:
+    """Fail once before spawning when an old/manual worker owns a pool slot."""
+
+    from pipeline.jobs.worker import worker_process_lock
+
+    unavailable: list[str] = []
+    for spec in specs:
+        try:
+            with worker_process_lock(spec.lane, slot=spec.slot):
+                pass
+        except RuntimeError:
+            unavailable.append(spec.label)
+    if unavailable:
+        raise RuntimeError(
+            "Worker slots are already owned: "
+            + ", ".join(unavailable)
+            + ". Stop the existing or orphaned workers before starting a new pool."
+        )
 
 
 def _stop_children(
@@ -124,15 +151,25 @@ def run_supervisor(*, poll_interval: float = 1.0) -> None:
     def request_stop(_signum: int, _frame: object) -> None:
         stop_requested.set()
 
+    handled_signals = [signal.SIGINT, signal.SIGTERM]
+    for name in ("SIGHUP", "SIGQUIT"):
+        value = getattr(signal, name, None)
+        if value is not None:
+            handled_signals.append(value)
     previous_handlers = {
         signum: signal.signal(signum, request_stop)
-        for signum in (signal.SIGINT, signal.SIGTERM)
+        for signum in handled_signals
     }
     children: dict[WorkerSpec, tuple[subprocess.Popen[bytes], float]] = {}
     quick_failures: dict[WorkerSpec, list[float]] = {spec: [] for spec in specs}
     try:
         with supervisor_process_lock():
-            children = {spec: _spawn(spec) for spec in specs}
+            _assert_worker_slots_available(specs)
+            supervisor_pid = os.getpid()
+            children = {
+                spec: _spawn(spec, supervisor_pid=supervisor_pid)
+                for spec in specs
+            }
             while not stop_requested.wait(poll_interval):
                 for spec, (process, started_at) in list(children.items()):
                     return_code = process.poll()
@@ -160,7 +197,9 @@ def run_supervisor(*, poll_interval: float = 1.0) -> None:
                             f"Worker {spec.label} failed three times within 30 seconds; "
                             "stopping the pool instead of restart-looping."
                         )
-                    children[spec] = _spawn(spec)
+                    children[spec] = _spawn(
+                        spec, supervisor_pid=supervisor_pid
+                    )
     finally:
         stop_requested.set()
         _stop_children(children)

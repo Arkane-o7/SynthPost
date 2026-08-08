@@ -17,7 +17,12 @@ from pipeline.api.main import _write_streamed_upload, app
 from pipeline.api.routes.jobs import public_job
 from pipeline.api.schemas import ProjectPatch, SourcePatch
 from pipeline.diagnostics import exit_code, run_diagnostics
-from pipeline.jobs.supervisor import configured_worker_specs, worker_command
+from pipeline.jobs.supervisor import (
+    WorkerSpec,
+    _assert_worker_slots_available,
+    configured_worker_specs,
+    worker_command,
+)
 from pipeline.jobs.worker import HANDLERS, worker_process_lock
 from pipeline.models import RenderJob
 from pipeline.observability import LogContext, format_event, safe_text
@@ -388,6 +393,12 @@ class ParallelWorkerTests(unittest.TestCase):
         self.assertEqual(
             worker_command(specs[-1])[-4:], ["--lane", "render", "--slot", "2"]
         )
+        supervised = worker_command(specs[-1], supervisor_pid=1234)
+        self.assertIn("--supervisor-pid", supervised)
+        self.assertIn("1234", supervised)
+        self.assertEqual(
+            supervised[-4:], ["--lane", "render", "--slot", "2"]
+        )
 
     def test_workers_lease_distinct_slots_up_to_configured_capacity(self) -> None:
         settings = config.load_settings({"SYNTHPOST_RENDER_WORKERS": "2"})
@@ -401,6 +412,19 @@ class ParallelWorkerTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "No free render"):
                         with worker_process_lock("render"):
                             self.fail("capacity must not be oversubscribed")
+
+    def test_supervisor_preflight_reports_owned_slots_without_restart_loop(self) -> None:
+        settings = config.load_settings({"SYNTHPOST_RENDER_WORKERS": "1"})
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "pipeline.jobs.worker.database_path",
+            return_value=Path(directory) / "queue.sqlite3",
+        ), patch("pipeline.jobs.worker.config.get_settings", return_value=settings):
+            with worker_process_lock("render", slot=1):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "Worker slots are already owned: render:1",
+                ):
+                    _assert_worker_slots_available((WorkerSpec("render", 1),))
 
 
 if __name__ == "__main__":
