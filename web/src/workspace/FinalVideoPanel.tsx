@@ -21,7 +21,7 @@ export const FinalVideoPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
         job.job_type === "assemble_episode"),
   );
   const activeJob = jobs.find((job) =>
-    ["queued", "running"].includes(job.status),
+    ["queued", "running", "cancel_requested"].includes(job.status),
   );
   const failedJob = jobs.find((job) => job.status === "failed");
   const isComplete = story?.workflow_state === "completed";
@@ -37,6 +37,24 @@ export const FinalVideoPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
     } finally {
       setBusy(false);
     }
+  };
+
+  const retryProductionJob = async (job: (typeof jobs)[number]) => {
+    if (job.autonomy_run_id) {
+      const run = await api.retryAutonomyRun(job.autonomy_run_id);
+      studio.mergeAutonomyRun(run);
+      return;
+    }
+    await api.retryJob(job.job_id);
+  };
+
+  const cancelProductionJob = async (job: (typeof jobs)[number]) => {
+    if (job.autonomy_run_id) {
+      const run = await api.cancelAutonomyRun(job.autonomy_run_id);
+      studio.mergeAutonomyRun(run);
+      return;
+    }
+    await api.cancelJob(job.job_id);
   };
 
   const phase =
@@ -154,14 +172,41 @@ export const FinalVideoPanel: React.FC<{ storyId: string }> = ({ storyId }) => {
           {jobs.length === 0 ? (
             <p className="text-muted">No production jobs yet.</p>
           ) : (
-            jobs.slice(0, 8).map((job) => (
-              <InlineJobCard
-                key={job.job_id}
-                job={job}
-                onRetry={() => void act(() => api.retryJob(job.job_id))}
-                onCancel={() => void act(() => api.cancelJob(job.job_id))}
-              />
-            ))
+            jobs.slice(0, 8).map((job) => {
+              const autonomyRun = job.autonomy_run_id
+                ? studio.autonomyRuns.find(
+                    (run) => run.run_id === job.autonomy_run_id,
+                  )
+                : undefined;
+              const canRetryAutonomyRun =
+                !job.autonomy_run_id || autonomyRun?.status === "needs_attention";
+              const canCancelAutonomyRun =
+                !job.autonomy_run_id ||
+                Boolean(
+                  autonomyRun &&
+                    ["queued", "running", "needs_attention"].includes(
+                      autonomyRun.status,
+                    ),
+                );
+              return (
+                <InlineJobCard
+                  key={job.job_id}
+                  job={job}
+                  retryLabel={job.autonomy_run_id ? "Retry shift" : undefined}
+                  cancelLabel={job.autonomy_run_id ? "Stop shift" : undefined}
+                  onRetry={
+                    canRetryAutonomyRun
+                      ? () => void act(() => retryProductionJob(job))
+                      : undefined
+                  }
+                  onCancel={
+                    canCancelAutonomyRun
+                      ? () => void act(() => cancelProductionJob(job))
+                      : undefined
+                  }
+                />
+              );
+            })
           )}
         </div>
       </details>

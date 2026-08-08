@@ -4,6 +4,8 @@ import { useStudio } from "../state/useStudio";
 import { EpisodeHeader } from "../components/EpisodeHeader";
 import { WorkflowStepper } from "../components/WorkflowStepper";
 import { NextActionControl } from "../components/NextActionControl";
+import { AutonomyRunControl } from "../components/AutonomyRunControl";
+import { AutonomyOwnedWorkspace } from "../components/AutonomyOwnedWorkspace";
 import { STAGES, getActiveStage, type StageKey } from "../lib/workflowUtils";
 
 import { StorySelectionPanel } from "../workspace/StorySelectionPanel";
@@ -32,7 +34,9 @@ const WorkspacePanel: React.FC<{ stage: StageKey; storyId: string }> = ({
   }
 };
 
-export const CommandCenter: React.FC = () => {
+export const CommandCenter: React.FC<{
+  onOpenReviewQueue: () => void;
+}> = ({ onOpenReviewQueue }) => {
   const studio = useStudio();
   const [projectTitle, setProjectTitle] = React.useState("");
   const [episodeTitle, setEpisodeTitle] = React.useState("");
@@ -43,16 +47,27 @@ export const CommandCenter: React.FC = () => {
   const activeStoryJobs = studio.jobs.filter(
     (job) =>
       job.story_id === studio.selectedStoryId &&
-      ["queued", "running"].includes(job.status),
+      ["queued", "running", "cancel_requested"].includes(job.status),
   );
   const hasActiveScriptJob = activeStoryJobs.some(
     (job) => job.job_type === "script_generate",
   );
+  const owningAutonomyRun = studio.autonomyRuns.find(
+    (run) =>
+      run.episode_id === studio.selectedEpisodeId &&
+      (["queued", "running", "needs_attention"].includes(run.status) ||
+        (run.status === "cancelled" && run.active_job_ids.length > 0)),
+  );
   const nextActionDisabled =
-    story?.workflow_state === "research_ready" && hasActiveScriptJob;
-  const nextActionDisabledReason = hasActiveScriptJob
-    ? "Script generation is already queued/running for this story."
-    : undefined;
+    Boolean(owningAutonomyRun) ||
+    (story?.workflow_state === "research_ready" && hasActiveScriptJob);
+  const nextActionDisabledReason = owningAutonomyRun
+    ? owningAutonomyRun.status === "cancelled"
+      ? "The stopped worker is still unwinding. Editing unlocks when its execution lease is released."
+      : "Hermes owns this production run. Use the night-shift control to stop or take over before editing."
+    : hasActiveScriptJob
+      ? "Script generation is already queued/running for this story."
+      : undefined;
   const defaultStage = getActiveStage(story?.workflow_state);
   const [activeStage, setActiveStage] = React.useState<StageKey>(defaultStage);
 
@@ -211,12 +226,18 @@ export const CommandCenter: React.FC = () => {
     return (
       <div className="stack-lg">
         <EpisodeHeader story={null} />
+        <AutonomyRunControl onOpenReviewQueue={onOpenReviewQueue} />
         <WorkflowStepper
           workflowState={undefined}
           activeStage="story"
           onStageClick={() => {}}
         />
-        <StorySelectionPanel />
+        <AutonomyOwnedWorkspace
+          key={owningAutonomyRun?.run_id ?? "manual-story-workspace"}
+          run={owningAutonomyRun}
+        >
+          <StorySelectionPanel />
+        </AutonomyOwnedWorkspace>
       </div>
     );
   }
@@ -241,12 +262,21 @@ export const CommandCenter: React.FC = () => {
           />
         }
       />
+      <AutonomyRunControl
+        storyId={studio.selectedStoryId}
+        onOpenReviewQueue={onOpenReviewQueue}
+      />
       <WorkflowStepper
         workflowState={story.workflow_state}
         activeStage={activeStage}
         onStageClick={setActiveStage}
       />
-      <WorkspacePanel stage={activeStage} storyId={studio.selectedStoryId} />
+      <AutonomyOwnedWorkspace
+        key={owningAutonomyRun?.run_id ?? "manual-production-workspace"}
+        run={owningAutonomyRun}
+      >
+        <WorkspacePanel stage={activeStage} storyId={studio.selectedStoryId} />
+      </AutonomyOwnedWorkspace>
     </div>
   );
 };

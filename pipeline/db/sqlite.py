@@ -44,12 +44,36 @@ def apply_migrations(connection: sqlite3.Connection) -> None:
         if version in applied:
             continue
         sql = migration.read_text(encoding="utf-8")
-        with connection:
-            connection.executescript(sql)
-            connection.execute(
-                "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-                (version, now_iso()),
-            )
+        # Recover safely if an older build was interrupted after migration 004
+        # added its column but before schema_migrations was updated.
+        if version == "004_autonomy_runs":
+            job_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(render_jobs)")
+            }
+            if "autonomy_run_id" in job_columns:
+                sql = sql.replace(
+                    "ALTER TABLE render_jobs ADD COLUMN autonomy_run_id TEXT;", ""
+                )
+
+        # sqlite3.executescript commits a transaction opened outside the
+        # script. Put BEGIN/COMMIT and the migration marker in the same script
+        # so a crash cannot leave a half-applied migration behind.
+        quoted_version = version.replace("'", "''")
+        quoted_applied_at = now_iso().replace("'", "''")
+        script = (
+            "BEGIN IMMEDIATE;\n"
+            f"{sql}\n"
+            "INSERT INTO schema_migrations(version, applied_at) "
+            f"VALUES ('{quoted_version}', '{quoted_applied_at}');\n"
+            "COMMIT;"
+        )
+        try:
+            connection.executescript(script)
+        except Exception:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
 
 
 def init_db(path: str | Path | None = None) -> sqlite3.Connection:

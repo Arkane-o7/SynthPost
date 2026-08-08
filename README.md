@@ -12,6 +12,7 @@ SynthPost is a local-first, AI-assisted newsroom and video-production system for
 - Editable, validated multi-template timelines
 - Local avatar/lip-sync rendering through the retained Avatar Engine, consuming SynthPost's canonical narration
 - Remotion composition and FFmpeg episode assembly
+- Hermes-powered unattended production from story discovery through a strictly checked, versioned MP4
 - React Studio with job progress, logs, retries, previews, and mobile/private Tailscale access
 - Configurable multi-process worker pools for parallel projects and episode renders
 - Deterministic offline tests and a lightweight `TEST_MODE` smoke render
@@ -46,6 +47,20 @@ needed. Groq and Gemini still use their provider keys. Use
 `make dev` starts FastAPI on port 8765, the configured editorial/media/render process pools, and Vite on port 5173. The default capacity is three workers per lane, so independent projects can research, acquire media, render, and assemble concurrently. Tune `SYNTHPOST_EDITORIAL_WORKERS`, `SYNTHPOST_MEDIA_WORKERS`, and `SYNTHPOST_RENDER_WORKERS` in `.env`, then confirm the effective capacity with `make doctor`.
 
 Run components separately with `make backend`, `make workers`, `make worker LANE=render SLOT=1`, and `make web`. SynthPost serializes conflicting stages that target the same story, but narration and visual discovery overlap safely after script approval. Episode assembly cannot overlap work in that episode; unrelated projects and episodes remain parallel.
+
+### YOLO production
+
+Open an episode and choose **YOLO Produce** to hand the full production shift to
+Hermes. SynthPost checkpoints every stage in SQLite, applies a green-only media
+policy, renders locally, runs strict technical QA, and places the versioned MP4
+in the Review Queue. It never uploads: watch the complete MP4 and accept or
+reject it manually before publishing to YouTube yourself.
+
+For an overnight run, keep `make dev` and the worker supervisor running. The Mac
+may be screen-locked, but it must not enter system sleep; use
+`caffeinate -i make dev` when needed. Closing a laptop lid normally suspends the
+workers. See [Unattended production](docs/AUTONOMY.md) for setup, gates, and
+recovery behavior.
 
 ## Basic workflow
 
@@ -87,6 +102,9 @@ To render an approved manifest directly:
 projects/<project_id>/episodes/<episode_id>/media_inbox/
 episodes/<episode_id>/
   episode.json
+  autonomy_runs/<run_id>/
+    final.mp4               # immutable review copy for this run
+    final.qa.json           # strict technical QA report
   stories/<story_id>/
     source_documents.json
     research_pack.json
@@ -126,6 +144,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Pipeline](docs/PIPELINE.md)
+- [Unattended production](docs/AUTONOMY.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [dots.tts voice cloning and expression](docs/TTS.md)
 - [Development](docs/DEVELOPMENT.md)

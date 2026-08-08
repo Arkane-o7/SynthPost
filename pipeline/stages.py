@@ -20,6 +20,7 @@ class StageName(str, Enum):
     avatar = "render_avatar"
     composition = "render_story"
     assembly = "assemble_episode"
+    final_video_qa = "final_video_qa"
 
 
 class StageOutcome(str, Enum):
@@ -134,6 +135,15 @@ STAGE_CONTRACTS: dict[str, StageContract] = {
         requires_story=False,
         output_keys=("final_output_path",),
         artifact_owner="episode final video + episode manifest",
+        retry_safe=False,
+    ),
+    StageName.final_video_qa.value: StageContract(
+        StageName.final_video_qa,
+        JobQueueLane.render,
+        requires_episode=True,
+        requires_story=False,
+        output_keys=("final_output_path", "qa_report_path", "qa_status"),
+        artifact_owner="versioned final video + deterministic QA report",
         retry_safe=False,
     ),
 }

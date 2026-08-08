@@ -205,6 +205,89 @@ def _codex(settings) -> DiagnosticCheck:
     )
 
 
+def _hermes(settings) -> DiagnosticCheck:
+    """Check the employee runtime without echoing its redacted status output."""
+
+    binary = settings.llm.hermes_binary
+    path = shutil.which(binary)
+    if not path:
+        return DiagnosticCheck(
+            "hermes",
+            "missing",
+            "feature",
+            f"Hermes Agent CLI not found at {binary!r}",
+            "Install Hermes Agent or set SYNTHPOST_HERMES_BINARY.",
+        )
+    toolsets = {
+        value.strip().casefold()
+        for value in settings.llm.hermes_toolsets.split(",")
+        if value.strip()
+    }
+    if toolsets != {"web"}:
+        return DiagnosticCheck(
+            "hermes",
+            "misconfigured",
+            "feature",
+            "Hermes is not isolated to the required web-only toolset.",
+            "Set SYNTHPOST_HERMES_TOOLSETS=web, then restart SynthPost.",
+        )
+    allowed = {
+        "HOME",
+        "HERMES_HOME",
+        "LANG",
+        "LC_ALL",
+        "LOGNAME",
+        "PATH",
+        "SHELL",
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "TMPDIR",
+        "USER",
+    }
+    environment = {
+        key: value for key, value in os.environ.items() if key in allowed
+    }
+    try:
+        result = subprocess.run(
+            [path, "status"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+            env=environment,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return DiagnosticCheck(
+            "hermes",
+            "misconfigured",
+            "feature",
+            f"Could not check Hermes Agent status: {type(exc).__name__}",
+            "Run `hermes status --all`, then retry `make doctor`.",
+        )
+    output = f"{result.stdout}\n{result.stderr}"
+    api_key_block = output.split("◆ API Keys", 1)[-1].split(
+        "◆ Auth Providers", 1
+    )[0]
+    authenticated = "✓ logged in" in output or any(
+        "✓" in line for line in api_key_block.splitlines()
+    )
+    if result.returncode != 0 or not authenticated:
+        return DiagnosticCheck(
+            "hermes",
+            "misconfigured",
+            "feature",
+            "Hermes Agent is installed but no usable saved provider login was detected.",
+            "Run `hermes setup` or configure a provider, then verify `hermes status --all`.",
+        )
+    model = settings.llm.hermes_model or "isolated provider auto-resolution"
+    return DiagnosticCheck(
+        "hermes",
+        "available",
+        "feature",
+        f"{Path(path).name} has a saved provider login; model={model}; toolsets={settings.llm.hermes_toolsets}",
+    )
+
+
 def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
     checks: list[DiagnosticCheck] = []
     try:
@@ -325,6 +408,7 @@ def run_diagnostics(*, config_only: bool = False) -> list[DiagnosticCheck]:
     )
     if settings.llm.provider == "codex":
         checks.append(_codex(settings))
+    checks.append(_hermes(settings))
     checks.append(_dots_tts(settings))
     rhubarb = PROJECT_ROOT / "Rhubarb-Lip-Sync-1.14.0-macOS" / "rhubarb"
     checks.append(

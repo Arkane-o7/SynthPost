@@ -1,4 +1,6 @@
 import type {
+  AutonomyRunView,
+  AutonomyRunStatus,
   ChannelId,
   ChannelProfile,
   Episode,
@@ -406,6 +408,61 @@ export const api = {
   revealEpisodeOutput: (episodeId: string) =>
     request<{ revealed: boolean; path: string }>(
       `/api/episodes/${episodeId}/reveal-output`,
+      { method: "POST" },
+    ),
+
+  startAutonomyRun: (payload: {
+    episode_id: string;
+    story_id?: string;
+    provider?: string;
+    target_duration_seconds?: number;
+    narration_mode?: NarrationMode;
+    category?: string;
+  }) =>
+    request<AutonomyRunView>("/api/autonomy/runs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  listAutonomyRuns: (
+    params: {
+      channelId?: ChannelId;
+      episodeId?: string;
+      status?: AutonomyRunStatus;
+      limit?: number;
+    } = {},
+  ) => {
+    const query = new URLSearchParams();
+    if (params.channelId) query.set("channel_id", params.channelId);
+    if (params.episodeId) query.set("episode_id", params.episodeId);
+    if (params.status) query.set("status", params.status);
+    if (params.limit != null) {
+      query.set("limit", String(Math.max(1, Math.min(500, params.limit))));
+    }
+    return request<AutonomyRunView[]>(
+      `/api/autonomy/runs${query.toString() ? `?${query}` : ""}`,
+    );
+  },
+  readAutonomyRun: (runId: string) =>
+    request<AutonomyRunView>(`/api/autonomy/runs/${runId}`),
+  cancelAutonomyRun: (runId: string) =>
+    request<AutonomyRunView>(`/api/autonomy/runs/${runId}/cancel`, {
+      method: "POST",
+    }),
+  retryAutonomyRun: (runId: string) =>
+    request<AutonomyRunView>(`/api/autonomy/runs/${runId}/retry`, {
+      method: "POST",
+    }),
+  acceptAutonomyRun: (runId: string) =>
+    request<AutonomyRunView>(`/api/autonomy/runs/${runId}/accept`, {
+      method: "POST",
+    }),
+  rejectAutonomyRun: (runId: string) =>
+    request<AutonomyRunView>(`/api/autonomy/runs/${runId}/reject`, {
+      method: "POST",
+    }),
+  revealAutonomyOutput: (runId: string) =>
+    request<{ revealed: boolean; path: string }>(
+      `/api/autonomy/runs/${runId}/reveal-output`,
       { method: "POST" },
     ),
 

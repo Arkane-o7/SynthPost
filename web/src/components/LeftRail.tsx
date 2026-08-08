@@ -9,17 +9,19 @@ import {
   ChevronDown,
   ChevronRight,
   FolderClosed,
+  MonitorPlay,
   Pin,
   Plus,
   Settings2,
   Trash2,
 } from "lucide-react";
 
-export type Page = "command" | "settings";
+export type Page = "command" | "review" | "settings";
 
 type RailIconName =
   | "settings"
   | "folder"
+  | "review"
   | "pin"
   | "trash";
 
@@ -29,6 +31,8 @@ const RailIcon: React.FC<{ name: RailIconName }> = ({ name }) => {
       return <Settings2 size={18} strokeWidth={1.8} aria-hidden="true" />;
     case "folder":
       return <FolderClosed size={18} strokeWidth={1.8} aria-hidden="true" />;
+    case "review":
+      return <MonitorPlay size={18} strokeWidth={1.8} aria-hidden="true" />;
     case "pin":
       return <Pin size={17} strokeWidth={1.8} aria-hidden="true" />;
     case "trash":
@@ -64,6 +68,9 @@ export const LeftRail: React.FC<{
   const [loadingProjects, setLoadingProjects] = React.useState<Set<string>>(
     new Set(),
   );
+  const reviewCount = studio.autonomyRuns.filter((run) =>
+    ["ready_for_review", "needs_attention"].includes(run.status),
+  ).length;
 
   React.useEffect(() => {
     setExpandedProjects(new Set());
@@ -291,6 +298,19 @@ export const LeftRail: React.FC<{
         <div className="rail-brand-sub">Production operating system</div>
       </div>
       <ChannelSwitcher onChange={() => setPage("command")} />
+
+      <nav className="rail-primary-nav" aria-label="Production desks">
+        <button
+          type="button"
+          className={`nav-btn ${page === "review" ? "active" : ""}`}
+          aria-current={page === "review" ? "page" : undefined}
+          onClick={() => setPage("review")}
+        >
+          <span className="nav-icon"><RailIcon name="review" /></span>
+          <span className="nav-label">Review Queue</span>
+          {reviewCount > 0 && <b className="rail-nav-count">{Math.min(reviewCount, 99)}</b>}
+        </button>
+      </nav>
 
       <section className="rail-library" aria-label="Projects and episodes">
         <div className="rail-section-heading">

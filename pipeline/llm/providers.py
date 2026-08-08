@@ -90,6 +90,23 @@ class ProviderAvailability:
     supports_structured_json: bool = True
 
 
+def hermes_toolset_problem(value: str | None) -> str | None:
+    """Hermes is an editorial researcher here, never a general local agent."""
+
+    requested = {
+        item.strip().casefold()
+        for item in str(value or "").split(",")
+        if item.strip()
+    }
+    if requested != {"web"}:
+        rendered = ", ".join(sorted(requested)) or "(empty)"
+        return (
+            "Unattended Hermes runs require the exact web-only toolset; "
+            f"received {rendered}"
+        )
+    return None
+
+
 def provider_availability(provider_name: str | None = None) -> ProviderAvailability:
     """Report configuration capability without making a network request."""
 
@@ -97,6 +114,22 @@ def provider_availability(provider_name: str | None = None) -> ProviderAvailabil
     settings = app_config.get_settings().llm
     if name == "mock":
         return ProviderAvailability(name, True, "deterministic offline provider")
+    if name == "hermes":
+        binary = settings.hermes_binary
+        resolved = shutil.which(binary)
+        if not resolved:
+            return ProviderAvailability(
+                name,
+                False,
+                f"Hermes Agent CLI not found or not executable at {binary!r}",
+            )
+        if problem := hermes_toolset_problem(settings.hermes_toolsets):
+            return ProviderAvailability(name, False, problem)
+        return ProviderAvailability(
+            name,
+            True,
+            f"Hermes Agent available at {resolved}; provider login is checked at generation time",
+        )
     if name == "codex":
         binary = settings.codex_binary
         resolved = shutil.which(binary)
@@ -192,6 +225,111 @@ def _codex_environment() -> dict[str, str]:
         environment["CODEX_HOME"] = codex_home
     environment["NO_COLOR"] = "1"
     return environment
+
+
+def _hermes_environment() -> dict[str, str]:
+    """Pass process/runtime context without forwarding SynthPost credentials."""
+
+    allowed = {
+        "HOME",
+        "PATH",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "TERM",
+        "HERMES_HOME",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+    }
+    environment = {key: value for key, value in os.environ.items() if key in allowed}
+    # Preserve Hermes's saved auth under HOME while suppressing user plugins,
+    # MCP servers, rules, memory, skills, hooks, and behavioral config.
+    environment["HERMES_SAFE_MODE"] = "1"
+    environment["HERMES_IGNORE_USER_CONFIG"] = "1"
+    environment["HERMES_IGNORE_RULES"] = "1"
+    return environment
+
+
+HERMES_MAX_INSTRUCTION_BYTES = 48 * 1024
+
+
+def _bounded_hermes_instruction(prefix: str, prompt: str) -> str:
+    """Stay well below macOS ARG_MAX even with multi-byte article text."""
+
+    prefix_bytes = prefix.encode("utf-8")
+    marker = "\n\n[Research pack truncated by SynthPost; use web research to fill gaps.]"
+    marker_bytes = marker.encode("utf-8")
+    remaining = HERMES_MAX_INSTRUCTION_BYTES - len(prefix_bytes)
+    if remaining <= len(marker_bytes):
+        raise ProviderConfigurationError(
+            "Hermes output schema is too large for the isolated CLI request"
+        )
+    prompt_bytes = prompt.encode("utf-8")
+    if len(prompt_bytes) <= remaining:
+        return prefix + prompt
+    clipped = prompt_bytes[: remaining - len(marker_bytes)]
+    while clipped:
+        try:
+            clipped_text = clipped.decode("utf-8")
+            break
+        except UnicodeDecodeError as exc:
+            clipped = clipped[: exc.start]
+    else:
+        clipped_text = ""
+    return prefix + clipped_text + marker
+
+
+def _run_hermes_command(
+    command: list[str], *, timeout_seconds: float, environment: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    """Stop Hermes and any tool children together when its deadline expires."""
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(app_config.PROJECT_ROOT),
+        env=environment,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except BaseException as exc:
+        if process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    pass
+        if isinstance(exc, subprocess.TimeoutExpired):
+            raise TimeoutError(
+                f"Hermes generation exceeded {timeout_seconds:.0f} seconds"
+            ) from exc
+        raise
+    return subprocess.CompletedProcess(
+        command, process.returncode, stdout=stdout, stderr=stderr
+    )
 
 
 def _run_codex_command(
@@ -409,6 +547,92 @@ class CodexProvider:
                     "Codex completed without writing a structured response"
                 )
             return parse_json_object(output_path.read_text(encoding="utf-8"))
+
+
+@dataclass
+class HermesProvider:
+    """Tool-using structured provider backed by isolated non-interactive chat.
+
+    Only the explicitly configured Hermes toolsets are exposed. The production
+    default is ``web``: Hermes may research and recommend sources, but cannot
+    mutate the repository, invoke renderers, or reach upload credentials.
+    """
+
+    binary: str = field(
+        default_factory=lambda: app_config.get_settings().llm.hermes_binary
+    )
+    model: str | None = field(
+        default_factory=lambda: app_config.get_settings().llm.hermes_model
+    )
+    toolsets: str = field(
+        default_factory=lambda: app_config.get_settings().llm.hermes_toolsets
+    )
+    timeout_seconds: float = field(
+        default_factory=lambda: app_config.get_settings().llm.hermes_timeout_seconds
+    )
+    name: str = "hermes"
+    last_model: str | None = None
+
+    def generate_json(
+        self, prompt: str, schema: dict[str, Any], *, temperature: float | None = None
+    ) -> dict[str, Any]:
+        del temperature  # Hermes owns the configured inference profile.
+        resolved = shutil.which(self.binary)
+        if not resolved:
+            raise ProviderConfigurationError(
+                f"Hermes Agent CLI not found or not executable at {self.binary!r}; "
+                "install Hermes or set SYNTHPOST_HERMES_BINARY"
+            )
+        if problem := hermes_toolset_problem(self.toolsets):
+            raise ProviderConfigurationError(problem)
+        toolsets = "web"
+
+        strict_schema = groq_strict_schema(schema)
+        instruction_prefix = (
+            "You are Hermes, SynthPost's research and editorial employee. "
+            "You may use only the enabled read-only research tools. Never modify files, "
+            "run commands, contact people, publish, upload, or request credentials. "
+            "Return only one JSON object matching the schema; do not wrap it in prose or markdown.\n\n"
+            "OUTPUT SCHEMA\n"
+            f"{json.dumps(strict_schema, ensure_ascii=False, separators=(',', ':'))}\n\n"
+            "SYNTHPOST TASK\n"
+        )
+        instruction = _bounded_hermes_instruction(instruction_prefix, prompt)
+        command = [
+            resolved,
+            "chat",
+            "--quiet",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "--toolsets",
+            toolsets,
+            "--source",
+            "tool",
+            "--max-turns",
+            "24",
+        ]
+        if self.model:
+            command.extend(("--model", self.model))
+        command.extend(("--query", instruction))
+        self.last_model = self.model
+        result = _run_hermes_command(
+            command,
+            timeout_seconds=self.timeout_seconds,
+            environment=_hermes_environment(),
+        )
+        if result.returncode != 0:
+            detail = safe_text(result.stderr or result.stdout or "Hermes failed")[-2000:]
+            if any(term in detail.casefold() for term in ("429", "rate limit", "quota")):
+                raise ProviderRateLimitError(f"Hermes generation failed: {detail}")
+            if any(
+                term in detail.casefold()
+                for term in ("not logged in", "authentication", "no provider", "setup")
+            ):
+                raise ProviderConfigurationError(
+                    f"Hermes is not ready: {detail}. Run `hermes status` or `hermes setup`."
+                )
+            raise ValueError(f"Hermes generation failed: {detail}")
+        return parse_json_object(result.stdout)
 
 
 @dataclass
@@ -1163,6 +1387,8 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
     provider = (provider_name or app_config.get_settings().llm.provider).strip().lower()
     if provider == "mock":
         return MockProvider()
+    if provider == "hermes":
+        return HermesProvider()
     if provider == "codex":
         return CodexProvider()
     if provider == "gemini":
@@ -1175,7 +1401,7 @@ def configured_provider(provider_name: str | None = None) -> LLMProvider:
         return HostedFallbackProvider(GroqProvider(), GeminiProvider())
     raise ValueError(
         f"Unsupported SYNTHPOST_LLM_PROVIDER: {provider}. "
-        "Use codex, groq, gemini, sarvam, or the explicit hosted_fallback option."
+        "Use hermes, codex, groq, gemini, sarvam, or the explicit hosted_fallback option."
     )
 
 

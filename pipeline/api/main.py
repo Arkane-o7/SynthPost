@@ -38,6 +38,7 @@ from pipeline.api.schemas import (
     VisualStageRequest,
 )
 from pipeline.api.routes.jobs import router as jobs_router
+from pipeline.api.routes.autonomy import router as autonomy_router
 from pipeline.db.repository import NotFoundError, Repository, get_repository
 from pipeline.discovery.discover import (
     add_custom_topic,
@@ -110,6 +111,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(jobs_router)
+app.include_router(autonomy_router)
 
 
 def _remove_managed_tree(path: Path, root: Path) -> None:
@@ -273,6 +275,9 @@ def startup() -> None:
                     fields={"story_count": reconciled},
                 )
             )
+        from pipeline.autonomy import reconcile_autonomy_runs
+
+        reconcile_autonomy_runs(repository)
     finally:
         repository.close()
 

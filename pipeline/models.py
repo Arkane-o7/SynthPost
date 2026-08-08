@@ -163,6 +163,10 @@ class JobStatus(str, Enum):
     queued = "queued"
     paused = "paused"
     running = "running"
+    # A running handler keeps its queue lease until it acknowledges the stop.
+    # This prevents a replacement run from mutating the same episode while a
+    # long Hermes/TTS/render call is still unwinding.
+    cancel_requested = "cancel_requested"
     completed = "completed"
     failed = "failed"
     cancelled = "cancelled"
@@ -174,10 +178,25 @@ class JobQueueLane(str, Enum):
     render = "render"
 
 
+class AutonomyRunStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    needs_attention = "needs_attention"
+    ready_for_review = "ready_for_review"
+    accepted = "accepted"
+    rejected = "rejected"
+    cancelled = "cancelled"
+
+
 def queue_lane_for_job_type(job_type: str) -> JobQueueLane:
     if job_type in {"visual_search", "timeline_generate"}:
         return JobQueueLane.media
-    if job_type in {"render_avatar", "render_story", "assemble_episode"}:
+    if job_type in {
+        "render_avatar",
+        "render_story",
+        "assemble_episode",
+        "final_video_qa",
+    }:
         return JobQueueLane.render
     return JobQueueLane.editorial
 
@@ -924,6 +943,7 @@ class RenderJob(StrictModel):
     channel_id: ChannelId = DEFAULT_CHANNEL_ID
     episode_id: str | None = None
     story_id: str | None = None
+    autonomy_run_id: str | None = None
     job_type: str
     queue_lane: JobQueueLane | None = None
     render_profile: str = "preview"
@@ -951,6 +971,50 @@ class RenderJob(StrictModel):
         if self.queue_lane is None:
             self.queue_lane = queue_lane_for_job_type(self.job_type)
         return self
+
+
+class AutonomyPolicy(StrictModel):
+    """Immutable guardrails for one unattended production run."""
+
+    provider: str = "hermes"
+    target_duration_seconds: int = Field(default=600, ge=60, le=3600)
+    narration_mode: NarrationMode = NarrationMode.explained
+    category: str | None = None
+    render_profile: Literal["production", "final_master"] = "production"
+    rights_policy: Literal["green_only"] = "green_only"
+    max_repairs_per_stage: int = Field(default=2, ge=0, le=5)
+    upload_enabled: Literal[False] = False
+    auto_select_story: bool = True
+
+
+class AutonomyRun(StrictModel):
+    """Durable control-plane record for a fully automated video."""
+
+    run_id: str = Field(default_factory=lambda: new_id("run"))
+    channel_id: ChannelId = DEFAULT_CHANNEL_ID
+    project_id: str
+    episode_id: str
+    story_id: str | None = None
+    candidate_id: str | None = None
+    engine: str = "hermes"
+    engine_session_id: str | None = None
+    status: AutonomyRunStatus = AutonomyRunStatus.queued
+    current_stage: str = "queued"
+    progress: float = Field(default=0.0, ge=0.0, le=100.0)
+    policy: AutonomyPolicy = Field(default_factory=AutonomyPolicy)
+    job_ids: list[str] = Field(default_factory=list)
+    active_job_ids: list[str] = Field(default_factory=list)
+    final_output_path: str | None = None
+    final_output_sha256: str | None = None
+    qa_report_path: str | None = None
+    qa: dict[str, Any] | None = None
+    warnings: list[str] = Field(default_factory=list)
+    error: str | None = None
+    created_at: str = Field(default_factory=now_iso)
+    updated_at: str = Field(default_factory=now_iso)
+    started_at: str | None = None
+    completed_at: str | None = None
+    reviewed_at: str | None = None
 
 
 class GenerationAudit(StrictModel):

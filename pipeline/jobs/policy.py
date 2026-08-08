@@ -13,7 +13,9 @@ EDITORIAL_JOB_TYPES = frozenset(
     {"discovery", "research", "script_generate", "narration_generate"}
 )
 MEDIA_JOB_TYPES = frozenset({"visual_search", "timeline_generate"})
-RENDER_JOB_TYPES = frozenset({"render_avatar", "render_story", "assemble_episode"})
+RENDER_JOB_TYPES = frozenset(
+    {"render_avatar", "render_story", "assemble_episode", "final_video_qa"}
+)
 
 # These stages share an immutable approved-script input but write independent
 # artifacts and database records. Every other same-story combination remains

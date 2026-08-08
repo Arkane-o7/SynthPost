@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
-import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Response
@@ -60,12 +61,21 @@ def cancel_job(job_id: str) -> dict[str, Any]:
     repository = get_repository()
     try:
         job = repository.get_job(job_id)
-        if job.status in {JobStatus.completed, JobStatus.failed}:
+        if job.autonomy_run_id:
+            from pipeline.autonomy import cancel_autonomy_run
+
+            cancel_autonomy_run(repository, job.autonomy_run_id)
+            return public_job(repository.get_job(job_id))
+        if job.status in {
+            JobStatus.completed,
+            JobStatus.failed,
+            JobStatus.cancelled,
+            JobStatus.cancel_requested,
+        }:
             return public_job(job)
-        job.status = JobStatus.cancelled
-        job.stage = "cancelled"
-        job.available_at = None
-        repository.upsert_job(job)
+        job = repository.request_job_cancellation(job_id)
+        if job.status == JobStatus.cancel_requested:
+            return public_job(job)
         if job.job_type == "script_generate" and job.story_id:
             candidate = repository.candidate_for_story(job.story_id)
             if candidate.workflow_state == StoryWorkflowState.script_generating:
@@ -112,6 +122,8 @@ def pause_job(job_id: str) -> dict[str, Any]:
     repository = get_repository()
     try:
         job = repository.get_job(job_id)
+        if job.autonomy_run_id:
+            raise ValueError("Use the autonomy run controls to pause or stop this job")
         if job.status == JobStatus.paused:
             return public_job(job)
         if job.status != JobStatus.queued:
@@ -129,6 +141,8 @@ def resume_job(job_id: str) -> dict[str, Any]:
     repository = get_repository()
     try:
         job = repository.get_job(job_id)
+        if job.autonomy_run_id:
+            raise ValueError("Use the autonomy run controls to resume or retry this job")
         if job.status != JobStatus.paused:
             raise ValueError("Only paused jobs can be resumed")
         job.status = JobStatus.queued
@@ -145,6 +159,11 @@ def retry_job(job_id: str) -> dict[str, Any]:
     repository = get_repository()
     try:
         job = repository.get_job(job_id)
+        if job.autonomy_run_id:
+            from pipeline.autonomy import retry_autonomy_run
+
+            retry_autonomy_run(repository, job.autonomy_run_id)
+            return public_job(repository.get_job(job_id))
         if job.status not in {JobStatus.failed, JobStatus.cancelled}:
             raise ValueError("Only failed or cancelled jobs can be retried")
         job.status = JobStatus.queued
@@ -183,25 +202,43 @@ def job_logs(job_id: str) -> Response:
         repository.close()
 
 
-@router.get("/job-events")
-def job_events(channel_id: ChannelId | None = None) -> StreamingResponse:
-    def stream():
-        last = ""
-        while True:
-            repository = get_repository()
-            try:
-                payload = [
-                    public_job(job)
-                    for job in repository.list_jobs(
-                        limit=50, channel_id=channel_id
-                    )
-                ]
-            finally:
-                repository.close()
-            encoded = json.dumps(payload, sort_keys=True)
-            if encoded != last:
-                yield f"event: jobs\ndata: {encoded}\n\n"
-                last = encoded
-            time.sleep(1.0)
+async def _job_event_stream(
+    channel_id: ChannelId | None = None,
+) -> AsyncIterator[str]:
+    """Stream job updates without reserving a request-worker thread.
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    A synchronous infinite generator is adapted by Starlette through its
+    thread pool. Every open Studio tab would therefore retain one worker
+    forever, eventually starving normal API requests and leaving Studio on
+    its loading screen. An async generator sleeps cooperatively and is
+    cancelled by StreamingResponse as soon as the client disconnects.
+    """
+
+    last = ""
+    while True:
+        repository = get_repository()
+        try:
+            payload = [
+                public_job(job)
+                for job in repository.list_jobs(limit=50, channel_id=channel_id)
+            ]
+        finally:
+            repository.close()
+        encoded = json.dumps(payload, sort_keys=True)
+        if encoded != last:
+            yield f"event: jobs\ndata: {encoded}\n\n"
+            last = encoded
+        await asyncio.sleep(1.0)
+
+
+@router.get("/job-events")
+async def job_events(channel_id: ChannelId | None = None) -> StreamingResponse:
+
+    return StreamingResponse(
+        _job_event_stream(channel_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

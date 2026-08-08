@@ -5080,6 +5080,1163 @@ label {
   }
 }
 
+/* ── 38. Hermes night shift & human shipping gate ───────────── */
+.rail-primary-nav {
+    flex: 0 0 auto;
+    margin: 10px 0 8px;
+    padding: 7px 0 10px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.rail-nav-count {
+    display: grid;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--channel-accent) 38%, transparent);
+    border-radius: 99px;
+    color: white;
+    background: var(--channel-accent);
+    font-size: 9px;
+    line-height: 1;
+}
+
+.right-rail-review-callout > button {
+    width: 100%;
+    justify-content: space-between;
+    padding: 12px;
+    border-color: color-mix(in srgb, var(--channel-accent) 28%, var(--border));
+    background: color-mix(in srgb, var(--channel-accent) 8%, var(--surface));
+    text-align: left;
+}
+
+.right-rail-review-callout > button > span {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.right-rail-review-callout > button strong {
+    font-size: 12px;
+}
+
+.right-rail-review-callout > button small {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.autonomy-console {
+    --autonomy-signal: var(--channel-accent);
+    position: relative;
+    display: grid;
+    grid-template-columns: 48px minmax(260px, 1fr) minmax(190px, auto);
+    grid-template-areas:
+        "beacon copy actions"
+        "beacon policy actions"
+        "flight flight flight";
+    gap: 10px 18px;
+    align-items: center;
+    padding: 19px 21px;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--autonomy-signal) 27%, var(--border));
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(105deg, color-mix(in srgb, var(--autonomy-signal) 9%, var(--surface-elevated)) 0%, var(--surface-elevated) 42%),
+        var(--surface-elevated);
+    box-shadow: var(--shadow-card);
+}
+
+.autonomy-console::before {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    content: "";
+    background: linear-gradient(90deg, var(--autonomy-signal), transparent 64%);
+}
+
+.autonomy-console::after {
+    position: absolute;
+    top: -56px;
+    right: 14%;
+    width: 180px;
+    height: 100px;
+    content: "";
+    border: 1px solid color-mix(in srgb, var(--autonomy-signal) 16%, transparent);
+    border-radius: 50%;
+    opacity: 0.5;
+    transform: rotate(-8deg);
+    pointer-events: none;
+}
+
+.autonomy-needs_attention {
+    --autonomy-signal: var(--status-amber);
+}
+
+.autonomy-ready_for_review {
+    --autonomy-signal: var(--status-green);
+}
+
+.autonomy-console-beacon {
+    position: relative;
+    grid-area: beacon;
+    display: grid;
+    width: 46px;
+    height: 46px;
+    place-items: center;
+    align-self: start;
+    border: 1px solid color-mix(in srgb, var(--autonomy-signal) 36%, var(--border));
+    border-radius: 14px;
+    color: var(--autonomy-signal);
+    background: color-mix(in srgb, var(--autonomy-signal) 10%, var(--surface-inset));
+}
+
+.autonomy-console-beacon > span {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--surface-elevated);
+    border-radius: 50%;
+    background: var(--autonomy-signal);
+    box-shadow: 0 0 13px var(--autonomy-signal);
+}
+
+.autonomy-running .autonomy-console-beacon > span,
+.autonomy-queued .autonomy-console-beacon > span {
+    animation: autonomy-beacon 1.6s ease-in-out infinite;
+}
+
+@keyframes autonomy-beacon {
+    50% { opacity: 0.35; transform: scale(0.72); }
+}
+
+.autonomy-console-copy {
+    z-index: 1;
+    grid-area: copy;
+    min-width: 0;
+}
+
+.autonomy-console-kicker {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 4px;
+}
+
+.autonomy-console-kicker > span:first-child,
+.review-queue-kicker {
+    color: var(--autonomy-signal, var(--channel-accent));
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.autonomy-console-copy h2 {
+    margin: 0 0 4px;
+    font-size: clamp(17px, 1.5vw, 22px);
+    letter-spacing: -0.015em;
+}
+
+.autonomy-console-copy p {
+    max-width: 760px;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.autonomy-policy {
+    z-index: 1;
+    grid-area: policy;
+    display: flex;
+    min-width: 0;
+    gap: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.autonomy-policy > span {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 7px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 99px;
+    color: var(--text-faint);
+    background: color-mix(in srgb, var(--surface-inset) 74%, transparent);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.autonomy-console-actions {
+    z-index: 1;
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.autonomy-launch-stack {
+    display: grid;
+    min-width: 186px;
+    max-width: 270px;
+    gap: 7px;
+    justify-items: stretch;
+}
+
+.autonomy-launch-blocker {
+    padding: 7px 9px;
+    border: 1px solid var(--status-amber-bd);
+    border-radius: 8px;
+    color: var(--status-amber);
+    background: var(--status-amber-bg);
+    font-size: 9px;
+    font-weight: 650;
+    line-height: 1.4;
+    text-align: left;
+}
+
+button.autonomy-launch-button,
+button.autonomy-review-button {
+    min-width: 186px;
+    min-height: 54px;
+    justify-content: space-between;
+    padding: 8px 11px 8px 13px;
+    border-color: var(--channel-accent);
+    color: white;
+    background: var(--channel-accent);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--channel-accent) 22%, transparent);
+}
+
+button.autonomy-review-button {
+    min-height: 44px;
+    border-color: var(--status-green);
+    background: var(--status-green);
+    box-shadow: 0 8px 24px color-mix(in srgb, var(--status-green) 20%, transparent);
+}
+
+button.autonomy-launch-button:hover,
+button.autonomy-review-button:hover {
+    color: white;
+    background: color-mix(in srgb, var(--channel-accent) 86%, white);
+}
+
+.autonomy-launch-button > span {
+    display: grid;
+    gap: 1px;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.autonomy-launch-button small {
+    font-size: 8px;
+    font-weight: 650;
+    letter-spacing: 0.1em;
+    opacity: 0.72;
+}
+
+button.autonomy-stop-button {
+    border-color: var(--status-red-bd);
+    color: var(--status-red);
+    background: var(--status-red-bg);
+}
+
+.autonomy-owned-workspace {
+    display: grid;
+    min-width: 0;
+    gap: 10px;
+}
+
+.autonomy-owned-banner {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 11px;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid color-mix(in srgb, var(--status-amber) 32%, var(--border));
+    border-radius: 11px;
+    background:
+        linear-gradient(100deg, color-mix(in srgb, var(--status-amber) 10%, var(--surface-elevated)), var(--surface-elevated) 62%);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--status-amber) 72%, transparent);
+}
+
+.autonomy-owned-lock {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid var(--status-amber-bd);
+    border-radius: 9px;
+    color: var(--status-amber);
+    background: var(--status-amber-bg);
+}
+
+.autonomy-owned-banner strong {
+    font-size: 11px;
+}
+
+.autonomy-owned-banner p {
+    margin: 2px 0 0;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+.autonomy-owned-policy {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    border-radius: 99px;
+    color: var(--text-faint);
+    background: var(--surface-inset);
+    font-family: "SF Mono", "JetBrains Mono", monospace;
+    font-size: 8px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.autonomy-owned-workspace-body {
+    min-width: 0;
+}
+
+.autonomy-owned-workspace-body [data-autonomy-owned-disabled="true"] {
+    cursor: not-allowed;
+}
+
+.autonomy-owned-workspace-body button[data-autonomy-owned-disabled="true"],
+.autonomy-owned-workspace-body input[data-autonomy-owned-disabled="true"],
+.autonomy-owned-workspace-body select[data-autonomy-owned-disabled="true"],
+.autonomy-owned-workspace-body textarea[data-autonomy-owned-disabled="true"] {
+    opacity: 0.48;
+    filter: saturate(0.42);
+}
+
+.autonomy-flight-path {
+    z-index: 1;
+    grid-area: flight;
+    display: grid;
+    gap: 8px;
+    margin-top: 5px;
+    padding-top: 13px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.autonomy-flight-progress {
+    height: 3px;
+    overflow: hidden;
+    border-radius: 99px;
+    background: var(--surface-inset);
+}
+
+.autonomy-flight-progress > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--autonomy-signal);
+    box-shadow: 0 0 14px var(--autonomy-signal);
+    transition: width 500ms ease;
+}
+
+.autonomy-stage-track {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.autonomy-stage-track > span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    color: var(--text-faint);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.autonomy-stage-track i {
+    display: grid;
+    width: 19px;
+    height: 19px;
+    flex: 0 0 19px;
+    place-items: center;
+    border: 1px solid var(--border-focus);
+    border-radius: 50%;
+    font-style: normal;
+    font-size: 7px;
+}
+
+.autonomy-stage-track > span.complete,
+.autonomy-stage-track > span.active {
+    color: var(--text);
+}
+
+.autonomy-stage-track > span.complete i {
+    border-color: var(--status-green-bd);
+    color: var(--status-green);
+    background: var(--status-green-bg);
+}
+
+.autonomy-stage-track > span.active i {
+    border-color: var(--autonomy-signal);
+    color: white;
+    background: var(--autonomy-signal);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--autonomy-signal) 34%, transparent);
+}
+
+.review-queue-page {
+    display: grid;
+    gap: 20px;
+    max-width: 1760px;
+    margin: 0 auto;
+}
+
+.review-queue-header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 21px;
+    align-items: center;
+    padding: 22px 24px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(96deg, color-mix(in srgb, var(--channel-accent) 10%, var(--surface-elevated)), var(--surface-elevated) 44%),
+        var(--surface-elevated);
+    box-shadow: var(--shadow-card);
+}
+
+button.review-back-button {
+    min-height: 42px;
+    align-self: start;
+}
+
+.review-queue-heading h1 {
+    margin: 2px 0 4px;
+    font-family: "AntonLocal", Impact, sans-serif;
+    font-size: clamp(30px, 3.2vw, 48px);
+    font-weight: 700;
+    letter-spacing: 0.015em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.review-queue-heading p {
+    max-width: 720px;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.review-queue-totals {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--border);
+}
+
+.review-queue-totals > span {
+    display: grid;
+    min-width: 70px;
+    padding: 9px 12px;
+    color: var(--text-faint);
+    background: var(--surface-inset);
+    font-size: 8px;
+    font-weight: 800;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+}
+
+.review-queue-totals b {
+    color: var(--text);
+    font-family: "SF Mono", monospace;
+    font-size: 17px;
+}
+
+.review-queue-totals .warn b {
+    color: var(--status-amber);
+}
+
+.review-queue-empty {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+
+.review-queue-layout {
+    display: grid;
+    grid-template-columns: minmax(250px, 330px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.review-run-list,
+.review-screening-panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+}
+
+.review-run-list {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100vh - 64px);
+    padding: 11px;
+    overflow-y: auto;
+}
+
+.review-run-list-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px 12px;
+    color: var(--text-faint);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.review-run-list-heading b {
+    font-family: "SF Mono", monospace;
+}
+
+button.review-run-card {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 7px 10px;
+    align-items: start;
+    margin-bottom: 7px;
+    padding: 12px;
+    border-color: transparent;
+    border-radius: 10px;
+    color: var(--text);
+    background: transparent;
+    text-align: left;
+    box-shadow: none;
+}
+
+button.review-run-card:hover,
+button.review-run-card.selected {
+    border-color: color-mix(in srgb, var(--channel-accent) 25%, var(--border));
+    background: color-mix(in srgb, var(--channel-accent) 7%, var(--surface-inset));
+}
+
+.review-run-card > .badge {
+    grid-column: 2;
+    justify-self: start;
+}
+
+.review-run-index {
+    padding-top: 2px;
+    color: var(--channel-accent);
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    font-weight: 800;
+}
+
+.review-run-card-copy {
+    display: grid;
+    min-width: 0;
+    gap: 3px;
+}
+
+.review-run-card-copy strong,
+.review-run-card-copy small,
+.review-run-card-copy > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.review-run-card-copy strong {
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.review-run-card-copy small {
+    color: var(--text-faint);
+    font-size: 9px;
+    white-space: nowrap;
+}
+
+.review-run-card-copy > span {
+    display: -webkit-box;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.review-screening-panel {
+    min-width: 0;
+    padding: 20px;
+}
+
+.review-screening-titlebar,
+.review-card-heading,
+.review-decision-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.review-screening-titlebar {
+    margin-bottom: 15px;
+}
+
+.review-screening-titlebar h2 {
+    margin-top: 3px;
+    font-size: clamp(20px, 2vw, 29px);
+}
+
+.review-player-shell {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 13px;
+    background: #020304;
+    box-shadow: 0 20px 55px rgba(0, 0, 0, 0.26);
+}
+
+.review-player-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.46);
+    font-size: 8px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}
+
+.review-player-label span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.review-player-shell video {
+    display: block;
+    width: 100%;
+    max-height: 68vh;
+    aspect-ratio: 16 / 9;
+    background: #000;
+}
+
+.review-run-live-state {
+    display: flex;
+    min-height: 260px;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 30px;
+    border: 1px dashed var(--border-focus);
+    border-radius: 13px;
+    color: var(--channel-accent);
+    background: var(--surface-inset);
+}
+
+.review-run-live-state h3 {
+    margin: 3px 0 5px;
+    color: var(--text);
+}
+
+.review-run-live-state p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.review-evidence-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(240px, 0.85fr);
+    gap: 13px;
+    margin-top: 14px;
+}
+
+.review-run-warnings {
+    margin-top: 14px;
+    padding: 14px 15px;
+    border: 1px solid color-mix(in srgb, var(--status-amber) 42%, var(--border));
+    border-radius: 11px;
+    background:
+        linear-gradient(112deg, color-mix(in srgb, var(--status-amber) 12%, var(--surface-elevated)), var(--surface-elevated) 58%);
+    box-shadow: inset 3px 0 0 var(--status-amber);
+}
+
+.review-run-warnings-heading {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.review-run-warnings-heading > span:first-child {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 8px;
+    color: var(--status-amber);
+    background: var(--status-amber-bg);
+}
+
+.review-run-warnings h3 {
+    margin: 2px 0 0;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.review-run-warnings ul {
+    display: grid;
+    gap: 6px;
+    margin: 11px 0 0 40px;
+    padding: 0;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.review-run-warnings li::marker {
+    color: var(--status-amber);
+}
+
+.review-qa-card,
+.review-output-card {
+    min-width: 0;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background: var(--surface-elevated);
+}
+
+.review-card-heading {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 750;
+}
+
+.review-card-heading > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.review-card-heading svg {
+    color: var(--channel-accent);
+}
+
+.review-check-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 12px;
+}
+
+.review-check {
+    display: flex;
+    min-width: 0;
+    gap: 7px;
+    align-items: flex-start;
+    padding: 8px;
+    border-radius: 8px;
+    color: var(--status-amber);
+    background: var(--status-amber-bg);
+}
+
+.review-check-passed {
+    color: var(--status-green);
+    background: var(--status-green-bg);
+}
+
+.review-check-error {
+    color: var(--status-red);
+    background: color-mix(in srgb, var(--status-red) 12%, transparent);
+}
+
+.review-check > span {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.review-check strong {
+    color: var(--text);
+    font-size: 9px;
+}
+
+.review-check small {
+    color: var(--text-muted);
+    font-size: 8px;
+    line-height: 1.35;
+}
+
+.review-card-empty {
+    margin: 15px 0 0;
+    color: var(--text-muted);
+    font-size: 10px;
+    line-height: 1.5;
+}
+
+.review-output-card dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 12px 0 0;
+}
+
+.review-output-card dl > div {
+    min-width: 0;
+    padding: 7px;
+    border-radius: 7px;
+    background: var(--surface-inset);
+}
+
+.review-output-card dt {
+    color: var(--text-faint);
+    font-size: 7px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.review-output-card dd {
+    overflow: hidden;
+    margin: 2px 0 0;
+    color: var(--text);
+    font-family: "SF Mono", monospace;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.review-output-card code {
+    display: block;
+    margin-top: 9px;
+    padding: 7px 9px;
+    overflow: hidden;
+    border-radius: 7px;
+    color: var(--text-faint);
+    background: var(--surface-inset);
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.review-decision-bar {
+    position: sticky;
+    z-index: 4;
+    bottom: 12px;
+    margin-top: 14px;
+    padding: 13px 14px;
+    border: 1px solid color-mix(in srgb, var(--channel-accent) 22%, var(--border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface-elevated) 94%, transparent);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(16px);
+}
+
+.review-decision-bar > div:first-child {
+    display: grid;
+    gap: 3px;
+}
+
+.review-decision-bar strong {
+    font-size: 11px;
+}
+
+.review-decision-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+button.review-accept-button {
+    border-color: var(--status-green);
+    color: white;
+    background: var(--status-green);
+}
+
+button.review-reject-button {
+    border-color: var(--status-red-bd);
+    color: var(--status-red);
+    background: var(--status-red-bg);
+}
+
+.light button.review-run-card {
+    background: transparent;
+}
+
+.light button.review-run-card:hover,
+.light button.review-run-card.selected {
+    background: color-mix(in srgb, var(--channel-accent) 7%, var(--surface-inset));
+}
+
+.light .review-player-shell {
+    border-color: rgba(15, 23, 42, 0.2);
+}
+
+@media (max-width: 1320px) and (min-width: 901px) {
+    .autonomy-console {
+        grid-template-columns: 42px minmax(0, 1fr);
+        grid-template-areas:
+            "beacon copy"
+            "beacon policy"
+            "actions actions"
+            "flight flight";
+    }
+
+    .autonomy-console-actions {
+        justify-content: flex-start;
+    }
+
+    .review-queue-header {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .review-queue-totals {
+        grid-column: 1 / -1;
+    }
+
+    .review-queue-layout {
+        grid-template-columns: 250px minmax(0, 1fr);
+    }
+
+    .review-evidence-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .autonomy-console {
+        grid-template-columns: 42px minmax(0, 1fr);
+        grid-template-areas:
+            "beacon copy"
+            "policy policy"
+            "flight flight"
+            "actions actions";
+        gap: 11px 13px;
+        padding: 16px;
+    }
+
+    .autonomy-console-beacon {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+    }
+
+    .autonomy-policy {
+        padding-bottom: 2px;
+    }
+
+    .autonomy-stage-track {
+        min-width: 560px;
+    }
+
+    .autonomy-flight-path {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .autonomy-flight-progress {
+        position: sticky;
+        left: 0;
+        width: 100%;
+    }
+
+    .autonomy-console-actions {
+        justify-content: stretch;
+    }
+
+    .autonomy-console-actions > button {
+        flex: 1 1 150px;
+    }
+
+    .autonomy-owned-banner {
+        grid-template-columns: 34px minmax(0, 1fr);
+    }
+
+    .autonomy-owned-policy {
+        grid-column: 2;
+        justify-self: start;
+    }
+
+    .review-queue-header {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 15px;
+        padding: 18px;
+    }
+
+    .review-back-button {
+        justify-self: start;
+    }
+
+    .review-queue-totals {
+        width: 100%;
+    }
+
+    .review-queue-totals > span {
+        width: auto;
+        min-width: 0;
+    }
+
+    .review-queue-layout {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    .review-run-list {
+        position: static;
+        display: flex;
+        max-height: none;
+        gap: 8px;
+        padding: 9px;
+        overflow-x: auto;
+        scroll-snap-type: x proximity;
+    }
+
+    .review-run-list-heading {
+        display: none;
+    }
+
+    button.review-run-card {
+        min-width: min(78vw, 310px);
+        margin: 0;
+        scroll-snap-align: start;
+    }
+
+    .review-screening-panel {
+        padding: 14px;
+    }
+
+    .review-evidence-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .review-decision-bar {
+        position: static;
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .review-decision-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .autonomy-console-copy h2 {
+        font-size: 17px;
+    }
+
+    .autonomy-console-copy p {
+        font-size: 11px;
+    }
+
+    .autonomy-console-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .autonomy-console-actions > button,
+    button.autonomy-launch-button,
+    button.autonomy-review-button {
+        width: 100%;
+        min-width: 0;
+        flex: 0 0 auto;
+    }
+
+    .autonomy-launch-stack {
+        width: 100%;
+        min-width: 0;
+        max-width: none;
+    }
+
+    .autonomy-owned-banner {
+        align-items: start;
+        padding: 11px;
+    }
+
+    .autonomy-owned-policy {
+        grid-column: 1 / -1;
+    }
+
+    .review-run-warnings-heading {
+        grid-template-columns: 30px minmax(0, 1fr);
+    }
+
+    .review-run-warnings-heading > .badge {
+        grid-column: 2;
+        justify-self: start;
+    }
+
+    .review-run-warnings ul {
+        margin-left: 18px;
+    }
+
+    .review-screening-titlebar,
+    .review-player-label {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .review-player-label {
+        gap: 5px;
+    }
+
+    .review-check-list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .review-output-card dl {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .review-decision-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .autonomy-running .autonomy-console-beacon > span,
+    .autonomy-queued .autonomy-console-beacon > span {
+        animation: none;
+    }
+}
+
 /* ── 37. Shadcn shell refinement & theme adaptation ────────── */
 html {
     background: var(--ink);
@@ -5472,4 +6629,34 @@ select:focus {
   .final-video-phases {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Keep high-signal autonomy controls intact after the global light button rules. */
+.light button.autonomy-launch-button {
+  border-color: var(--channel-accent);
+  color: white;
+  background: var(--channel-accent);
+}
+
+.light button.autonomy-review-button,
+.light button.review-accept-button {
+  border-color: var(--status-green);
+  color: white;
+  background: var(--status-green);
+}
+
+.light button.autonomy-stop-button,
+.light button.review-reject-button {
+  border-color: var(--status-red-bd);
+  color: var(--status-red);
+  background: var(--status-red-bg);
+}
+
+.light button.review-run-card {
+  background: transparent;
+}
+
+.light button.review-run-card:hover,
+.light button.review-run-card.selected {
+  background: color-mix(in srgb, var(--channel-accent) 7%, var(--surface-inset));
 }

@@ -21,10 +21,13 @@ export const MobileChrome: React.FC<{
     ? studio.jobs.filter((job) => job.episode_id === studio.selectedEpisodeId)
     : studio.jobs;
   const activeJobs = contextJobs.filter((job) =>
-    ["queued", "paused", "running"].includes(job.status),
+    ["queued", "paused", "running", "cancel_requested"].includes(job.status),
   ).length;
   const failedJobs = contextJobs.filter((job) => job.status === "failed").length;
-  const attentionCount = activeJobs + failedJobs;
+  const autonomyAttention = studio.autonomyRuns.filter((run) =>
+    ["ready_for_review", "needs_attention"].includes(run.status),
+  ).length;
+  const attentionCount = activeJobs + failedJobs + autonomyAttention;
 
   return (
     <>

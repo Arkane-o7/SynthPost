@@ -13,6 +13,8 @@ from pipeline.channels import (
 )
 from pipeline.db.sqlite import connect, dumps, init_db, loads, row_data, rows_data
 from pipeline.models import (
+    AutonomyRun,
+    AutonomyRunStatus,
     Episode,
     EpisodeStatus,
     GenerationAudit,
@@ -274,7 +276,7 @@ class Repository:
             f"""
             SELECT COUNT(*) AS count
             FROM render_jobs
-            WHERE status IN ('queued', 'paused', 'running')
+            WHERE status IN ('queued', 'paused', 'running', 'cancel_requested')
               AND (episode_id = ?{story_clause})
             """,
             params,
@@ -319,6 +321,9 @@ class Repository:
         )
         self.connection.execute(
             "DELETE FROM render_jobs WHERE episode_id = ?", (episode.episode_id,)
+        )
+        self.connection.execute(
+            "DELETE FROM autonomy_runs WHERE episode_id = ?", (episode.episode_id,)
         )
         self.connection.execute(
             "DELETE FROM story_candidates WHERE episode_id = ?",
@@ -930,6 +935,111 @@ class Repository:
         data = row_data(row)
         return TimelinePlan.model_validate(data) if data else None
 
+    # Autonomy runs -------------------------------------------------------
+    def upsert_autonomy_run(
+        self,
+        run: AutonomyRun,
+        *,
+        expected_status: AutonomyRunStatus | str | None = None,
+    ) -> AutonomyRun:
+        """Persist a run without allowing stale reconcilers to reopen a gate.
+
+        Ordinary reconciliation may only replace ``queued``/``running`` rows.
+        Explicit user transitions (retry, review, cancel) supply the exact
+        status they observed, giving those actions compare-and-swap semantics.
+        """
+
+        run.updated_at = now_iso()
+        data = run.model_dump(mode="json")
+        allowed_statuses = (
+            [
+                expected_status.value
+                if isinstance(expected_status, AutonomyRunStatus)
+                else str(expected_status)
+            ]
+            if expected_status is not None
+            else [AutonomyRunStatus.queued.value, AutonomyRunStatus.running.value]
+        )
+        placeholders = ", ".join("?" for _ in allowed_statuses)
+        with self.connection:
+            self.connection.execute(
+                f"""
+                INSERT INTO autonomy_runs(
+                  run_id, channel_id, project_id, episode_id, story_id, status,
+                  current_stage, data, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                  story_id=excluded.story_id,
+                  status=excluded.status,
+                  current_stage=excluded.current_stage,
+                  data=excluded.data,
+                  updated_at=excluded.updated_at
+                WHERE autonomy_runs.status IN ({placeholders})
+                """,
+                (
+                    run.run_id,
+                    run.channel_id,
+                    run.project_id,
+                    run.episode_id,
+                    run.story_id,
+                    run.status.value,
+                    run.current_stage,
+                    dumps(data),
+                    run.created_at,
+                    run.updated_at,
+                    *allowed_statuses,
+                ),
+            )
+        return self.get_autonomy_run(run.run_id)
+
+    def get_autonomy_run(self, run_id: str) -> AutonomyRun:
+        return AutonomyRun.model_validate(
+            self._require_data("autonomy_runs", "run_id", run_id)
+        )
+
+    def list_autonomy_runs(
+        self,
+        *,
+        channel_id: ChannelId | None = None,
+        episode_id: str | None = None,
+        status: AutonomyRunStatus | str | None = None,
+        limit: int = 100,
+    ) -> list[AutonomyRun]:
+        filters: list[str] = []
+        params: list[Any] = []
+        if channel_id is not None:
+            get_channel_profile(channel_id)
+            filters.append("channel_id = ?")
+            params.append(channel_id)
+        if episode_id is not None:
+            filters.append("episode_id = ?")
+            params.append(episode_id)
+        if status is not None:
+            filters.append("status = ?")
+            params.append(status.value if isinstance(status, AutonomyRunStatus) else status)
+        where = f"WHERE {' AND '.join(filters)} " if filters else ""
+        params.append(max(1, min(limit, 500)))
+        return [
+            AutonomyRun.model_validate(data)
+            for data in rows_data(
+                self._many(
+                    f"SELECT data FROM autonomy_runs {where}"
+                    "ORDER BY created_at DESC LIMIT ?",
+                    params,
+                )
+            )
+        ]
+
+    def unreviewed_autonomy_run(self, episode_id: str) -> AutonomyRun | None:
+        row = self._one(
+            "SELECT data FROM autonomy_runs WHERE episode_id = ? "
+            "AND status IN ('queued', 'running', 'needs_attention', 'ready_for_review') "
+            "ORDER BY created_at DESC LIMIT 1",
+            (episode_id,),
+        )
+        data = row_data(row)
+        return AutonomyRun.model_validate(data) if data else None
+
     # Jobs / artifacts ----------------------------------------------------
     def create_job(
         self,
@@ -938,6 +1048,7 @@ class Repository:
         channel_id: ChannelId | None = None,
         episode_id: str | None = None,
         story_id: str | None = None,
+        autonomy_run_id: str | None = None,
         render_profile: str = "preview",
         payload: dict[str, Any] | None = None,
     ) -> RenderJob:
@@ -970,6 +1081,7 @@ class Repository:
             queue_lane=queue_lane_for_job_type(job_type),
             episode_id=episode_id,
             story_id=story_id,
+            autonomy_run_id=autonomy_run_id,
             render_profile=render_profile,
             payload=payload or {},
             max_attempts=default_max_attempts(job_type),
@@ -985,7 +1097,10 @@ class Repository:
         episode_id: str | None = None,
         render_profile: str | None = None,
     ) -> RenderJob | None:
-        filters = ["job_type = ?", "status IN ('queued', 'running')"]
+        filters = [
+            "job_type = ?",
+            "status IN ('queued', 'paused', 'running', 'cancel_requested')",
+        ]
         params: list[Any] = [job_type]
         if story_id is not None:
             filters.append("story_id = ?")
@@ -1012,11 +1127,11 @@ class Repository:
             self.connection.execute(
                 """
                 INSERT INTO render_jobs(
-                  job_id, job_type, queue_lane, episode_id, story_id, status,
+                  job_id, job_type, queue_lane, episode_id, story_id, autonomy_run_id, status,
                   progress, stage, available_at, attempts, max_attempts, data,
                   created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(job_id) DO UPDATE SET
                   status=excluded.status,
                   progress=excluded.progress,
@@ -1025,6 +1140,7 @@ class Repository:
                   available_at=excluded.available_at,
                   attempts=excluded.attempts,
                   max_attempts=excluded.max_attempts,
+                  autonomy_run_id=excluded.autonomy_run_id,
                   data=excluded.data,
                   updated_at=excluded.updated_at
                 """,
@@ -1034,6 +1150,7 @@ class Repository:
                     job.queue_lane.value,
                     job.episode_id,
                     job.story_id,
+                    job.autonomy_run_id,
                     job.status.value,
                     job.progress,
                     job.stage,
@@ -1078,6 +1195,36 @@ class Repository:
             )
         return cursor.rowcount == 1
 
+    def request_job_cancellation(self, job_id: str) -> RenderJob:
+        """Request a stop without releasing a handler that is still running."""
+
+        job = self.get_job(job_id)
+        if job.status == JobStatus.running:
+            job.status = JobStatus.cancel_requested
+            job.stage = "stop_requested"
+            job.available_at = None
+            self.update_job_if_status(job, JobStatus.running)
+        elif job.status in {JobStatus.queued, JobStatus.paused}:
+            previous = job.status
+            job.status = JobStatus.cancelled
+            job.stage = "cancelled"
+            job.available_at = None
+            job.completed_at = now_iso()
+            self.update_job_if_status(job, previous)
+        return self.get_job(job_id)
+
+    def acknowledge_job_cancellation(self, job_id: str) -> bool:
+        """Release a cancellation lease only after the worker handler exits."""
+
+        job = self.get_job(job_id)
+        if job.status != JobStatus.cancel_requested:
+            return False
+        job.status = JobStatus.cancelled
+        job.stage = "cancelled"
+        job.available_at = None
+        job.completed_at = now_iso()
+        return self.update_job_if_status(job, JobStatus.cancel_requested)
+
     def heartbeat_job(self, job_id: str) -> JobStatus:
         """Refresh a running job's lease and return its authoritative status."""
 
@@ -1090,12 +1237,17 @@ class Repository:
             if data is None:
                 raise NotFoundError(f"job not found: {job_id}")
             job = RenderJob.model_validate(data)
-            if job.status == JobStatus.running:
+            if job.status in {JobStatus.running, JobStatus.cancel_requested}:
                 job.updated_at = now_iso()
                 self.connection.execute(
                     "UPDATE render_jobs SET data = ?, updated_at = ? "
-                    "WHERE job_id = ? AND status = 'running'",
-                    (dumps(job.model_dump(mode="json")), job.updated_at, job_id),
+                    "WHERE job_id = ? AND status = ?",
+                    (
+                        dumps(job.model_dump(mode="json")),
+                        job.updated_at,
+                        job_id,
+                        job.status.value,
+                    ),
                 )
             self.connection.commit()
             return job.status
@@ -1118,6 +1270,7 @@ class Repository:
         story_id: str | None = None,
         episode_id: str | None = None,
         job_type: str | None = None,
+        autonomy_run_id: str | None = None,
     ) -> list[RenderJob]:
         filters: list[str] = []
         params: list[Any] = []
@@ -1136,6 +1289,9 @@ class Repository:
         if job_type is not None:
             filters.append("job_type = ?")
             params.append(job_type)
+        if autonomy_run_id is not None:
+            filters.append("autonomy_run_id = ?")
+            params.append(autonomy_run_id)
         where = f"WHERE {' AND '.join(filters)} " if filters else ""
         params.append(limit)
         return [
@@ -1177,7 +1333,7 @@ class Repository:
                 f"""
                 NOT EXISTS (
                   SELECT 1 FROM render_jobs AS running
-                  WHERE running.status = 'running'
+                  WHERE running.status IN ('running', 'cancel_requested')
                     AND (
                       (candidate.story_id IS NOT NULL
                        AND running.story_id = candidate.story_id)
@@ -1185,8 +1341,8 @@ class Repository:
                       OR
                       (candidate.episode_id IS NOT NULL
                        AND running.episode_id = candidate.episode_id
-                       AND (candidate.job_type = 'assemble_episode'
-                            OR running.job_type = 'assemble_episode'))
+                       AND (candidate.job_type IN ('assemble_episode', 'final_video_qa')
+                            OR running.job_type IN ('assemble_episode', 'final_video_qa')))
                     )
                 )
                 """,

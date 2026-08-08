@@ -91,6 +91,29 @@ class ConfigurationBoundaryTests(unittest.TestCase):
         self.assertEqual(settings.llm.codex_model, "gpt-5.6-sol")
         self.assertEqual(settings.llm.codex_reasoning_effort, "high")
 
+    def test_hermes_configuration_is_typed_for_autonomy_runs(self) -> None:
+        settings = config.load_settings(
+            {
+                "SYNTHPOST_HERMES_BINARY": "hermes-local",
+                "SYNTHPOST_HERMES_MODEL": "provider/model",
+                "SYNTHPOST_HERMES_TOOLSETS": "web",
+                "SYNTHPOST_HERMES_TIMEOUT_SECONDS": "321",
+            }
+        )
+        self.assertEqual(settings.llm.hermes_binary, "hermes-local")
+        self.assertEqual(settings.llm.hermes_model, "provider/model")
+        self.assertEqual(settings.llm.hermes_toolsets, "web")
+        self.assertEqual(settings.llm.hermes_timeout_seconds, 321)
+
+    def test_global_hermes_configuration_rejects_non_web_toolsets(self) -> None:
+        settings = config.load_settings(
+            {
+                "SYNTHPOST_LLM_PROVIDER": "hermes",
+                "SYNTHPOST_HERMES_TOOLSETS": "all",
+            }
+        )
+        self.assertIn("must be exactly web", settings.llm.provider_problem() or "")
+
     def test_parallel_worker_defaults_and_overrides_are_typed(self) -> None:
         defaults = config.load_settings({})
         self.assertEqual(defaults.jobs.editorial_workers, 3)

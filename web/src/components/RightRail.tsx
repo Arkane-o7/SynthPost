@@ -8,12 +8,20 @@ import type {
   ScriptDocument,
   TimelinePlan,
 } from "../contracts";
-import { Activity, History, TriangleAlert, X } from "lucide-react";
+import {
+  Activity,
+  ChevronRight,
+  History,
+  MonitorPlay,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 
 export const RightRail: React.FC<{
   mobileOpen?: boolean;
   onMobileClose?: () => void;
-}> = ({ mobileOpen = false, onMobileClose }) => {
+  onOpenReviewQueue?: () => void;
+}> = ({ mobileOpen = false, onMobileClose, onOpenReviewQueue }) => {
   const studio = useStudio();
   const [cancellingJobId, setCancellingJobId] = React.useState("");
 
@@ -33,17 +41,35 @@ export const RightRail: React.FC<{
   };
   const contextJobs = studio.jobs.filter(isCurrentContextJob);
   const activeJobs = contextJobs.filter((j) =>
-    ["queued", "paused", "running"].includes(j.status),
+    ["queued", "paused", "running", "cancel_requested"].includes(j.status),
   );
   const recentJobs = contextJobs.slice(0, 5);
+  const reviewRuns = studio.autonomyRuns.filter((run) =>
+    ["ready_for_review", "needs_attention"].includes(run.status),
+  );
+  const readyRunCount = reviewRuns.filter(
+    (run) => run.status === "ready_for_review",
+  ).length;
+  const attentionRunCount = reviewRuns.length - readyRunCount;
+  const activeAutonomyRun = studio.autonomyRuns.find(
+    (run) =>
+      run.episode_id === currentEpisodeId &&
+      (["queued", "running", "needs_attention"].includes(run.status) ||
+        (run.status === "cancelled" && run.active_job_ids.length > 0)),
+  );
   const [script, setScript] = React.useState<ScriptDocument | null>(null);
   const [timeline, setTimeline] = React.useState<TimelinePlan | null>(null);
 
-  const cancelJob = async (jobId: string) => {
+  const cancelJob = async (job: RenderJob) => {
     try {
-      setCancellingJobId(jobId);
+      setCancellingJobId(job.job_id);
       studio.setError("");
-      await api.cancelJob(jobId);
+      if (job.autonomy_run_id) {
+        const run = await api.cancelAutonomyRun(job.autonomy_run_id);
+        studio.mergeAutonomyRun(run);
+      } else {
+        await api.cancelJob(job.job_id);
+      }
       await studio.refreshAll();
     } catch (error) {
       studio.setError(error instanceof Error ? error.message : String(error));
@@ -78,7 +104,7 @@ export const RightRail: React.FC<{
   ]);
 
   const blockers: string[] = [];
-  if (story) {
+  if (story && !activeAutonomyRun) {
     if (
       !script &&
       ["selected", "research_ready"].includes(story.workflow_state ?? "")
@@ -158,6 +184,31 @@ export const RightRail: React.FC<{
           <X size={19} aria-hidden="true" />
         </button>
       </div>
+      {reviewRuns.length > 0 && (
+        <div className="right-rail-section right-rail-review-callout">
+          <h3 className="rail-section-title">
+            <MonitorPlay size={14} aria-hidden="true" />
+            Final review
+          </h3>
+          <button
+            type="button"
+            onClick={() => {
+              onMobileClose?.();
+              onOpenReviewQueue?.();
+            }}
+          >
+            <span>
+              <strong>{readyRunCount} MP4{readyRunCount === 1 ? "" : "s"} ready</strong>
+              <small>
+                {attentionRunCount
+                  ? `${attentionRunCount} run${attentionRunCount === 1 ? "" : "s"} need attention`
+                  : "Waiting at the human shipping gate"}
+              </small>
+            </span>
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {/* Active Jobs */}
       <div className="right-rail-section">
         <h3 className="rail-section-title">
@@ -175,7 +226,8 @@ export const RightRail: React.FC<{
                 key={job.job_id}
                 job={job}
                 cancelling={cancellingJobId === job.job_id}
-                onCancel={() => void cancelJob(job.job_id)}
+                cancelLabel={job.autonomy_run_id ? "Stop shift" : undefined}
+                onCancel={() => void cancelJob(job)}
               />
             ))}
           </div>

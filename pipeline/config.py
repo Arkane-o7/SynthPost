@@ -36,6 +36,7 @@ class StorageSettings(SettingsModel):
 
 class LLMSettings(SettingsModel):
     provider: Literal[
+        "hermes",
         "codex",
         "groq",
         "gemini",
@@ -47,6 +48,10 @@ class LLMSettings(SettingsModel):
     request_timeout_seconds: float = Field(default=45.0, gt=0)
     max_retries: int = Field(default=2, ge=0, le=10)
     save_debug: bool = False
+    hermes_binary: str = "hermes"
+    hermes_model: str | None = None
+    hermes_toolsets: str = "web"
+    hermes_timeout_seconds: float = Field(default=900.0, gt=0)
     codex_binary: str = "codex"
     codex_sandbox_binary: str = "/usr/bin/sandbox-exec"
     codex_model: str = "gpt-5.6-sol"
@@ -65,6 +70,21 @@ class LLMSettings(SettingsModel):
     sarvam_max_completion_tokens: int = Field(default=2300, ge=128)
 
     def provider_problem(self) -> str | None:
+        if self.provider == "hermes":
+            requested_toolsets = {
+                value.strip().casefold()
+                for value in self.hermes_toolsets.split(",")
+                if value.strip()
+            }
+            if requested_toolsets != {"web"}:
+                return (
+                    "SYNTHPOST_HERMES_TOOLSETS must be exactly web for unattended runs"
+                )
+            if not shutil.which(self.hermes_binary):
+                return (
+                    f"Hermes Agent CLI not found or not executable at {self.hermes_binary!r}; "
+                    "install Hermes or set SYNTHPOST_HERMES_BINARY"
+                )
         if self.provider == "codex":
             if not shutil.which(self.codex_binary):
                 return (
@@ -312,6 +332,12 @@ def load_settings(values: Mapping[str, str] | None = None) -> SynthPostSettings:
                 ),
                 max_retries=r.integer("SYNTHPOST_LLM_MAX_RETRIES", 2),
                 save_debug=r.boolean("SYNTHPOST_SAVE_LLM_DEBUG", False),
+                hermes_binary=r.text("SYNTHPOST_HERMES_BINARY", "hermes"),
+                hermes_model=r.text("SYNTHPOST_HERMES_MODEL"),
+                hermes_toolsets=r.text("SYNTHPOST_HERMES_TOOLSETS", "web"),
+                hermes_timeout_seconds=r.number(
+                    "SYNTHPOST_HERMES_TIMEOUT_SECONDS", 900.0
+                ),
                 codex_binary=r.text("SYNTHPOST_CODEX_BINARY", "codex"),
                 codex_sandbox_binary=r.text(
                     "SYNTHPOST_CODEX_SANDBOX_BINARY", "/usr/bin/sandbox-exec"

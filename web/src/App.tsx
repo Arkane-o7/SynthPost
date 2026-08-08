@@ -5,6 +5,7 @@ import { AppErrorBoundary } from "./components/AppErrorBoundary";
 import { SettingsModal } from "./components/SettingsModal";
 import type { Page } from "./components/LeftRail";
 import { CommandCenter } from "./pages/CommandCenter";
+import { ReviewQueuePage } from "./pages/ReviewQueuePage";
 import { ThemeProvider } from "./components/theme-provider";
 import "./styles/studio.css";
 import "./styles/shadcn.css";
@@ -26,7 +27,14 @@ const Main: React.FC = () => {
         </div>
       ) : (
         <>
-          <CommandCenter key={studio.selectedChannelId} />
+          {page === "review" ? (
+            <ReviewQueuePage onOpenCommandCenter={() => setPage("command")} />
+          ) : (
+            <CommandCenter
+              key={studio.selectedChannelId}
+              onOpenReviewQueue={() => setPage("review")}
+            />
+          )}
           {page === "settings" && (
             <SettingsModal onClose={() => setPage("command")} />
           )}

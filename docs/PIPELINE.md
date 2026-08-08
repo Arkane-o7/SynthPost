@@ -1,6 +1,6 @@
 # Pipeline guide
 
-The queue-backed production pipeline contains nine registered stages. `pipeline/stages.py` is the executable registry for lane, required identity, output keys, retry safety, and artifact ownership. Manifest construction is a synchronous approval boundary between timeline and rendering.
+The queue-backed production pipeline contains ten registered stages. `pipeline/stages.py` is the executable registry for lane, required identity, output keys, retry safety, and artifact ownership. Manifest construction is a synchronous approval boundary between timeline and rendering.
 
 ## Lifecycle
 
@@ -15,6 +15,7 @@ The queue-backed production pipeline contains nine registered stages. `pipeline/
 | Avatar / `render_avatar` | render | approved timeline, renderer manifest, profile | `story_manifest`, `anchor_output_path` | avatar job, audio/lip-sync/render output |
 | Composition / `render_story` | render | renderer manifest, anchor, eligible local visual paths | `story_manifest` | `preview.png`, `composited*.mp4` |
 | Assembly / `assemble_episode` | render | episode story compositions and brand clips | `final_output_path` | final MP4, assembly work files, episode manifest |
+| Final video QA / `final_video_qa` | render | versioned autonomous MP4 and expected render profile | `final_output_path`, `qa_report_path`, `qa_status` | full decode, stream/profile/sync/loudness checks, persisted QA report |
 
 ## Approval boundary
 
@@ -69,6 +70,13 @@ Remotion consumes `story.json`. If the output is newer than the manifest, anchor
 ### Assembly
 
 FFmpeg normalizes story clips and joins them with brand intro/outro assets. Production and `TEST_MODE` outputs are distinct. Successful production assembly updates the episode and story completion states. If an editor starts a script revision while an older assembly is already in flight, that output is retained, but its completion cannot overwrite the reopened `in_progress` episode state.
+
+For an autonomy run, assembly does not publish the episode output or mark the
+story complete. SynthPost first copies the result to
+`episodes/<episode>/autonomy_runs/<run>/final.mp4`, records its SHA-256, and
+queues final-video QA. Only a passing current-revision QA job publishes that
+path to the episode and moves the run to `ready_for_review`. Acceptance remains
+a separate human decision and has no upload side effect.
 
 ## Cache, skip, retry, and failure semantics
 

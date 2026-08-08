@@ -34,6 +34,7 @@ export const AppShell: React.FC<{
         <RightRail
           mobileOpen={mobileRailOpen}
           onMobileClose={() => setMobileRailOpen(false)}
+          onOpenReviewQueue={() => setPage("review")}
         />
       )}
       {mobileRailOpen && (

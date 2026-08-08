@@ -13,12 +13,15 @@ from pipeline.llm.providers import (
     CodexProvider,
     GeminiProvider,
     GroqProvider,
+    HermesProvider,
     HostedFallbackProvider,
     ProviderConfigurationError,
     ProviderRateLimitError,
     SarvamProvider,
     _codex_environment,
+    _hermes_environment,
     _run_codex_command,
+    _run_hermes_command,
     configured_provider,
     groq_strict_schema,
     provider_availability,
@@ -59,6 +62,7 @@ class LLMProviderTests(unittest.TestCase):
 
     def test_configured_provider_supports_hosted_providers(self) -> None:
         self.assertIsInstance(configured_provider("codex"), CodexProvider)
+        self.assertIsInstance(configured_provider("hermes"), HermesProvider)
         self.assertIsInstance(configured_provider("groq"), GroqProvider)
         self.assertIsInstance(configured_provider("gemini"), GeminiProvider)
         self.assertIsInstance(configured_provider("sarvam"), SarvamProvider)
@@ -222,6 +226,185 @@ class LLMProviderTests(unittest.TestCase):
         )
         value = provider.generate_json("prompt", {"type": "object"})
         self.assertEqual(value, {"provider": "hosted-secondary"})
+
+    def test_hermes_provider_availability_tracks_configured_cli(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {"SYNTHPOST_HERMES_BINARY": "hermes-test"},
+            clear=True,
+        ), patch(
+            "pipeline.llm.providers.shutil.which",
+            return_value=None,
+        ) as which:
+            unavailable = provider_availability("hermes")
+
+        self.assertFalse(unavailable.available)
+        self.assertIn("Hermes Agent CLI not found", unavailable.reason)
+        which.assert_called_once_with("hermes-test")
+
+        with patch.dict(
+            "os.environ",
+            {"SYNTHPOST_HERMES_BINARY": "hermes-test"},
+            clear=True,
+        ), patch(
+            "pipeline.llm.providers.shutil.which",
+            return_value="/opt/hermes/bin/hermes",
+        ):
+            available = provider_availability("hermes")
+
+        self.assertTrue(available.available)
+        self.assertIn("/opt/hermes/bin/hermes", available.reason)
+
+    def test_hermes_provider_runs_mocked_web_only_noninteractive_generation(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["/opt/hermes/bin/hermes"],
+            0,
+            stdout='{"ok": true}',
+            stderr="",
+        )
+        with patch.dict(
+            "os.environ",
+            {"PATH": "/usr/bin", "PYTHONPATH": "/private/source"},
+            clear=True,
+        ), patch(
+            "pipeline.llm.providers.shutil.which",
+            return_value="/opt/hermes/bin/hermes",
+        ), patch(
+            "pipeline.llm.providers._run_hermes_command",
+            return_value=completed,
+        ) as run:
+            value = HermesProvider(
+                binary="hermes-test",
+                model="test-model",
+                toolsets="web",
+                timeout_seconds=17.0,
+            ).generate_json(
+                "Research this topic.",
+                {"type": "object", "properties": {"ok": {"type": "boolean"}}},
+            )
+
+        self.assertEqual(value, {"ok": True})
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/opt/hermes/bin/hermes")
+        self.assertEqual(
+            command[1:5],
+            ["chat", "--quiet", "--ignore-user-config", "--ignore-rules"],
+        )
+        self.assertEqual(command[5:7], ["--toolsets", "web"])
+        self.assertEqual(command[7:11], ["--source", "tool", "--max-turns", "24"])
+        self.assertEqual(command[11:13], ["--model", "test-model"])
+        instruction = command[command.index("--query") + 1]
+        self.assertIn("enabled read-only research tools", instruction)
+        self.assertIn("Never modify files", instruction)
+        self.assertIn('"required":["ok"]', instruction)
+        self.assertIn('"additionalProperties":false', instruction)
+        self.assertIn("Research this topic.", instruction)
+        self.assertLessEqual(len(instruction.encode("utf-8")), 48 * 1024)
+        self.assertEqual(run.call_args.kwargs["timeout_seconds"], 17.0)
+        self.assertEqual(
+            run.call_args.kwargs["environment"],
+            {
+                "PATH": "/usr/bin",
+                "HERMES_SAFE_MODE": "1",
+                "HERMES_IGNORE_USER_CONFIG": "1",
+                "HERMES_IGNORE_RULES": "1",
+            },
+        )
+
+    def test_hermes_child_environment_excludes_application_credentials(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "HOME": "/tmp/home",
+                "PATH": "/usr/bin",
+                "HERMES_HOME": "/tmp/hermes-home",
+                "PYTHONPATH": "/private/source",
+                "GROQ_API_KEY": "secret",
+                "GEMINI_API_KEY": "secret",
+                "YOUTUBE_CLIENT_SECRET": "secret",
+                "SYNTHPOST_SEARXNG_API_KEY": "secret",
+            },
+            clear=True,
+        ):
+            environment = _hermes_environment()
+        self.assertEqual(environment["HOME"], "/tmp/home")
+        self.assertEqual(environment["HERMES_HOME"], "/tmp/hermes-home")
+        self.assertEqual(environment["HERMES_SAFE_MODE"], "1")
+        self.assertEqual(environment["HERMES_IGNORE_USER_CONFIG"], "1")
+        self.assertEqual(environment["HERMES_IGNORE_RULES"], "1")
+        self.assertNotIn("PYTHONPATH", environment)
+        self.assertNotIn("GROQ_API_KEY", environment)
+        self.assertNotIn("GEMINI_API_KEY", environment)
+        self.assertNotIn("YOUTUBE_CLIENT_SECRET", environment)
+        self.assertNotIn("SYNTHPOST_SEARXNG_API_KEY", environment)
+
+    def test_hermes_provider_rejects_missing_cli_before_generation(self) -> None:
+        with patch(
+            "pipeline.llm.providers.shutil.which",
+            return_value=None,
+        ), patch("pipeline.llm.providers._run_hermes_command") as run:
+            with self.assertRaisesRegex(
+                ProviderConfigurationError,
+                "Hermes Agent CLI not found",
+            ):
+                HermesProvider(binary="missing-hermes").generate_json(
+                    "prompt",
+                    {"type": "object"},
+                )
+        run.assert_not_called()
+
+    def test_hermes_provider_requires_exact_web_only_toolset(self) -> None:
+        with patch(
+            "pipeline.llm.providers.shutil.which",
+            return_value="/opt/hermes/bin/hermes",
+        ), patch("pipeline.llm.providers._run_hermes_command") as run:
+            for toolsets in ("web,terminal", "all", "*", "coding", "plugin:demo", ""):
+                with self.subTest(toolsets=toolsets), self.assertRaisesRegex(
+                    ProviderConfigurationError,
+                    "exact web-only toolset",
+                ):
+                    HermesProvider(toolsets=toolsets).generate_json(
+                        "prompt",
+                        {"type": "object"},
+                    )
+        run.assert_not_called()
+
+    def test_hermes_prompt_is_bounded_below_macos_argument_limit(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["hermes"], 0, stdout='{"ok": true}', stderr=""
+        )
+        with patch(
+            "pipeline.llm.providers.shutil.which", return_value="/opt/hermes/bin/hermes"
+        ), patch(
+            "pipeline.llm.providers._run_hermes_command", return_value=completed
+        ) as run:
+            HermesProvider(toolsets="web").generate_json(
+                "🌍" * 100_000,
+                {"type": "object", "properties": {"ok": {"type": "boolean"}}},
+            )
+        instruction = run.call_args.args[0][-1]
+        self.assertLessEqual(len(instruction.encode("utf-8")), 48 * 1024)
+        self.assertIn("Research pack truncated by SynthPost", instruction)
+
+    def test_hermes_process_group_is_stopped_on_outer_job_timeout(self) -> None:
+        process = MagicMock()
+        process.pid = 7331
+        process.poll.return_value = None
+        process.communicate.side_effect = [
+            TimeoutError("worker deadline"),
+            ("", ""),
+        ]
+        with patch("pipeline.llm.providers.subprocess.Popen", return_value=process), patch(
+            "pipeline.llm.providers.os.killpg"
+        ) as killpg:
+            with self.assertRaisesRegex(TimeoutError, "worker deadline"):
+                _run_hermes_command(
+                    ["hermes", "chat"],
+                    timeout_seconds=900,
+                    environment={},
+                )
+        killpg.assert_called_once_with(7331, signal.SIGTERM)
+        self.assertEqual(process.communicate.call_count, 2)
 
     def test_groq_client_sends_an_explicit_application_user_agent(self) -> None:
         response = _JSONResponse(

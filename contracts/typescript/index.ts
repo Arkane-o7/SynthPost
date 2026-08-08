@@ -438,10 +438,11 @@ export type RenderJob = {
   channel_id: ChannelId;
   episode_id: string | null;
   story_id: string | null;
+  autonomy_run_id: string | null;
   job_type: string;
   queue_lane: 'editorial' | 'media' | 'render';
   render_profile: string;
-  status: 'queued' | 'paused' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'queued' | 'paused' | 'running' | 'cancel_requested' | 'completed' | 'failed' | 'cancelled';
   progress: number;
   stage: string;
   started_at: string | null;
@@ -459,6 +460,119 @@ export type RenderJob = {
   failure_kind: string | null;
   created_at?: string;
   updated_at?: string;
+};
+
+export type AutonomyRunStatus =
+  | 'queued'
+  | 'running'
+  | 'needs_attention'
+  | 'ready_for_review'
+  | 'accepted'
+  | 'rejected'
+  | 'cancelled';
+
+export type AutonomyQaFinding = {
+  code: string;
+  severity: 'warning' | 'error';
+  message: string;
+  measured: number | string | null;
+  expected: number | string | null;
+};
+
+export type AutonomyQaProbeStream = {
+  codec_type?: string;
+  codec_name?: string;
+  width?: number;
+  height?: number;
+  duration?: number | string;
+  [key: string]: unknown;
+};
+
+export type AutonomyQaReport = {
+  contract_version: 'synthpost.final_video_qa.v1';
+  status: 'passed' | 'failed';
+  passed: boolean;
+  input_path: string;
+  report_path: string;
+  checked_at: string;
+  expected_width: number | null;
+  expected_height: number | null;
+  expected_fps: number | null;
+  probe: {
+    streams?: AutonomyQaProbeStream[];
+    format?: {
+      duration?: number | string;
+      size?: number | string;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  metrics: Record<string, number | string | null>;
+  findings: AutonomyQaFinding[];
+};
+
+export type AutonomyQaCheck = {
+  check_id: string;
+  label: string;
+  status: 'passed' | 'warning' | 'failed';
+  detail: string;
+};
+
+export type AutonomyQaView = AutonomyQaReport & {
+  checks: AutonomyQaCheck[];
+  duration_seconds: number | null;
+  width: number | null;
+  height: number | null;
+  video_codec: string | null;
+  audio_codec: string | null;
+  size_bytes: number | null;
+};
+
+export type AutonomyPolicy = {
+  provider: string;
+  target_duration_seconds: number;
+  narration_mode: NarrationMode;
+  category: string | null;
+  render_profile: 'production' | 'final_master';
+  rights_policy: 'green_only';
+  max_repairs_per_stage: number;
+  upload_enabled: false;
+  auto_select_story: boolean;
+};
+
+export type AutonomyRun = {
+  run_id: string;
+  channel_id: ChannelId;
+  project_id: string;
+  episode_id: string;
+  story_id: string | null;
+  candidate_id: string | null;
+  engine: 'hermes' | string;
+  engine_session_id: string | null;
+  status: AutonomyRunStatus;
+  current_stage: string;
+  progress: number;
+  policy: AutonomyPolicy;
+  job_ids: string[];
+  active_job_ids: string[];
+  final_output_path: string | null;
+  final_output_sha256: string | null;
+  qa_report_path: string | null;
+  qa: AutonomyQaReport | null;
+  warnings: string[];
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  reviewed_at: string | null;
+};
+
+export type AutonomyRunView = Omit<AutonomyRun, 'qa'> & {
+  project_title: string;
+  episode_title: string;
+  story_title: string | null;
+  qa: AutonomyQaView | null;
 };
 
 export type GenerationAudit = {

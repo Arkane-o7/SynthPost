@@ -425,16 +425,17 @@
     },
     "RenderJob": {
       "type": "object",
-      "required": ["job_id", "channel_id", "episode_id", "story_id", "job_type", "queue_lane", "render_profile", "status", "progress", "stage", "started_at", "completed_at", "output_paths", "log_path", "error", "attempts", "max_attempts", "available_at", "last_attempt_at", "last_error", "failure_kind"],
+      "required": ["job_id", "channel_id", "episode_id", "story_id", "autonomy_run_id", "job_type", "queue_lane", "render_profile", "status", "progress", "stage", "started_at", "completed_at", "output_paths", "log_path", "error", "attempts", "max_attempts", "available_at", "last_attempt_at", "last_error", "failure_kind"],
       "properties": {
         "job_id": {"type": "string"},
         "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
         "episode_id": {"type": ["string", "null"]},
         "story_id": {"type": ["string", "null"]},
+        "autonomy_run_id": {"type": ["string", "null"]},
         "job_type": {"type": "string"},
         "queue_lane": {"enum": ["editorial", "media", "render"]},
         "render_profile": {"type": "string"},
-        "status": {"enum": ["queued", "paused", "running", "completed", "failed", "cancelled"]},
+        "status": {"enum": ["queued", "paused", "running", "cancel_requested", "completed", "failed", "cancelled"]},
         "progress": {"type": "number"},
         "stage": {"type": "string"},
         "started_at": {"type": ["string", "null"]},
@@ -448,6 +449,146 @@
         "last_attempt_at": {"type": ["string", "null"]},
         "last_error": {"type": ["string", "null"]},
         "failure_kind": {"type": ["string", "null"]}
+      }
+    },
+    "AutonomyQaFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message", "measured", "expected"],
+      "properties": {
+        "code": {"type": "string"},
+        "severity": {"enum": ["warning", "error"]},
+        "message": {"type": "string"},
+        "measured": {"type": ["number", "string", "null"]},
+        "expected": {"type": ["number", "string", "null"]}
+      }
+    },
+    "AutonomyQaCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["check_id", "label", "status", "detail"],
+      "properties": {
+        "check_id": {"type": "string"},
+        "label": {"type": "string"},
+        "status": {"enum": ["passed", "warning", "failed"]},
+        "detail": {"type": "string"}
+      }
+    },
+    "AutonomyQaView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "status", "passed", "input_path", "report_path", "checked_at", "expected_width", "expected_height", "expected_fps", "probe", "metrics", "findings", "checks", "duration_seconds", "width", "height", "video_codec", "audio_codec", "size_bytes"],
+      "properties": {
+        "contract_version": {"type": "string", "const": "synthpost.final_video_qa.v1"},
+        "status": {"enum": ["passed", "failed"]},
+        "passed": {"type": "boolean"},
+        "input_path": {"type": "string"},
+        "report_path": {"type": "string"},
+        "checked_at": {"type": "string"},
+        "expected_width": {"type": ["integer", "null"]},
+        "expected_height": {"type": ["integer", "null"]},
+        "expected_fps": {"type": ["number", "null"]},
+        "probe": {"type": "object"},
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {"type": ["number", "string", "null"]}
+        },
+        "findings": {"type": "array", "items": {"$ref": "#/$defs/AutonomyQaFinding"}},
+        "checks": {"type": "array", "items": {"$ref": "#/$defs/AutonomyQaCheck"}},
+        "duration_seconds": {"type": ["number", "null"]},
+        "width": {"type": ["integer", "null"]},
+        "height": {"type": ["integer", "null"]},
+        "video_codec": {"type": ["string", "null"]},
+        "audio_codec": {"type": ["string", "null"]},
+        "size_bytes": {"type": ["integer", "null"]}
+      }
+    },
+    "AutonomyPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "target_duration_seconds", "narration_mode", "category", "render_profile", "rights_policy", "max_repairs_per_stage", "upload_enabled", "auto_select_story"],
+      "properties": {
+        "provider": {"type": "string"},
+        "target_duration_seconds": {"type": "integer", "minimum": 60, "maximum": 3600},
+        "narration_mode": {"enum": ["signal", "explained", "deep_dive", "india_builds"]},
+        "category": {"type": ["string", "null"]},
+        "render_profile": {"enum": ["production", "final_master"]},
+        "rights_policy": {"enum": ["green_only"]},
+        "max_repairs_per_stage": {"type": "integer", "minimum": 0, "maximum": 5},
+        "upload_enabled": {"type": "boolean", "const": false},
+        "auto_select_story": {"type": "boolean"}
+      }
+    },
+    "AutonomyRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "channel_id", "project_id", "episode_id", "story_id", "candidate_id", "engine", "engine_session_id", "status", "current_stage", "progress", "policy", "job_ids", "active_job_ids", "final_output_path", "final_output_sha256", "qa_report_path", "qa", "warnings", "error", "created_at", "updated_at", "started_at", "completed_at", "reviewed_at"],
+      "properties": {
+        "run_id": {"type": "string"},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "project_id": {"type": "string"},
+        "episode_id": {"type": "string"},
+        "story_id": {"type": ["string", "null"]},
+        "candidate_id": {"type": ["string", "null"]},
+        "engine": {"type": "string"},
+        "engine_session_id": {"type": ["string", "null"]},
+        "status": {"enum": ["queued", "running", "needs_attention", "ready_for_review", "accepted", "rejected", "cancelled"]},
+        "current_stage": {"type": "string"},
+        "progress": {"type": "number", "minimum": 0, "maximum": 100},
+        "policy": {"$ref": "#/$defs/AutonomyPolicy"},
+        "job_ids": {"type": "array", "items": {"type": "string"}},
+        "active_job_ids": {"type": "array", "items": {"type": "string"}},
+        "final_output_path": {"type": ["string", "null"]},
+        "final_output_sha256": {"type": ["string", "null"]},
+        "qa_report_path": {"type": ["string", "null"]},
+        "qa": {"type": ["object", "null"]},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "error": {"type": ["string", "null"]},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"},
+        "started_at": {"type": ["string", "null"]},
+        "completed_at": {"type": ["string", "null"]},
+        "reviewed_at": {"type": ["string", "null"]}
+      }
+    },
+    "AutonomyRunView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "channel_id", "project_id", "episode_id", "story_id", "candidate_id", "engine", "engine_session_id", "status", "current_stage", "progress", "policy", "job_ids", "active_job_ids", "final_output_path", "final_output_sha256", "qa_report_path", "qa", "warnings", "error", "created_at", "updated_at", "started_at", "completed_at", "reviewed_at", "project_title", "episode_title", "story_title"],
+      "properties": {
+        "run_id": {"type": "string"},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "project_id": {"type": "string"},
+        "episode_id": {"type": "string"},
+        "story_id": {"type": ["string", "null"]},
+        "candidate_id": {"type": ["string", "null"]},
+        "engine": {"type": "string"},
+        "engine_session_id": {"type": ["string", "null"]},
+        "status": {"enum": ["queued", "running", "needs_attention", "ready_for_review", "accepted", "rejected", "cancelled"]},
+        "current_stage": {"type": "string"},
+        "progress": {"type": "number", "minimum": 0, "maximum": 100},
+        "policy": {"$ref": "#/$defs/AutonomyPolicy"},
+        "job_ids": {"type": "array", "items": {"type": "string"}},
+        "active_job_ids": {"type": "array", "items": {"type": "string"}},
+        "final_output_path": {"type": ["string", "null"]},
+        "final_output_sha256": {"type": ["string", "null"]},
+        "qa_report_path": {"type": ["string", "null"]},
+        "qa": {
+          "anyOf": [
+            {"$ref": "#/$defs/AutonomyQaView"},
+            {"type": "null"}
+          ]
+        },
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "error": {"type": ["string", "null"]},
+        "created_at": {"type": "string"},
+        "updated_at": {"type": "string"},
+        "started_at": {"type": ["string", "null"]},
+        "completed_at": {"type": ["string", "null"]},
+        "reviewed_at": {"type": ["string", "null"]},
+        "project_title": {"type": "string"},
+        "episode_title": {"type": "string"},
+        "story_title": {"type": ["string", "null"]}
       }
     },
     "GenerationAudit": {

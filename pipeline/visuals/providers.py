@@ -104,6 +104,7 @@ class VisualSource(Protocol):
         *,
         progress_callback: Callable[[float, str], None] | None = None,
         cancel_check: Callable[[], None] | None = None,
+        provider_name: str | None = None,
     ) -> list[VisualCandidate]: ...
 
 
@@ -1091,7 +1092,9 @@ def _validate_ai_visual_plan(
     return plans
 
 
-def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
+def _visual_search_plan(
+    repository, story_id: str, *, provider_name: str | None = None
+) -> list[VisualQueryPlan]:
     script = repository.latest_script(story_id)
     candidate = repository.candidate_for_story(story_id)
     channel_profile = get_channel_profile(
@@ -1102,7 +1105,7 @@ def _visual_search_plan(repository, story_id: str) -> list[VisualQueryPlan]:
     if not config.get_settings().visuals.ai_query_planning:
         return _fallback_visual_search_plan(repository, story_id)
 
-    provider = configured_provider()
+    provider = configured_provider(provider_name)
     research_pack_loader = getattr(repository, "latest_research_pack", None)
     research_pack = (
         research_pack_loader(story_id) if research_pack_loader else None
@@ -1674,6 +1677,7 @@ def search_searxng_visuals(
     *,
     progress_callback=None,
     cancel_check=None,
+    provider_name: str | None = None,
 ) -> list[VisualCandidate]:
     visual_settings = config.get_settings().visuals
     if not searxng_configured() or visual_settings.disable_web_visuals:
@@ -1694,7 +1698,8 @@ def search_searxng_visuals(
     downloads_enabled = visual_settings.download_videos
     max_queries = visual_settings.visual_max_queries
     tasks = _visual_search_tasks(
-        _visual_search_plan(repository, story_id), max_queries
+        _visual_search_plan(repository, story_id, provider_name=provider_name),
+        max_queries,
     )
     total_tasks = max(1, len(tasks))
     if progress_callback:
@@ -1804,7 +1809,9 @@ class EpisodeMediaInboxSource:
         *,
         progress_callback=None,
         cancel_check=None,
+        provider_name: str | None = None,
     ) -> list[VisualCandidate]:
+        del provider_name
         return search_episode_media_inbox(
             repository, story_id, generate_fallback=False
         )
@@ -1824,12 +1831,14 @@ class SearXNGVisualSource:
         *,
         progress_callback=None,
         cancel_check=None,
+        provider_name: str | None = None,
     ) -> list[VisualCandidate]:
         return search_searxng_visuals(
             repository,
             story_id,
             progress_callback=progress_callback,
             cancel_check=cancel_check,
+            provider_name=provider_name,
         )
 
 
@@ -1849,6 +1858,7 @@ def search_visuals(
     *,
     progress_callback=None,
     cancel_check=None,
+    provider_name: str | None = None,
 ) -> list[VisualCandidate]:
     """Search the episode-isolated media inbox, then SearXNG and fallbacks."""
 
@@ -1873,6 +1883,7 @@ def search_visuals(
                     story_id,
                     progress_callback=progress_callback,
                     cancel_check=cancel_check,
+                    provider_name=provider_name,
                 )
             )
         except SearXNGError:

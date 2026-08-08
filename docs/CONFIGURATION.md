@@ -20,10 +20,14 @@ Required means required for the named feature, not for opening the local Studio.
 
 | Variable | Default | Required | Example | Notes |
 |---|---:|---|---|---|
-| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `codex` | `codex`, `groq`, `gemini`, `sarvam`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. |
+| `SYNTHPOST_LLM_PROVIDER` | `groq` | script/AI features | `codex` | `hermes`, `codex`, `groq`, `gemini`, `sarvam`, `hosted_fallback`, or `mock`; legacy `groq_then_gemini` remains an alias; mock is tests/smoke only. YOLO runs select Hermes explicitly by default, independent of this global setting. |
 | `SYNTHPOST_LLM_REQUEST_TIMEOUT_SECONDS` | `45` | no | `60` | Positive request timeout. |
 | `SYNTHPOST_LLM_MAX_RETRIES` | `2` | no | `1` | Maximum retry cap for structured-output validation, 0–10. The Codex starter config uses one retry to bound plan usage and job duration. |
 | `SYNTHPOST_SAVE_LLM_DEBUG` | `0` | no | `0` | Debug output can contain provider text; keep disabled and never commit it. |
+| `SYNTHPOST_HERMES_BINARY` | `hermes` | YOLO/Hermes | `/Users/me/.local/bin/hermes` | Executable name or path. The CLI must already have a working provider login. |
+| `SYNTHPOST_HERMES_MODEL` | empty | no | `provider/model-name` | Optional Hermes model override. Empty uses isolated provider auto-resolution from the saved login; behavioral user config is ignored. |
+| `SYNTHPOST_HERMES_TOOLSETS` | `web` | no | `web` | Must be exactly `web`. Unattended SynthPost rejects aliases, composites, plugins, `all`, and every local/mutating toolset. |
+| `SYNTHPOST_HERMES_TIMEOUT_SECONDS` | `900` | no | `900` | Per-invocation non-interactive timeout. The queue worker still owns the outer stage deadline and retry policy. |
 | `SYNTHPOST_CODEX_BINARY` | `codex` | Codex | `/Applications/ChatGPT.app/Contents/Resources/codex` | Executable name or path. The CLI must already be authenticated with `codex login`. |
 | `SYNTHPOST_CODEX_SANDBOX_BINARY` | `/usr/bin/sandbox-exec` | Codex | `/usr/bin/sandbox-exec` | macOS process sandbox used to prevent the model from spawning tools or shell commands. The provider fails closed if unavailable. |
 | `SYNTHPOST_CODEX_MODEL` | `gpt-5.6-sol` | Codex | `gpt-5.6-sol` | Codex model available to the signed-in ChatGPT account. Model availability and limits follow that account. |
@@ -40,6 +44,27 @@ Required means required for the named feature, not for opening the local Studio.
 | `SYNTHPOST_SARVAM_MODEL` | `sarvam-105b` | no | `sarvam-105b` | Hosted Sarvam AI model ID (`sarvam-105b`, `sarvam-30b`, etc.). |
 | `SYNTHPOST_SARVAM_TEMPERATURE` | `0.2` | no | `0.2` | 0–2. |
 | `SYNTHPOST_SARVAM_MAX_COMPLETION_TOKENS` | `2300` | no | `4000` | Minimum 128. |
+
+### Hermes Agent for unattended production
+
+The episode-level **YOLO Produce** action uses Hermes for research-aware script
+generation and visual-search recommendations. Verify the local CLI before
+leaving a run unattended:
+
+```bash
+command -v hermes
+hermes status --all
+make doctor
+```
+
+SynthPost invokes isolated non-interactive Hermes sessions with the exact
+web-only toolset. The child process receives a small runtime environment
+allowlist; SynthPost provider keys, search credentials, application secrets,
+and any future upload credentials are not forwarded. Hermes user rules, memory,
+skills, hooks, plugins, MCP servers, and behavioral config are disabled for
+these calls. Hermes never owns the SQLite workflow, renderer, approval gates,
+or publication. See
+[Unattended production](AUTONOMY.md) for the full operating contract.
 
 ### Codex with a ChatGPT account
 

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from pipeline.channels import ChannelId, DEFAULT_CHANNEL_ID
 from pipeline.models import (
+    AutonomyRun,
     ContentRole,
     EpisodeStatus,
     NarrationMode,
@@ -15,6 +16,7 @@ from pipeline.models import (
     RightsTier,
     SourceType,
 )
+from pipeline.video_qa import FinalVideoQAReport
 
 
 class APIModel(BaseModel):
@@ -148,3 +150,49 @@ class RenderRequest(APIModel):
     test_mode: bool = False
     force: bool = False
     skip_avatar_render: bool = True
+
+
+class AutonomyRunCreate(APIModel):
+    episode_id: str
+    story_id: str | None = None
+    provider: str = "hermes"
+    target_duration_seconds: int = Field(default=600, ge=60, le=3600)
+    narration_mode: NarrationMode = NarrationMode.explained
+    category: str | None = None
+    render_profile: str = "production"
+    max_repairs_per_stage: int = Field(default=2, ge=0, le=5)
+
+
+class AutonomyQACheck(APIModel):
+    """One normalized final-video check shown by Studio."""
+
+    check_id: str
+    label: str
+    status: Literal["passed", "warning", "failed"]
+    detail: str
+
+
+class AutonomyQAView(FinalVideoQAReport):
+    """Persisted QA evidence plus stable fields for the review UI."""
+
+    checks: list[AutonomyQACheck]
+    duration_seconds: float | None
+    width: int | None
+    height: int | None
+    video_codec: str | None
+    audio_codec: str | None
+    size_bytes: int | None
+
+
+class AutonomyRunView(AutonomyRun):
+    """HTTP representation enriched with display-only repository context."""
+
+    project_title: str
+    episode_title: str
+    story_title: str | None
+    qa: AutonomyQAView | None = None
+
+
+class AutonomyOutputRevealView(APIModel):
+    revealed: Literal[True]
+    path: str

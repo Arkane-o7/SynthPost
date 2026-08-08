@@ -12,7 +12,17 @@ export const InlineJobCard: React.FC<{
   onCancel?: () => void;
   onPause?: () => void;
   onResume?: () => void;
-}> = ({ job, onRetry, onCancel, onPause, onResume }) => {
+  retryLabel?: string;
+  cancelLabel?: string;
+}> = ({
+  job,
+  onRetry,
+  onCancel,
+  onPause,
+  onResume,
+  retryLabel = 'Retry',
+  cancelLabel = 'Cancel',
+}) => {
   const progressClass =
     job.status === 'completed'
       ? 'progress-complete'
@@ -52,12 +62,12 @@ export const InlineJobCard: React.FC<{
         <div className="row-tight" style={{ marginTop: 8 }}>
           {onRetry && job.status === 'failed' && (
             <button className="btn-ghost" onClick={onRetry}>
-              Retry
+              {retryLabel}
             </button>
           )}
           {onCancel && ['queued', 'running'].includes(job.status) && (
             <button className="btn-ghost" onClick={onCancel}>
-              Cancel
+              {cancelLabel}
             </button>
           )}
           {onPause && job.status === 'queued' && (
@@ -83,7 +93,8 @@ export const MiniJobCard: React.FC<{
   job: RenderJob;
   onCancel?: () => void;
   cancelling?: boolean;
-}> = ({ job, onCancel, cancelling = false }) => {
+  cancelLabel?: string;
+}> = ({ job, onCancel, cancelling = false, cancelLabel }) => {
   const progressClass =
     job.status === 'completed'
       ? 'progress-complete'
@@ -115,14 +126,17 @@ export const MiniJobCard: React.FC<{
             type="button"
             className="job-stop-button"
             disabled={cancelling}
-            aria-label={`${job.status === 'running' ? 'Stop' : 'Cancel'} ${job.job_type} job`}
+            aria-label={
+              cancelLabel
+                ? `${cancelLabel} for ${job.job_type}`
+                : `${job.status === 'running' ? 'Stop' : 'Cancel'} ${job.job_type} job`
+            }
             onClick={onCancel}
           >
             {cancelling
               ? 'Stopping…'
-              : job.status === 'running'
-                ? 'Stop'
-                : 'Cancel'}
+              : cancelLabel ??
+                (job.status === 'running' ? 'Stop' : 'Cancel')}
           </button>
         )}
       </div>

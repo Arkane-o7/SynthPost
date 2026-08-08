@@ -9,6 +9,9 @@ function toneForStatus(status: string): BadgeTone {
     case 'completed':
     case 'manual_approved':
     case 'enabled':
+    case 'accepted':
+    case 'passed':
+    case 'ready_for_review':
       return 'green';
     case 'needs_review':
     case 'in_progress':
@@ -16,8 +19,11 @@ function toneForStatus(status: string): BadgeTone {
     case 'draft':
     case 'queued':
     case 'running':
+    case 'cancel_requested':
     case 'suggested':
     case 'yellow':
+    case 'warning':
+    case 'needs_attention':
       return 'amber';
     case 'rejected':
     case 'failed':

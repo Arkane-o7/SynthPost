@@ -7,6 +7,7 @@ import {
 } from "../channels";
 import { useJobEvents } from "./useJobEvents";
 import type {
+  AutonomyRunView,
   ChannelId,
   ChannelProfile,
   Episode,
@@ -58,6 +59,7 @@ type StudioState = {
   sources: SourceDefinition[];
   candidates: StoryCandidate[];
   jobs: RenderJob[];
+  autonomyRuns: AutonomyRunView[];
   selectedProjectId: string;
   selectedEpisodeId: string;
   selectedStoryId: string;
@@ -75,7 +77,9 @@ type StudioContextValue = StudioState & {
   setError: (value: string) => void;
   refreshAll: () => Promise<void>;
   refreshJobs: () => Promise<void>;
+  refreshAutonomyRuns: () => Promise<void>;
   refreshCandidates: () => Promise<void>;
+  mergeAutonomyRun: (run: AutonomyRunView) => void;
 };
 
 const StudioContext = React.createContext<StudioContextValue | null>(null);
@@ -93,6 +97,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
     sources: [],
     candidates: [],
     jobs: [],
+    autonomyRuns: [],
     selectedProjectId: storedSelection(channelId, "project"),
     selectedEpisodeId: storedSelection(channelId, "episode"),
     selectedStoryId: storedSelection(channelId, "story"),
@@ -103,6 +108,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
   const stateRef = React.useRef(state);
   const loadGenerationRef = React.useRef(0);
   const selectionGenerationRef = React.useRef(0);
+  const autonomyRefreshGenerationRef = React.useRef(0);
 
   React.useEffect(() => {
     stateRef.current = state;
@@ -120,6 +126,9 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
     async (requestedChannelId: ChannelId, clearSnapshot: boolean) => {
       const generation = ++loadGenerationRef.current;
       selectionGenerationRef.current += 1;
+      // A full channel load supersedes any channel-scoped autonomy poll that
+      // may still be in flight.
+      autonomyRefreshGenerationRef.current += 1;
       if (clearSnapshot) {
         patch({
           selectedChannelId: requestedChannelId,
@@ -132,6 +141,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           sources: [],
           candidates: [],
           jobs: [],
+          autonomyRuns: [],
           selectedProjectId: "",
           selectedEpisodeId: "",
           selectedStoryId: "",
@@ -144,12 +154,16 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
 
       try {
         const knownChannels = stateRef.current.channels;
-        const [channels, allProjects, sources, allJobs] = await Promise.all([
-          knownChannels.length ? Promise.resolve(knownChannels) : api.listChannels(),
-          api.listProjects(requestedChannelId),
-          api.listSources(),
-          api.listJobs({ channelId: requestedChannelId }),
-        ]);
+        const [channels, allProjects, sources, allJobs, allAutonomyRuns] =
+          await Promise.all([
+            knownChannels.length
+              ? Promise.resolve(knownChannels)
+              : api.listChannels(),
+            api.listProjects(requestedChannelId),
+            api.listSources(),
+            api.listJobs({ channelId: requestedChannelId }),
+            api.listAutonomyRuns({ channelId: requestedChannelId, limit: 500 }),
+          ]);
         if (generation !== loadGenerationRef.current) return;
 
         const projects = allProjects.filter(
@@ -157,6 +171,9 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
         );
         const jobs = allJobs.filter(
           (job) => job.channel_id === requestedChannelId,
+        );
+        const autonomyRuns = allAutonomyRuns.filter(
+          (run) => run.channel_id === requestedChannelId,
         );
         const requestedProjectId = storedSelection(requestedChannelId, "project");
         const selectedProjectId = projects.some(
@@ -209,6 +226,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           sources,
           candidates,
           jobs,
+          autonomyRuns,
           selectedProjectId,
           selectedEpisodeId,
           selectedStoryId,
@@ -265,7 +283,7 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
           return (
             oldJob &&
             oldJob.status !== newJob.status &&
-            ["completed", "failed"].includes(newJob.status)
+            ["completed", "failed", "cancelled"].includes(newJob.status)
           );
         });
         const next = {
@@ -289,23 +307,132 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
     patch({ jobs: jobs.filter((job) => job.channel_id === currentChannelId) });
   }, [patch]);
 
+  const refreshAutonomyRuns = React.useCallback(async () => {
+    const generation = ++autonomyRefreshGenerationRef.current;
+    const currentChannelId = stateRef.current.selectedChannelId;
+    const autonomyRuns = await api.listAutonomyRuns({
+      channelId: currentChannelId,
+      limit: 500,
+    });
+    if (
+      generation !== autonomyRefreshGenerationRef.current ||
+      currentChannelId !== stateRef.current.selectedChannelId
+    ) {
+      return;
+    }
+    const filteredRuns = autonomyRuns.filter(
+      (run) => run.channel_id === currentChannelId,
+    );
+    const current = stateRef.current;
+    const runOwnedStoryId = filteredRuns.find(
+      (run) =>
+        run.episode_id === current.selectedEpisodeId &&
+        (["queued", "running", "needs_attention"].includes(run.status) ||
+          (run.status === "cancelled" && run.active_job_ids.length > 0)) &&
+        Boolean(run.story_id),
+    )?.story_id;
+    if (runOwnedStoryId && runOwnedStoryId !== current.selectedStoryId) {
+      persistSelection(currentChannelId, "story", runOwnedStoryId);
+    }
+    patch({
+      autonomyRuns: filteredRuns,
+      ...(runOwnedStoryId ? { selectedStoryId: runOwnedStoryId } : {}),
+    });
+  }, [patch]);
+
+  const mergeAutonomyRun = React.useCallback(
+    (run: AutonomyRunView) => {
+      const current = stateRef.current;
+      if (run.channel_id !== current.selectedChannelId) return;
+
+      // Mutations are authoritative and invalidate older list responses.
+      autonomyRefreshGenerationRef.current += 1;
+      const autonomyRuns = [
+        run,
+        ...current.autonomyRuns.filter((item) => item.run_id !== run.run_id),
+      ];
+      const followsSelectedEpisode =
+        run.episode_id === current.selectedEpisodeId &&
+        (["queued", "running", "needs_attention"].includes(run.status) ||
+          (run.status === "cancelled" && run.active_job_ids.length > 0)) &&
+        Boolean(run.story_id);
+      if (followsSelectedEpisode && run.story_id) {
+        persistSelection(current.selectedChannelId, "story", run.story_id);
+      }
+      patch({
+        autonomyRuns,
+        ...(followsSelectedEpisode && run.story_id
+          ? { selectedStoryId: run.story_id }
+          : {}),
+      });
+    },
+    [patch],
+  );
+
   const refreshCandidates = React.useCallback(async () => {
     const snapshot = stateRef.current;
     const allCandidates = await api.listCandidates({
       channelId: snapshot.selectedChannelId,
       episodeId: snapshot.selectedEpisodeId || undefined,
     });
-    if (snapshot.selectedChannelId !== stateRef.current.selectedChannelId) return;
+    const current = stateRef.current;
+    if (
+      snapshot.selectedChannelId !== current.selectedChannelId ||
+      snapshot.selectedEpisodeId !== current.selectedEpisodeId
+    ) {
+      return;
+    }
+    const candidates = allCandidates.filter(
+      (candidate) => candidate.channel_id === snapshot.selectedChannelId,
+    );
+    const runOwnedStoryId = current.autonomyRuns.find(
+      (run) =>
+        run.episode_id === current.selectedEpisodeId &&
+        (["queued", "running", "needs_attention"].includes(run.status) ||
+          (run.status === "cancelled" && run.active_job_ids.length > 0)) &&
+        Boolean(run.story_id),
+    )?.story_id;
+    const shouldFollowRun = Boolean(
+      runOwnedStoryId &&
+        candidates.some((candidate) => candidate.story_id === runOwnedStoryId),
+    );
+    if (shouldFollowRun && runOwnedStoryId) {
+      persistSelection(current.selectedChannelId, "story", runOwnedStoryId);
+    }
     patch({
-      candidates: allCandidates.filter(
-        (candidate) => candidate.channel_id === snapshot.selectedChannelId,
-      ),
+      candidates,
+      ...(shouldFollowRun && runOwnedStoryId
+        ? { selectedStoryId: runOwnedStoryId }
+        : {}),
     });
   }, [patch]);
 
   React.useEffect(() => {
     void refreshCandidates().catch((error) => patch({ error: errorMessage(error) }));
   }, [state.lastJobEventTimestamp, refreshCandidates, patch]);
+
+  React.useEffect(() => {
+    void refreshAutonomyRuns().catch((error) =>
+      patch({ error: errorMessage(error) }),
+    );
+  }, [state.lastJobEventTimestamp, refreshAutonomyRuns, patch]);
+
+  React.useEffect(() => {
+    if (
+      !state.autonomyRuns.some((run) =>
+        ["queued", "running"].includes(run.status) ||
+        (run.status === "cancelled" && run.active_job_ids.length > 0),
+      )
+    ) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void refreshAutonomyRuns().catch((error) =>
+        patch({ error: errorMessage(error) }),
+      );
+    }, 4_000);
+    return () => window.clearInterval(timer);
+  }, [state.autonomyRuns, refreshAutonomyRuns, patch]);
 
   React.useEffect(() => {
     if (!state.selectedProjectId) return;
@@ -464,7 +591,9 @@ export const StudioProvider: React.FC<{ children: React.ReactNode }> = ({
     setError: (error) => patch({ error }),
     refreshAll,
     refreshJobs,
+    refreshAutonomyRuns,
     refreshCandidates,
+    mergeAutonomyRun,
   };
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;
