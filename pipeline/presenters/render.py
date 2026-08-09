@@ -220,6 +220,102 @@ def _prepare_png_puppet(
     return manifest["direction"]
 
 
+def _prepare_procedural_puppet(
+    story_json_path: str | Path,
+    manifest: dict[str, Any],
+    *,
+    test_mode: bool,
+    render_profile: str,
+) -> dict[str, Any]:
+    """Attach Remotion-drawn characters directly to the canonical narration.
+
+    Storytime scenes do not need an intermediate avatar movie or a committed
+    pose pack. The renderer constructs the cast from deterministic vector
+    primitives, while this stage preserves the same audio-master contract used
+    by every other presenter provider.
+    """
+
+    production = _production(manifest)
+    narration = (
+        manifest.get("narration")
+        if isinstance(manifest.get("narration"), dict)
+        else {}
+    )
+    configured = str(narration.get("audio_path") or "").strip()
+    if not configured:
+        raise ValueError(
+            "procedural_puppet presenter requires canonical narration.audio_path"
+        )
+    narration_path = resolve_project_path(configured)
+    if not narration_path.is_file():
+        raise FileNotFoundError(
+            f"Canonical narration audio is missing: {narration_path}"
+        )
+    probe = ffprobe_summary(narration_path)
+    if not probe.get("audio_codec"):
+        raise ValueError(f"Canonical narration is not readable audio: {narration_path}")
+
+    beats = narration.get("beats")
+    if not isinstance(beats, list) or not beats:
+        raise ValueError(
+            "procedural_puppet presenter requires exact narration.beats timing"
+        )
+    expected = float(narration.get("duration_seconds") or 0.0)
+    actual = float(probe.get("duration_seconds") or 0.0)
+    duration = expected or actual
+    if duration <= 0:
+        raise ValueError("Procedural presenter narration duration must be positive")
+    if expected and actual and abs(expected - actual) > 0.35:
+        raise ValueError(
+            "Canonical narration duration does not match its audio probe: "
+            f"manifest={expected:.3f}s audio={actual:.3f}s"
+        )
+
+    direction = {
+        "job_id": str(manifest["story_id"]),
+        "presenter_provider": "procedural_puppet",
+        "presenter_renderer": "remotion",
+        "presenter_profile": production.get("presenter_style"),
+        "narration_audio_path": project_relative(narration_path),
+        "estimated_duration_seconds": duration,
+        "duration_source": "canonical_narration",
+        "avatar_render_background": production.get("presenter_background"),
+        "render_profile": render_profile,
+        "test_mode": bool(test_mode),
+    }
+    manifest["direction"] = {
+        key: value for key, value in direction.items() if value not in (None, "")
+    }
+    write_manifest(story_json_path, manifest)
+    record_story_artifact(
+        story_json_path,
+        "procedural_presenter",
+        artifact_record(
+            path=narration_path,
+            stage="presenter",
+            input_paths=[story_json_path, narration_path],
+            provider="procedural_puppet",
+            model=str(production.get("presenter_style") or "procedural_character"),
+            fresh=True,
+            reused=True,
+            test_mode=test_mode,
+            render_profile=render_profile,
+            metadata={
+                "channel_id": manifest.get("channel_id"),
+                "timing_source": narration.get("timing_source"),
+                "beat_count": len(beats),
+                **probe,
+            },
+        ),
+    )
+    print(
+        safe_text(
+            f"[presenter] Prepared procedural cast against {len(beats)} exact narration beats"
+        )
+    )
+    return manifest["direction"]
+
+
 def render_presenter(
     story_json_path: str | Path,
     *,
@@ -257,7 +353,14 @@ def render_presenter(
             test_mode=test_mode,
             render_profile=render_profile,
         )
+    if provider == "procedural_puppet":
+        return _prepare_procedural_puppet(
+            story_json_path,
+            manifest,
+            test_mode=test_mode,
+            render_profile=render_profile,
+        )
     raise ValueError(
         f"Unsupported presenter provider {provider!r}; expected avatar_engine, "
-        "video_file, or png_puppet"
+        "video_file, png_puppet, or procedural_puppet"
     )

@@ -1,0 +1,1556 @@
+{
+  "story_id": "story_sidequest_wrong_group_chat_pilot",
+  "episode_id": "episode_sidequest_wrong_group_chat_pilot",
+  "channel_id": "storytime",
+  "channel": {
+    "channel_id": "storytime",
+    "profile_version": "1.0.0",
+    "name": "Sidequest",
+    "short_name": "SQ",
+    "tagline": "Small stories. Big detours.",
+    "description": "Animated personal stories, awkward moments, and everyday observations.",
+    "accent_color": "#7C5CFC",
+    "accent_soft_color": "rgba(124, 92, 252, 0.16)",
+    "accent_hover_color": "#9278FF",
+    "default_category": "storytime",
+    "default_render_profile": "production",
+    "default_narration_mode": "explained",
+    "default_target_duration_seconds": 600,
+    "editorial_focus": "First-person experiences, social mishaps, growing pains, internet-era life, and observational comedy.",
+    "research_style": "Story-owner notes and supplied memories first; light factual verification only where a real-world detail materially affects the story.",
+    "script_style": "Conversational first-person storytelling with a fast hook, concrete scene work, honest uncertainty, escalation, visual punchlines, and a earned callback.",
+    "narration_style": "Warm, intimate, quick-witted, and naturally performative without sounding like a stand-up routine.",
+    "visual_style": "Original limited animation on warm paper: expressive line characters, bold silhouettes, economical props, reaction poses, and occasional memory inserts.",
+    "timeline_style": "Audio-master story beats averaging four to nine seconds, with pose changes, camera reframes, visual exaggeration, and held frames that land punchlines.",
+    "template_pack": "storytime_animation_v1",
+    "brand_pack": "sidequest_v1",
+    "anchor_profile": "sidequest_procedural_cast_v1",
+    "voice_profile": "sidequest_voice_v1",
+    "outro_pack": "sidequest_v1",
+    "production": {
+      "composition_template": "timeline_story_storytime",
+      "template_policy": "storytime_animation_v1",
+      "logo_path": "brand/storytime_bug.svg",
+      "outro_path": "assets/channels/storytime/outro.mp4",
+      "presenter_provider": "procedural_puppet",
+      "presenter_renderer": "remotion",
+      "presenter_preview_renderer": "remotion",
+      "presenter_final_renderer": "remotion",
+      "presenter_asset_path": null,
+      "presenter_metadata_path": null,
+      "presenter_style": "sidequest_line_cast",
+      "presenter_body_form": "neutral",
+      "presenter_background": "transparent",
+      "narrator_provider": "edge_tts",
+      "narrator_model_name": "edge-tts-7.2.8",
+      "narrator_voice_id": "en-US-AvaMultilingualNeural",
+      "narrator_voice_speed": 1.04,
+      "narrator_voice_profile_path": null,
+      "narrator_reference_audio_path": null,
+      "narrator_reference_text": null,
+      "brand": {
+        "navy": "#2B2340",
+        "deep_blue": "#443765",
+        "accent": "#7C5CFC",
+        "accent_secondary": "#FFB85C",
+        "danger": "#E85D75",
+        "white": "#FFF8EA",
+        "muted": "#8D829E",
+        "ink": "#292234"
+      }
+    },
+    "prompt_pack_version": "prompts-v1"
+  },
+  "raw": {
+    "headline_source": "I Sent a Private Voice Note to the Entire Office",
+    "source_name": "Sidequest",
+    "published_at": "2026-08-09T00:00:00+05:30",
+    "category": "storytime"
+  },
+  "script": {
+    "script_id": "script_sidequest_wrong_group_chat_pilot",
+    "headline": "I Sent a Private Voice Note to the Entire Office",
+    "dek": "One private note. Eleven listeners. Zero useful thoughts.",
+    "category": "storytime animation",
+    "status": "approved",
+    "sections": [
+      {
+        "section_id": "cold_open",
+        "section_type": "cold_open",
+        "text": "At 11:47 at night, I watched eleven tiny \u201clistened\u201d icons appear under a voice note that was not supposed to leave my phone.\n\nThe note was one minute and fifty-two seconds long, and it had gone to the office group chat. My manager was in that group. So were both interns."
+      },
+      {
+        "section_id": "setup",
+        "section_type": "context",
+        "text": "That morning, someone had announced a Saturday team-building day.\n\nI was fine with the Saturday part. I was less fine with the phrase \u201chigh-energy icebreaker.\u201d\n\nSo that night I recorded a voice note for my friend Sam.\n\nI said I would rather file my taxes in a moving car than explain my spirit animal to Accounting.\n\nThe note was dramatic and private for about three seconds."
+      },
+      {
+        "section_id": "wrong_chat",
+        "section_type": "key_developments",
+        "text": "Sam's chat sat directly under a group called \u201cSaturday Offsite.\u201d\n\nI tapped, held the button, delivered my tiny speech, and hit send without reading the name at the top.\n\nThen Sam texted me separately.\n\n\u201cWrong chat.\u201d\n\nI looked back at the screen and felt every useful thought leave my body at once."
+      },
+      {
+        "section_id": "damage_control",
+        "section_type": "stakes",
+        "text": "I found \u201cdelete for everyone,\u201d but eleven people had already listened.\n\nSo I typed an apology.\n\nIt started with \u201cFor context,\u201d which is how you know an apology is about to create more context.\n\nI deleted that too.\n\nThen my manager reacted to the original voice note with a thumbs-up and wrote, \u201cLooking forward to your energy tomorrow.\u201d"
+      },
+      {
+        "section_id": "next_morning",
+        "section_type": "why_it_matters",
+        "text": "The next morning, everyone was painfully kind to me.\n\nNobody mentioned the voice note. This was worse.\n\nThe organizer had replaced the icebreaker with \u201cshare one fun fact.\u201d\n\nWhen it reached me, my manager smiled and said, \u201cYou seem to have strong feelings about group activities. Why don't you start?\u201d\n\nMy fun fact was that I had recently learned how long one minute and fifty-two seconds can feel."
+      },
+      {
+        "section_id": "button",
+        "section_type": "conclusion",
+        "text": "I renamed the office chat \u201cDO NOT SEND AUDIO HERE.\u201d\n\nThat solved the problem.\n\nMostly."
+      }
+    ]
+  },
+  "direction": {
+    "fps": 24,
+    "estimated_duration_seconds": 109.676,
+    "presenter_provider": "procedural_puppet",
+    "narration_audio_path": "videos/sidequest-wrong-group-chat-pilot/podcast_audio.wav"
+  },
+  "narration": {
+    "audio_path": "videos/sidequest-wrong-group-chat-pilot/podcast_audio.wav",
+    "subtitles_path": "videos/sidequest-wrong-group-chat-pilot/podcast_audio.srt",
+    "provider": "edge_tts",
+    "model": "edge-tts-7.2.8",
+    "voice_id": "en-US-AvaMultilingualNeural",
+    "voice_profile": null,
+    "timing_source": "edge_word_boundaries_pcm_samples",
+    "preview_audio": false,
+    "duration_seconds": 109.676,
+    "beats": [
+      {
+        "beat_id": "cold_open_beat_01",
+        "section_id": "cold_open",
+        "text": "At 11:47 at night, I watched eleven tiny \u201clistened\u201d icons appear under a voice note that was not supposed to leave my phone.",
+        "kind": "narration",
+        "start_time": 0.0,
+        "speech_end_time": 7.574937,
+        "end_time": 7.574937
+      },
+      {
+        "beat_id": "cold_open_beat_02",
+        "section_id": "cold_open",
+        "text": "The note was one minute and fifty-two seconds long, and it had gone to the office group chat. My manager was in that group. So were both interns.",
+        "kind": "narration",
+        "start_time": 7.574937,
+        "speech_end_time": 16.728,
+        "end_time": 16.948
+      },
+      {
+        "beat_id": "setup_beat_01",
+        "section_id": "setup",
+        "text": "That morning, someone had announced a Saturday team-building day.",
+        "kind": "narration",
+        "start_time": 16.948,
+        "speech_end_time": 20.170354,
+        "end_time": 20.170354
+      },
+      {
+        "beat_id": "setup_beat_02",
+        "section_id": "setup",
+        "text": "I was fine with the Saturday part. I was less fine with the phrase \u201chigh-energy icebreaker.\u201d",
+        "kind": "narration",
+        "start_time": 20.170354,
+        "speech_end_time": 25.648354,
+        "end_time": 25.648354
+      },
+      {
+        "beat_id": "setup_beat_03",
+        "section_id": "setup",
+        "text": "So that night I recorded a voice note for my friend Sam.",
+        "kind": "narration",
+        "start_time": 25.648354,
+        "speech_end_time": 29.515167,
+        "end_time": 29.515167
+      },
+      {
+        "beat_id": "setup_beat_04",
+        "section_id": "setup",
+        "text": "I said I would rather file my taxes in a moving car than explain my spirit animal to Accounting.",
+        "kind": "narration",
+        "start_time": 29.515167,
+        "speech_end_time": 35.637646,
+        "end_time": 35.637646
+      },
+      {
+        "beat_id": "setup_beat_05",
+        "section_id": "setup",
+        "text": "The note was dramatic and private for about three seconds.",
+        "kind": "narration",
+        "start_time": 35.637646,
+        "speech_end_time": 38.86,
+        "end_time": 39.08
+      },
+      {
+        "beat_id": "wrong_chat_beat_01",
+        "section_id": "wrong_chat",
+        "text": "Sam's chat sat directly under a group called \u201cSaturday Offsite.\u201d",
+        "kind": "narration",
+        "start_time": 39.08,
+        "speech_end_time": 42.781542,
+        "end_time": 42.781542
+      },
+      {
+        "beat_id": "wrong_chat_beat_02",
+        "section_id": "wrong_chat",
+        "text": "I tapped, held the button, delivered my tiny speech, and hit send without reading the name at the top.",
+        "kind": "narration",
+        "start_time": 42.781542,
+        "speech_end_time": 49.814458,
+        "end_time": 49.814458
+      },
+      {
+        "beat_id": "wrong_chat_beat_03",
+        "section_id": "wrong_chat",
+        "text": "Then Sam texted me separately.",
+        "kind": "narration",
+        "start_time": 49.814458,
+        "speech_end_time": 51.665229,
+        "end_time": 51.665229
+      },
+      {
+        "beat_id": "wrong_chat_beat_04",
+        "section_id": "wrong_chat",
+        "text": "\u201cWrong chat.\u201d",
+        "kind": "narration",
+        "start_time": 51.665229,
+        "speech_end_time": 52.405542,
+        "end_time": 52.405542
+      },
+      {
+        "beat_id": "wrong_chat_beat_05",
+        "section_id": "wrong_chat",
+        "text": "I looked back at the screen and felt every useful thought leave my body at once.",
+        "kind": "narration",
+        "start_time": 52.405542,
+        "speech_end_time": 58.328,
+        "end_time": 58.548
+      },
+      {
+        "beat_id": "damage_control_beat_01",
+        "section_id": "damage_control",
+        "text": "I found \u201cdelete for everyone,\u201d but eleven people had already listened.",
+        "kind": "narration",
+        "start_time": 58.548,
+        "speech_end_time": 62.270854,
+        "end_time": 62.270854
+      },
+      {
+        "beat_id": "damage_control_beat_02",
+        "section_id": "damage_control",
+        "text": "So I typed an apology.",
+        "kind": "narration",
+        "start_time": 62.270854,
+        "speech_end_time": 63.963042,
+        "end_time": 63.963042
+      },
+      {
+        "beat_id": "damage_control_beat_03",
+        "section_id": "damage_control",
+        "text": "It started with \u201cFor context,\u201d which is how you know an apology is about to create more context.",
+        "kind": "narration",
+        "start_time": 63.963042,
+        "speech_end_time": 70.054979,
+        "end_time": 70.054979
+      },
+      {
+        "beat_id": "damage_control_beat_04",
+        "section_id": "damage_control",
+        "text": "I deleted that too.",
+        "kind": "narration",
+        "start_time": 70.054979,
+        "speech_end_time": 71.40875,
+        "end_time": 71.40875
+      },
+      {
+        "beat_id": "damage_control_beat_05",
+        "section_id": "damage_control",
+        "text": "Then my manager reacted to the original voice note with a thumbs-up and wrote, \u201cLooking forward to your energy tomorrow.\u201d",
+        "kind": "narration",
+        "start_time": 71.40875,
+        "speech_end_time": 78.516,
+        "end_time": 78.736
+      },
+      {
+        "beat_id": "next_morning_beat_01",
+        "section_id": "next_morning",
+        "text": "The next morning, everyone was painfully kind to me.",
+        "kind": "narration",
+        "start_time": 78.736,
+        "speech_end_time": 81.944688,
+        "end_time": 81.944688
+      },
+      {
+        "beat_id": "next_morning_beat_02",
+        "section_id": "next_morning",
+        "text": "Nobody mentioned the voice note. This was worse.",
+        "kind": "narration",
+        "start_time": 81.944688,
+        "speech_end_time": 84.796875,
+        "end_time": 84.796875
+      },
+      {
+        "beat_id": "next_morning_beat_03",
+        "section_id": "next_morning",
+        "text": "The organizer had replaced the icebreaker with \u201cshare one fun fact.\u201d",
+        "kind": "narration",
+        "start_time": 84.796875,
+        "speech_end_time": 88.718604,
+        "end_time": 88.718604
+      },
+      {
+        "beat_id": "next_morning_beat_04",
+        "section_id": "next_morning",
+        "text": "When it reached me, my manager smiled and said, \u201cYou seem to have strong feelings about group activities. Why don't you start?\u201d",
+        "kind": "narration",
+        "start_time": 88.718604,
+        "speech_end_time": 96.562083,
+        "end_time": 96.562083
+      },
+      {
+        "beat_id": "next_morning_beat_05",
+        "section_id": "next_morning",
+        "text": "My fun fact was that I had recently learned how long one minute and fifty-two seconds can feel.",
+        "kind": "narration",
+        "start_time": 96.562083,
+        "speech_end_time": 103.336,
+        "end_time": 103.556
+      },
+      {
+        "beat_id": "button_beat_01",
+        "section_id": "button",
+        "text": "I renamed the office chat \u201cDO NOT SEND AUDIO HERE.\u201d",
+        "kind": "narration",
+        "start_time": 103.556,
+        "speech_end_time": 107.636,
+        "end_time": 107.636
+      },
+      {
+        "beat_id": "button_beat_02",
+        "section_id": "button",
+        "text": "That solved the problem.",
+        "kind": "narration",
+        "start_time": 107.636,
+        "speech_end_time": 109.268,
+        "end_time": 109.268
+      },
+      {
+        "beat_id": "button_beat_03",
+        "section_id": "button",
+        "text": "Mostly.",
+        "kind": "narration",
+        "start_time": 109.268,
+        "speech_end_time": 109.676,
+        "end_time": 109.676
+      }
+    ]
+  },
+  "runtime": {
+    "render_profile": "studio_review",
+    "render_profile_settings": {
+      "fps": 24,
+      "width": 1920,
+      "height": 1080
+    }
+  },
+  "approved_timeline": {
+    "timeline_id": "timeline_sidequest_wrong_group_chat_pilot",
+    "story_id": "story_sidequest_wrong_group_chat_pilot",
+    "version": 1,
+    "status": "approved",
+    "segments": [
+      {
+        "segment_id": "segment_01_cold_open_beat_01",
+        "beat_id": "cold_open_beat_01",
+        "scene_id": "scene_01",
+        "section_id": "cold_open",
+        "start_time": 0.0,
+        "end_time": 7.574937,
+        "duration": 7.574937,
+        "narrative_function": "advance_story",
+        "visual_role": "cold_open",
+        "transition_in": "paper_cut",
+        "transition_out": "hard_cut",
+        "script_text": "At 11:47 at night, I watched eleven tiny \u201clistened\u201d icons appear under a voice note that was not supposed to leave my phone.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_cold_open"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "online",
+              "action": "freeze",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "ELEVEN PEOPLE LISTENED",
+              "variation": 0,
+              "speech_end_offset": 7.574937
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_02_cold_open_beat_02",
+        "beat_id": "cold_open_beat_02",
+        "scene_id": "scene_02",
+        "section_id": "cold_open",
+        "start_time": 7.574937,
+        "end_time": 16.948,
+        "duration": 9.373063,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "The note was one minute and fifty-two seconds long, and it had gone to the office group chat. My manager was in that group. So were both interns.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "medium"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "online",
+              "action": "hide",
+              "cast_size": 1,
+              "shot": "medium",
+              "accent_text": "MY MANAGER. BOTH INTERNS.",
+              "variation": 1,
+              "speech_end_offset": 9.153063
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_03_setup_beat_01",
+        "beat_id": "setup_beat_01",
+        "scene_id": "scene_03",
+        "section_id": "setup",
+        "start_time": 16.948,
+        "end_time": 20.170354,
+        "duration": 3.222354,
+        "narrative_function": "advance_story",
+        "visual_role": "establishing_doodle",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "That morning, someone had announced a Saturday team-building day.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "wide"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_establishing_doodle"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "neutral",
+              "location": "office",
+              "action": "talk",
+              "cast_size": 3,
+              "shot": "wide",
+              "accent_text": "SATURDAY TEAM BUILDING",
+              "variation": 2,
+              "speech_end_offset": 3.222354
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_04_setup_beat_02",
+        "beat_id": "setup_beat_02",
+        "scene_id": "scene_04",
+        "section_id": "setup",
+        "start_time": 20.170354,
+        "end_time": 25.648354,
+        "duration": 5.478,
+        "narrative_function": "advance_story",
+        "visual_role": "dialogue_two_shot",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I was fine with the Saturday part. I was less fine with the phrase \u201chigh-energy icebreaker.\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "two_shot"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_dialogue_two_shot"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "office",
+              "action": "talk",
+              "cast_size": 2,
+              "shot": "two_shot",
+              "accent_text": "HIGH-ENERGY ICEBREAKER",
+              "variation": 3,
+              "speech_end_offset": 5.478
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_05_setup_beat_03",
+        "beat_id": "setup_beat_03",
+        "scene_id": "scene_05",
+        "section_id": "setup",
+        "start_time": 25.648354,
+        "end_time": 29.515167,
+        "duration": 3.866813,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "So that night I recorded a voice note for my friend Sam.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "medium"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "neutral",
+              "location": "home",
+              "action": "talk",
+              "cast_size": 1,
+              "shot": "medium",
+              "accent_text": "A PRIVATE NOTE FOR SAM",
+              "variation": 4,
+              "speech_end_offset": 3.866813
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_06_setup_beat_04",
+        "beat_id": "setup_beat_04",
+        "scene_id": "scene_06",
+        "section_id": "setup",
+        "start_time": 29.515167,
+        "end_time": 35.637646,
+        "duration": 6.122479,
+        "narrative_function": "advance_story",
+        "visual_role": "imagination_burst",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I said I would rather file my taxes in a moving car than explain my spirit animal to Accounting.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "wide"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_imagination_burst"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "travel",
+              "action": "celebrate",
+              "cast_size": 1,
+              "shot": "wide",
+              "accent_text": "TAXES. IN A MOVING CAR.",
+              "variation": 5,
+              "speech_end_offset": 6.122479
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_07_setup_beat_05",
+        "beat_id": "setup_beat_05",
+        "scene_id": "scene_07",
+        "section_id": "setup",
+        "start_time": 35.637646,
+        "end_time": 39.08,
+        "duration": 3.442354,
+        "narrative_function": "land_punchline",
+        "visual_role": "punchline_button",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "The note was dramatic and private for about three seconds.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_punchline_button"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "home",
+              "action": "freeze",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "PRIVATE FOR THREE SECONDS",
+              "variation": 6,
+              "speech_end_offset": 3.222354
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_08_wrong_chat_beat_01",
+        "beat_id": "wrong_chat_beat_01",
+        "scene_id": "scene_08",
+        "section_id": "wrong_chat",
+        "start_time": 39.08,
+        "end_time": 42.781542,
+        "duration": 3.701542,
+        "narrative_function": "advance_story",
+        "visual_role": "establishing_doodle",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Sam's chat sat directly under a group called \u201cSaturday Offsite.\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "wide"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_establishing_doodle"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "neutral",
+              "location": "online",
+              "action": "point",
+              "cast_size": 1,
+              "shot": "wide",
+              "accent_text": "TWO CHATS. ONE BAD TAP.",
+              "variation": 7,
+              "speech_end_offset": 3.701542
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_09_wrong_chat_beat_02",
+        "beat_id": "wrong_chat_beat_02",
+        "scene_id": "scene_09",
+        "section_id": "wrong_chat",
+        "start_time": 42.781542,
+        "end_time": 49.814458,
+        "duration": 7.032916,
+        "narrative_function": "advance_story",
+        "visual_role": "motion_montage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I tapped, held the button, delivered my tiny speech, and hit send without reading the name at the top.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "sequence"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_motion_montage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "excited",
+              "location": "online",
+              "action": "point",
+              "cast_size": 1,
+              "shot": "sequence",
+              "accent_text": "TAP. HOLD. SEND.",
+              "variation": 8,
+              "speech_end_offset": 7.032916
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_10_wrong_chat_beat_03",
+        "beat_id": "wrong_chat_beat_03",
+        "scene_id": "scene_10",
+        "section_id": "wrong_chat",
+        "start_time": 49.814458,
+        "end_time": 51.665229,
+        "duration": 1.850771,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Then Sam texted me separately.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "medium"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "neutral",
+              "location": "online",
+              "action": "talk",
+              "cast_size": 1,
+              "shot": "medium",
+              "accent_text": "THEN SAM TEXTED",
+              "variation": 9,
+              "speech_end_offset": 1.850771
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_11_wrong_chat_beat_04",
+        "beat_id": "wrong_chat_beat_04",
+        "scene_id": "scene_11",
+        "section_id": "wrong_chat",
+        "start_time": 51.665229,
+        "end_time": 52.405542,
+        "duration": 0.740313,
+        "narrative_function": "advance_story",
+        "visual_role": "dialogue_two_shot",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "\u201cWrong chat.\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "two_shot"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_dialogue_two_shot"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "online",
+              "action": "freeze",
+              "cast_size": 2,
+              "shot": "two_shot",
+              "accent_text": "WRONG CHAT",
+              "variation": 10,
+              "speech_end_offset": 0.740313
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_12_wrong_chat_beat_05",
+        "beat_id": "wrong_chat_beat_05",
+        "scene_id": "scene_12",
+        "section_id": "wrong_chat",
+        "start_time": 52.405542,
+        "end_time": 58.548,
+        "duration": 6.142458,
+        "narrative_function": "advance_story",
+        "visual_role": "imagination_burst",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I looked back at the screen and felt every useful thought leave my body at once.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_imagination_burst"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "memory_space",
+              "action": "fall",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "EVERY THOUGHT LEFT",
+              "variation": 11,
+              "speech_end_offset": 5.922458
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_13_damage_control_beat_01",
+        "beat_id": "damage_control_beat_01",
+        "scene_id": "scene_13",
+        "section_id": "damage_control",
+        "start_time": 58.548,
+        "end_time": 62.270854,
+        "duration": 3.722854,
+        "narrative_function": "advance_story",
+        "visual_role": "motion_montage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I found \u201cdelete for everyone,\u201d but eleven people had already listened.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "sequence"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_motion_montage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "online",
+              "action": "run",
+              "cast_size": 1,
+              "shot": "sequence",
+              "accent_text": "DELETE FOR EVERYONE",
+              "variation": 12,
+              "speech_end_offset": 3.722854
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_14_damage_control_beat_02",
+        "beat_id": "damage_control_beat_02",
+        "scene_id": "scene_14",
+        "section_id": "damage_control",
+        "start_time": 62.270854,
+        "end_time": 63.963042,
+        "duration": 1.692188,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "So I typed an apology.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "medium"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "online",
+              "action": "talk",
+              "cast_size": 1,
+              "shot": "medium",
+              "accent_text": "SO I TYPED AN APOLOGY",
+              "variation": 13,
+              "speech_end_offset": 1.692188
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_15_damage_control_beat_03",
+        "beat_id": "damage_control_beat_03",
+        "scene_id": "scene_15",
+        "section_id": "damage_control",
+        "start_time": 63.963042,
+        "end_time": 70.054979,
+        "duration": 6.091937,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "It started with \u201cFor context,\u201d which is how you know an apology is about to create more context.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "online",
+              "action": "point",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "FOR CONTEXT...",
+              "variation": 14,
+              "speech_end_offset": 6.091937
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_16_damage_control_beat_04",
+        "beat_id": "damage_control_beat_04",
+        "scene_id": "scene_16",
+        "section_id": "damage_control",
+        "start_time": 70.054979,
+        "end_time": 71.40875,
+        "duration": 1.353771,
+        "narrative_function": "land_punchline",
+        "visual_role": "punchline_button",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I deleted that too.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_punchline_button"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "online",
+              "action": "freeze",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "DELETE THAT TOO",
+              "variation": 15,
+              "speech_end_offset": 1.353771
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_17_damage_control_beat_05",
+        "beat_id": "damage_control_beat_05",
+        "scene_id": "scene_17",
+        "section_id": "damage_control",
+        "start_time": 71.40875,
+        "end_time": 78.736,
+        "duration": 7.32725,
+        "narrative_function": "advance_story",
+        "visual_role": "dialogue_two_shot",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Then my manager reacted to the original voice note with a thumbs-up and wrote, \u201cLooking forward to your energy tomorrow.\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "two_shot"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_dialogue_two_shot"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "online",
+              "action": "talk",
+              "cast_size": 2,
+              "shot": "two_shot",
+              "accent_text": "LOOKING FORWARD TO YOUR ENERGY",
+              "variation": 16,
+              "speech_end_offset": 7.10725
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_18_next_morning_beat_01",
+        "beat_id": "next_morning_beat_01",
+        "scene_id": "scene_18",
+        "section_id": "next_morning",
+        "start_time": 78.736,
+        "end_time": 81.944688,
+        "duration": 3.208688,
+        "narrative_function": "advance_story",
+        "visual_role": "establishing_doodle",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "The next morning, everyone was painfully kind to me.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "wide"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_establishing_doodle"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "office",
+              "action": "hide",
+              "cast_size": 4,
+              "shot": "wide",
+              "accent_text": "THE NEXT MORNING",
+              "variation": 17,
+              "speech_end_offset": 3.208688
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_19_next_morning_beat_02",
+        "beat_id": "next_morning_beat_02",
+        "scene_id": "scene_19",
+        "section_id": "next_morning",
+        "start_time": 81.944688,
+        "end_time": 84.796875,
+        "duration": 2.852187,
+        "narrative_function": "land_punchline",
+        "visual_role": "punchline_button",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Nobody mentioned the voice note. This was worse.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_punchline_button"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "office",
+              "action": "freeze",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "NOBODY MENTIONED IT",
+              "variation": 18,
+              "speech_end_offset": 2.852187
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_20_next_morning_beat_03",
+        "beat_id": "next_morning_beat_03",
+        "scene_id": "scene_20",
+        "section_id": "next_morning",
+        "start_time": 84.796875,
+        "end_time": 88.718604,
+        "duration": 3.921729,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "The organizer had replaced the icebreaker with \u201cshare one fun fact.\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "medium"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "excited",
+              "location": "office",
+              "action": "point",
+              "cast_size": 1,
+              "shot": "medium",
+              "accent_text": "ONE FUN FACT",
+              "variation": 19,
+              "speech_end_offset": 3.921729
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_21_next_morning_beat_04",
+        "beat_id": "next_morning_beat_04",
+        "scene_id": "scene_21",
+        "section_id": "next_morning",
+        "start_time": 88.718604,
+        "end_time": 96.562083,
+        "duration": 7.843479,
+        "narrative_function": "advance_story",
+        "visual_role": "dialogue_two_shot",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "When it reached me, my manager smiled and said, \u201cYou seem to have strong feelings about group activities. Why don't you start?\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "two_shot"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_dialogue_two_shot"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "office",
+              "action": "talk",
+              "cast_size": 2,
+              "shot": "two_shot",
+              "accent_text": "WHY DON'T YOU START?",
+              "variation": 20,
+              "speech_end_offset": 7.843479
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_22_next_morning_beat_05",
+        "beat_id": "next_morning_beat_05",
+        "scene_id": "scene_22",
+        "section_id": "next_morning",
+        "start_time": 96.562083,
+        "end_time": 103.556,
+        "duration": 6.993917,
+        "narrative_function": "advance_story",
+        "visual_role": "imagination_burst",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "My fun fact was that I had recently learned how long one minute and fifty-two seconds can feel.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "wide"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_imagination_burst"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "panic",
+              "location": "memory_space",
+              "action": "freeze",
+              "cast_size": 1,
+              "shot": "wide",
+              "accent_text": "ONE MINUTE. FIFTY-TWO SECONDS.",
+              "variation": 21,
+              "speech_end_offset": 6.773917
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_23_button_beat_01",
+        "beat_id": "button_beat_01",
+        "scene_id": "scene_23",
+        "section_id": "button",
+        "start_time": 103.556,
+        "end_time": 107.636,
+        "duration": 4.08,
+        "narrative_function": "land_punchline",
+        "visual_role": "punchline_button",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "I renamed the office chat \u201cDO NOT SEND AUDIO HERE.\u201d",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_punchline_button"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "neutral",
+              "location": "online",
+              "action": "point",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "DO NOT SEND AUDIO HERE",
+              "variation": 22,
+              "speech_end_offset": 4.08
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_24_button_beat_02",
+        "beat_id": "button_beat_02",
+        "scene_id": "scene_24",
+        "section_id": "button",
+        "start_time": 107.636,
+        "end_time": 109.268,
+        "duration": 1.632,
+        "narrative_function": "advance_story",
+        "visual_role": "character_stage",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "That solved the problem.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "medium"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_character_stage"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "excited",
+              "location": "online",
+              "action": "celebrate",
+              "cast_size": 1,
+              "shot": "medium",
+              "accent_text": "PROBLEM SOLVED",
+              "variation": 23,
+              "speech_end_offset": 1.632
+            }
+          }
+        },
+        "status": "approved"
+      },
+      {
+        "segment_id": "segment_25_button_beat_03",
+        "beat_id": "button_beat_03",
+        "scene_id": "scene_25",
+        "section_id": "button",
+        "start_time": 109.268,
+        "end_time": 109.676,
+        "duration": 0.408,
+        "narrative_function": "land_punchline",
+        "visual_role": "punchline_button",
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut",
+        "script_text": "Mostly.",
+        "anchor": {
+          "visible": false,
+          "speaking": true,
+          "camera": "close"
+        },
+        "visual": {
+          "media_type": "fallback",
+          "content_role": "fallback"
+        },
+        "template": {
+          "template_id": "storytime_punchline_button"
+        },
+        "audio": {
+          "mode": "narration",
+          "narration_volume": 1.0,
+          "source_volume": 0.0,
+          "ducking": false
+        },
+        "overlays": {
+          "data": {
+            "storytime": {
+              "mood": "awkward",
+              "location": "online",
+              "action": "freeze",
+              "cast_size": 1,
+              "shot": "close",
+              "accent_text": "MOSTLY.",
+              "variation": 24,
+              "speech_end_offset": 0.408
+            }
+          }
+        },
+        "status": "approved"
+      }
+    ]
+  },
+  "composition": {
+    "template": "timeline_story_storytime",
+    "duration_seconds": 109.676,
+    "output_path": "videos/sidequest-wrong-group-chat-pilot/output.mp4",
+    "preview_path": "videos/sidequest-wrong-group-chat-pilot/preview.png"
+  },
+  "production_notes": {
+    "fictional_composite": true,
+    "design_read": "Reading this as an awkward everyday story for a YouTube storytime audience, Playful / Agency mode - VARIANCE 8 / MOTION 8 / DENSITY 3.",
+    "asset_strategy": "Original procedural Sidequest animation only; no external media, creator artwork, memes, or stock footage.",
+    "voice_status": "channel-owned neural synthetic voice"
+  }
+}

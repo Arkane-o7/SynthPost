@@ -1,6 +1,6 @@
 // Synthea Studio contracts. Keep field names snake_case to match persisted JSON.
 
-export type ChannelId = 'synthpost' | 'meridian' | 'beyond';
+export type ChannelId = 'synthpost' | 'meridian' | 'beyond' | 'storytime';
 
 export type ChannelProductionProfile = {
   composition_template: string;
@@ -282,7 +282,7 @@ export type NarrationArtifact = {
   script_id: string;
   script_version: number;
   input_hash: string;
-  provider: 'dots_tts' | 'kokoro';
+  provider: 'dots_tts' | 'edge_tts' | 'kokoro';
   model: string;
   voice_id: string;
   voice_speed: number;

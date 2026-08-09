@@ -705,7 +705,7 @@ class NarrationArtifact(StrictModel):
     script_id: str
     script_version: int
     input_hash: str
-    provider: Literal["dots_tts", "kokoro"] = "dots_tts"
+    provider: Literal["dots_tts", "edge_tts", "kokoro"] = "dots_tts"
     model: str = "dots.tts-soar-mlx-int4"
     voice_id: str
     voice_speed: float = Field(gt=0)

@@ -12,6 +12,8 @@ SynthPost is a local-first, AI-assisted newsroom and video-production system for
 - Editable, validated multi-template timelines
 - Local avatar/lip-sync rendering through the retained Avatar Engine, consuming SynthPost's canonical narration
 - Remotion composition and FFmpeg episode assembly
+- Sidequest storytime-animation production with a procedural recurring cast,
+  script-derived scene direction, and approved memory cutaways
 - Hermes-powered unattended production from story discovery through a strictly checked, versioned MP4
 - React Studio with job progress, logs, retries, previews, and mobile/private Tailscale access
 - Configurable multi-process worker pools for parallel projects and episode renders
@@ -147,6 +149,7 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 - [Unattended production](docs/AUTONOMY.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [dots.tts voice cloning and expression](docs/TTS.md)
+- [Sidequest storytime animation](docs/STORYTIME_ANIMATION.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Contributing](CONTRIBUTING.md)

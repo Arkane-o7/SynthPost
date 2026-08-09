@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 
-ChannelId = Literal["synthpost", "meridian", "beyond"]
+ChannelId = Literal["synthpost", "meridian", "beyond", "storytime"]
 DEFAULT_CHANNEL_ID: ChannelId = "synthpost"
 
 

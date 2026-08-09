@@ -56,6 +56,7 @@ const templateToCompositionId: Record<string, string> = {
   timeline_story_synthpost: "timeline-story-synthpost",
   timeline_story_meridian: "timeline-story-meridian",
   timeline_story_beyond: "timeline-story-beyond",
+  timeline_story_storytime: "timeline-story-storytime",
   approved_timeline: "timeline-story",
 };
 
@@ -785,7 +786,10 @@ const main = async () => {
     }
   } else if (timelineSegments.length) {
     const narrationPath = String(
-      direction.avatar_audio_path ?? manifest.narration?.audio_path ?? "",
+      direction.narration_audio_path ??
+        direction.avatar_audio_path ??
+        manifest.narration?.audio_path ??
+        "",
     ).trim();
     if (narrationPath) {
       narrationAudio = await stageMedia(

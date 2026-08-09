@@ -20,10 +20,11 @@ from .base import (
 )
 from .beyond import PROFILE as BEYOND
 from .meridian import PROFILE as MERIDIAN
+from .storytime import PROFILE as STORYTIME
 from .synthpost import PROFILE as SYNTHPOST
 
 
-_CHANNELS: tuple[ChannelProfile, ...] = (SYNTHPOST, MERIDIAN, BEYOND)
+_CHANNELS: tuple[ChannelProfile, ...] = (SYNTHPOST, MERIDIAN, BEYOND, STORYTIME)
 CHANNELS: Mapping[ChannelId, ChannelProfile] = MappingProxyType(
     {profile.channel_id: profile for profile in _CHANNELS}
 )
@@ -57,6 +58,7 @@ __all__ = [
     "CHANNELS",
     "DEFAULT_CHANNEL_ID",
     "MERIDIAN",
+    "STORYTIME",
     "SYNTHPOST",
     "BrandTheme",
     "ChannelId",

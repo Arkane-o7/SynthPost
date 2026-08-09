@@ -1,10 +1,11 @@
-"""Generate and load the canonical dots.tts narration artifact for a story."""
+"""Generate and load the canonical channel-owned narration artifact."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,7 @@ from ..storage import (
 )
 
 SAMPLE_RATE = 48_000
+EDGE_TTS_PACKAGE = "edge-tts==7.2.8"
 
 
 class NarrationNotReadyError(ValueError):
@@ -111,10 +113,11 @@ def _request(
 ) -> dict[str, Any]:
     settings = config.get_settings().narration
     production = resolved_production(channel_profile)
-    if production["narrator_provider"] != "dots_tts":
+    provider = str(production["narrator_provider"])
+    if provider not in {"dots_tts", "edge_tts"}:
         raise ValueError(
-            f"Unsupported narrator provider {production['narrator_provider']!r} "
-            f"for {channel_profile.name}; expected 'dots_tts'"
+            f"Unsupported narrator provider {provider!r} for {channel_profile.name}; "
+            "expected 'dots_tts' or 'edge_tts'"
         )
     units = _units(script)
     request_units: list[dict[str, Any]] = []
@@ -142,7 +145,7 @@ def _request(
         "channel_profile_version": channel_profile.profile_version,
         "script_id": script.script_id,
         "script_version": script.version,
-        "provider": "dots_tts",
+        "provider": provider,
         "model_path": str(resolve_project_path(settings.model_path)),
         "model_name": production["narrator_model_name"] or settings.model_name,
         "voice_id": production["narrator_voice_id"],
@@ -179,6 +182,53 @@ def _request(
         "test_mode": test_mode,
         "units": request_units,
     }
+
+
+def _worker_command(
+    request: dict[str, Any],
+    request_path: Path,
+    audio_path: Path,
+    result_path: Path,
+) -> list[str]:
+    provider = str(request["provider"])
+    if provider == "dots_tts":
+        return [
+            _tts_python(),
+            str(PROJECT_ROOT / "pipeline" / "narration" / "dots_worker.py"),
+            str(request_path),
+            str(audio_path),
+            str(result_path),
+        ]
+
+    worker = str(PROJECT_ROOT / "pipeline" / "narration" / "edge_worker.py")
+    if request.get("test_mode"):
+        return [
+            _tts_python(),
+            worker,
+            str(request_path),
+            str(audio_path),
+            str(result_path),
+        ]
+    uv = shutil.which("uv")
+    if not uv:
+        raise RuntimeError(
+            "Sidequest Edge narration requires `uv` so its pinned neural TTS "
+            f"runtime ({EDGE_TTS_PACKAGE}) can run without modifying SynthPost's venv."
+        )
+    return [
+        uv,
+        "run",
+        "--quiet",
+        "--with",
+        EDGE_TTS_PACKAGE,
+        "--python",
+        _tts_python(),
+        "python",
+        worker,
+        str(request_path),
+        str(audio_path),
+        str(result_path),
+    ]
 
 
 def _input_hash(request: dict[str, Any]) -> str:
@@ -243,12 +293,12 @@ def generate_narration(
     script = repository.latest_script(story_id)
     if not script or script.status != ScriptStatus.approved:
         raise NarrationNotReadyError(
-            "Approve the latest script before generating its dots.tts narration."
+            "Approve the latest script before generating its canonical narration."
         )
     episode = repository.episode_for_story(story_id)
     channel_profile = get_channel_profile(episode.channel_id)
     request = _request(script, channel_profile, test_mode=test_mode)
-    if not test_mode:
+    if not test_mode and request["provider"] == "dots_tts":
         profile_path = request.get("voice_profile_path")
         reference_path = request.get("reference_audio_path")
         reference_text = str(request.get("reference_text") or "").strip()
@@ -314,13 +364,7 @@ def generate_narration(
             part for part in (str(PROJECT_ROOT), env.get("PYTHONPATH", "")) if part
         )
         process = subprocess.run(
-            [
-                _tts_python(),
-                str(PROJECT_ROOT / "pipeline" / "narration" / "dots_worker.py"),
-                str(request_path),
-                str(temp_audio),
-                str(result_path),
-            ],
+            _worker_command(request, request_path, temp_audio, result_path),
             cwd=PROJECT_ROOT,
             env=env,
             capture_output=True,
@@ -331,7 +375,7 @@ def generate_narration(
         if process.returncode != 0:
             detail = (process.stderr or process.stdout).strip()
             raise RuntimeError(
-                "dots.tts narration generation failed"
+                f"{request['provider']} narration generation failed"
                 + (f": {detail[-1200:]}" if detail else "")
             )
         result = json.loads(result_path.read_text(encoding="utf-8"))
@@ -362,7 +406,7 @@ def generate_narration(
         script_id=script.script_id,
         script_version=script.version,
         input_hash=expected_hash,
-        provider="dots_tts",
+        provider=request["provider"],
         model=request["model_name"],
         voice_id=request["voice_id"],
         voice_speed=request["voice_speed"],
@@ -377,7 +421,11 @@ def generate_narration(
             ["test_synthesizer=true"]
             if test_mode
             else [
-                "timing_is_sample_exact_not_forced_alignment",
+                (
+                    "timing_uses_native_word_boundaries_on_pcm_sample_clock"
+                    if request["provider"] == "edge_tts"
+                    else "timing_is_sample_exact_not_forced_alignment"
+                ),
                 "synthetic_voice_disclosure_required",
             ]
         ),
@@ -426,7 +474,7 @@ def load_narration_artifact(
     if not path.exists():
         if require_current:
             raise NarrationNotReadyError(
-                "Generate dots.tts narration for the latest approved script first."
+                "Generate canonical narration for the latest approved script first."
             )
         return None
     artifact = NarrationArtifact.model_validate(read_manifest(path))

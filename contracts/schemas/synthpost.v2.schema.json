@@ -8,7 +8,7 @@
       "type": "object",
       "required": ["channel_id", "profile_version", "name", "short_name", "tagline", "description", "accent_color", "accent_soft_color", "accent_hover_color", "default_category", "default_render_profile", "default_narration_mode", "default_target_duration_seconds", "editorial_focus", "research_style", "script_style", "narration_style", "visual_style", "timeline_style", "template_pack", "brand_pack", "anchor_profile", "voice_profile", "outro_pack", "prompt_pack_version", "production"],
       "properties": {
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "profile_version": {"type": "string"},
         "name": {"type": "string"},
         "short_name": {"type": "string"},
@@ -65,7 +65,7 @@
       "required": ["project_id", "channel_id", "profile_version", "title", "created_at", "updated_at", "default_category", "default_render_profile", "status"],
       "properties": {
         "project_id": {"type": "string"},
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "profile_version": {"type": "string"},
         "title": {"type": "string"},
         "created_at": {"type": "string"},
@@ -81,7 +81,7 @@
       "properties": {
         "episode_id": {"type": "string"},
         "project_id": {"type": "string"},
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "profile_version": {"type": "string"},
         "title": {"type": "string"},
         "story_ids": {"type": "array", "items": {"type": "string"}},
@@ -119,7 +119,7 @@
       "required": ["candidate_id", "channel_id", "title", "canonical_url", "source_id", "source_name", "published_at", "author", "category", "summary", "thumbnail_url", "language", "discovered_at", "scores", "editorial_fit", "final_score", "score_reasons", "selection_status", "rejection_reasons", "duplicate_group_id", "event_cluster_id", "cluster_size", "supporting_sources", "related_candidate_ids", "evidence_score", "assignment_lane", "assignment_summary", "recommended_format", "assignment_confidence"],
       "properties": {
         "candidate_id": {"type": "string"},
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "title": {"type": "string"},
         "canonical_url": {"type": ["string", "null"]},
         "source_id": {"type": ["string", "null"]},
@@ -335,7 +335,7 @@
         "script_id": {"type": "string"},
         "script_version": {"type": "integer"},
         "input_hash": {"type": "string"},
-        "provider": {"enum": ["dots_tts", "kokoro"]},
+        "provider": {"enum": ["dots_tts", "edge_tts", "kokoro"]},
         "model": {"type": "string"},
         "voice_id": {"type": "string"},
         "voice_speed": {"type": "number"},
@@ -431,7 +431,7 @@
       "required": ["job_id", "channel_id", "episode_id", "story_id", "autonomy_run_id", "job_type", "queue_lane", "render_profile", "status", "progress", "stage", "started_at", "completed_at", "output_paths", "log_path", "error", "attempts", "max_attempts", "available_at", "last_attempt_at", "last_error", "failure_kind"],
       "properties": {
         "job_id": {"type": "string"},
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "episode_id": {"type": ["string", "null"]},
         "story_id": {"type": ["string", "null"]},
         "autonomy_run_id": {"type": ["string", "null"]},
@@ -529,7 +529,7 @@
       "required": ["run_id", "channel_id", "project_id", "episode_id", "story_id", "candidate_id", "engine", "engine_session_id", "status", "current_stage", "progress", "policy", "job_ids", "active_job_ids", "final_output_path", "final_output_sha256", "qa_report_path", "qa", "warnings", "error", "created_at", "updated_at", "started_at", "completed_at", "reviewed_at"],
       "properties": {
         "run_id": {"type": "string"},
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "project_id": {"type": "string"},
         "episode_id": {"type": "string"},
         "story_id": {"type": ["string", "null"]},
@@ -561,7 +561,7 @@
       "required": ["run_id", "channel_id", "project_id", "episode_id", "story_id", "candidate_id", "engine", "engine_session_id", "status", "current_stage", "progress", "policy", "job_ids", "active_job_ids", "final_output_path", "final_output_sha256", "qa_report_path", "qa", "warnings", "error", "created_at", "updated_at", "started_at", "completed_at", "reviewed_at", "project_title", "episode_title", "story_title", "selected_duration_seconds", "duration_rationale"],
       "properties": {
         "run_id": {"type": "string"},
-        "channel_id": {"enum": ["synthpost", "meridian", "beyond"]},
+        "channel_id": {"enum": ["synthpost", "meridian", "beyond", "storytime"]},
         "project_id": {"type": "string"},
         "episode_id": {"type": "string"},
         "story_id": {"type": ["string", "null"]},

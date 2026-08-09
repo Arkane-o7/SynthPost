@@ -6,6 +6,7 @@ import { FullScreenNewsVisuals } from "./templates/FullScreenNewsVisuals";
 import { SplitMain } from "./templates/SplitMain";
 import { TimelineStory } from "./templates/TimelineStory";
 import { MeridianStory } from "./templates/MeridianStory";
+import { StorytimeStory, StorytimeThumbnail } from "./templates/StorytimeStory";
 
 import type { StoryProps } from "./types";
 
@@ -151,6 +152,50 @@ export const RemotionRoot: React.FC = () => {
         durationInFrames={24 * 12}
         defaultProps={{...fallbackProps, channelId: "beyond", channelName: "Beyond"}}
         calculateMetadata={calculateStoryMetadata}
+      />
+      <Composition
+        id="timeline-story-storytime"
+        component={StorytimeStory}
+        width={1920}
+        height={1080}
+        fps={24}
+        durationInFrames={24 * 12}
+        defaultProps={{
+          ...fallbackProps,
+          channelId: "storytime",
+          channelName: "Sidequest",
+          channelTagline: "Small stories. Big detours.",
+          headline: "THAT SEEMED LIKE A GOOD IDEA",
+          category: "STORYTIME",
+          sourceLabel: "SIDEQUEST",
+          brandTheme: {
+            navy: "#2B2340",
+            deepBlue: "#443765",
+            accent: "#7C5CFC",
+            accentSecondary: "#FFB85C",
+            danger: "#E85D75",
+            white: "#FFF8EA",
+            muted: "#8D829E",
+            ink: "#292234",
+          },
+        }}
+        calculateMetadata={calculateStoryMetadata}
+      />
+      <Composition
+        id="storytime-thumbnail-16x9"
+        component={StorytimeThumbnail}
+        width={1920}
+        height={1080}
+        fps={24}
+        durationInFrames={1}
+      />
+      <Composition
+        id="storytime-thumbnail-4x3"
+        component={StorytimeThumbnail}
+        width={1200}
+        height={900}
+        fps={24}
+        durationInFrames={1}
       />
     </>
   );

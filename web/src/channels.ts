@@ -12,7 +12,7 @@ export type ChannelPresentation = {
   accentGlow: string;
 };
 
-export const CHANNEL_IDS: ChannelId[] = ["synthpost", "meridian", "beyond"];
+export const CHANNEL_IDS: ChannelId[] = ["synthpost", "meridian", "beyond", "storytime"];
 
 const CHANNEL_PRESENTATIONS: Record<ChannelId, ChannelPresentation> = {
   synthpost: {
@@ -47,6 +47,17 @@ const CHANNEL_PRESENTATIONS: Record<ChannelId, ChannelPresentation> = {
     accentHover: "#6aa0ff",
     accentSoft: "rgba(79, 140, 255, 0.14)",
     accentGlow: "rgba(79, 140, 255, 0.28)",
+  },
+  storytime: {
+    channelId: "storytime",
+    name: "Sidequest",
+    initials: "SQ",
+    tagline: "Stories · mishaps · detours",
+    description: "Animated personal stories, awkward moments and everyday observations.",
+    accent: "#7c5cfc",
+    accentHover: "#9278ff",
+    accentSoft: "rgba(124, 92, 252, 0.16)",
+    accentGlow: "rgba(124, 92, 252, 0.3)",
   },
 };
 

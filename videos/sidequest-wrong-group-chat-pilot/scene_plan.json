@@ -1,0 +1,107 @@
+{
+  "story_id": "story_sidequest_wrong_group_chat_pilot",
+  "design_read": "Reading this as an awkward everyday story for a YouTube storytime audience, Playful / Agency mode - VARIANCE 8 / MOTION 8 / DENSITY 3.",
+  "asset_strategy": "Original procedural Sidequest animation only; no external media, creator artwork, memes, or stock footage.",
+  "beats": [
+    {
+      "template_id": "storytime_cold_open",
+      "cue": {"mood": "panic", "location": "online", "action": "freeze", "cast_size": 1, "shot": "close", "accent_text": "ELEVEN PEOPLE LISTENED", "variation": 0}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "awkward", "location": "online", "action": "hide", "cast_size": 1, "shot": "medium", "accent_text": "MY MANAGER. BOTH INTERNS.", "variation": 1}
+    },
+    {
+      "template_id": "storytime_establishing_doodle",
+      "cue": {"mood": "neutral", "location": "office", "action": "talk", "cast_size": 3, "shot": "wide", "accent_text": "SATURDAY TEAM BUILDING", "variation": 2}
+    },
+    {
+      "template_id": "storytime_dialogue_two_shot",
+      "cue": {"mood": "awkward", "location": "office", "action": "talk", "cast_size": 2, "shot": "two_shot", "accent_text": "HIGH-ENERGY ICEBREAKER", "variation": 3}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "neutral", "location": "home", "action": "talk", "cast_size": 1, "shot": "medium", "accent_text": "A PRIVATE NOTE FOR SAM", "variation": 4}
+    },
+    {
+      "template_id": "storytime_imagination_burst",
+      "cue": {"mood": "panic", "location": "travel", "action": "celebrate", "cast_size": 1, "shot": "wide", "accent_text": "TAXES. IN A MOVING CAR.", "variation": 5}
+    },
+    {
+      "template_id": "storytime_punchline_button",
+      "cue": {"mood": "awkward", "location": "home", "action": "freeze", "cast_size": 1, "shot": "close", "accent_text": "PRIVATE FOR THREE SECONDS", "variation": 6}
+    },
+    {
+      "template_id": "storytime_establishing_doodle",
+      "cue": {"mood": "neutral", "location": "online", "action": "point", "cast_size": 1, "shot": "wide", "accent_text": "TWO CHATS. ONE BAD TAP.", "variation": 7}
+    },
+    {
+      "template_id": "storytime_motion_montage",
+      "cue": {"mood": "excited", "location": "online", "action": "point", "cast_size": 1, "shot": "sequence", "accent_text": "TAP. HOLD. SEND.", "variation": 8}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "neutral", "location": "online", "action": "talk", "cast_size": 1, "shot": "medium", "accent_text": "THEN SAM TEXTED", "variation": 9}
+    },
+    {
+      "template_id": "storytime_dialogue_two_shot",
+      "cue": {"mood": "panic", "location": "online", "action": "freeze", "cast_size": 2, "shot": "two_shot", "accent_text": "WRONG CHAT", "variation": 10}
+    },
+    {
+      "template_id": "storytime_imagination_burst",
+      "cue": {"mood": "panic", "location": "memory_space", "action": "fall", "cast_size": 1, "shot": "close", "accent_text": "EVERY THOUGHT LEFT", "variation": 11}
+    },
+    {
+      "template_id": "storytime_motion_montage",
+      "cue": {"mood": "panic", "location": "online", "action": "run", "cast_size": 1, "shot": "sequence", "accent_text": "DELETE FOR EVERYONE", "variation": 12}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "awkward", "location": "online", "action": "talk", "cast_size": 1, "shot": "medium", "accent_text": "SO I TYPED AN APOLOGY", "variation": 13}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "awkward", "location": "online", "action": "point", "cast_size": 1, "shot": "close", "accent_text": "FOR CONTEXT...", "variation": 14}
+    },
+    {
+      "template_id": "storytime_punchline_button",
+      "cue": {"mood": "panic", "location": "online", "action": "freeze", "cast_size": 1, "shot": "close", "accent_text": "DELETE THAT TOO", "variation": 15}
+    },
+    {
+      "template_id": "storytime_dialogue_two_shot",
+      "cue": {"mood": "awkward", "location": "online", "action": "talk", "cast_size": 2, "shot": "two_shot", "accent_text": "LOOKING FORWARD TO YOUR ENERGY", "variation": 16}
+    },
+    {
+      "template_id": "storytime_establishing_doodle",
+      "cue": {"mood": "awkward", "location": "office", "action": "hide", "cast_size": 4, "shot": "wide", "accent_text": "THE NEXT MORNING", "variation": 17}
+    },
+    {
+      "template_id": "storytime_punchline_button",
+      "cue": {"mood": "panic", "location": "office", "action": "freeze", "cast_size": 1, "shot": "close", "accent_text": "NOBODY MENTIONED IT", "variation": 18}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "excited", "location": "office", "action": "point", "cast_size": 1, "shot": "medium", "accent_text": "ONE FUN FACT", "variation": 19}
+    },
+    {
+      "template_id": "storytime_dialogue_two_shot",
+      "cue": {"mood": "awkward", "location": "office", "action": "talk", "cast_size": 2, "shot": "two_shot", "accent_text": "WHY DON'T YOU START?", "variation": 20}
+    },
+    {
+      "template_id": "storytime_imagination_burst",
+      "cue": {"mood": "panic", "location": "memory_space", "action": "freeze", "cast_size": 1, "shot": "wide", "accent_text": "ONE MINUTE. FIFTY-TWO SECONDS.", "variation": 21}
+    },
+    {
+      "template_id": "storytime_punchline_button",
+      "cue": {"mood": "neutral", "location": "online", "action": "point", "cast_size": 1, "shot": "close", "accent_text": "DO NOT SEND AUDIO HERE", "variation": 22}
+    },
+    {
+      "template_id": "storytime_character_stage",
+      "cue": {"mood": "excited", "location": "online", "action": "celebrate", "cast_size": 1, "shot": "medium", "accent_text": "PROBLEM SOLVED", "variation": 23}
+    },
+    {
+      "template_id": "storytime_punchline_button",
+      "cue": {"mood": "awkward", "location": "online", "action": "freeze", "cast_size": 1, "shot": "close", "accent_text": "MOSTLY.", "variation": 24}
+    }
+  ]
+}

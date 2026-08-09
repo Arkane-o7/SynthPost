@@ -55,7 +55,7 @@ class StreamlinedStudioTests(unittest.TestCase):
 
         self.assertEqual(
             [profile.channel_id for profile in profiles],
-            ["synthpost", "meridian", "beyond"],
+            ["synthpost", "meridian", "beyond", "storytime"],
         )
         self.assertEqual(get_channel_profile("meridian").name, "Meridian")
         self.assertEqual(
