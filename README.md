@@ -1,6 +1,28 @@
 # SynthPost Studio
 
+![Platform](https://img.shields.io/badge/platform-macOS-000000?logo=apple)
+![Backend](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)
+![Studio](https://img.shields.io/badge/studio-React%20%2B%20Remotion-61dafb)
+![Workflow](https://img.shields.io/badge/workflow-local--first-22c55e)
+
 SynthPost is a local-first, AI-assisted newsroom and video-production system for researching stories, editing scripts and visuals, planning a timeline, rendering an avatar-led composition, and exporting a finished episode. Editorial state and job queues stay on the Mac in SQLite; render inputs and outputs remain inspectable local files.
+
+<p align="center">
+  <img src="assets/channels/meridian/presenter/poses/neutral.png" alt="SynthPost presenter" width="360">
+</p>
+
+```mermaid
+flowchart LR
+    A[Sources] --> B[Research and claims]
+    B --> C[Script and editorial review]
+    C --> D[Narration and timing]
+    D --> E[Avatar and media render]
+    E --> F[Remotion composition]
+    F --> G[FFmpeg episode export]
+    H[React Studio] --> B
+    H --> C
+    H --> E
+```
 
 ## Current capabilities
 
