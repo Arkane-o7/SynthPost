@@ -18,13 +18,10 @@ from .base import (
     segmentation_prompt_context,
     visual_prompt_context,
 )
-from .beyond import PROFILE as BEYOND
-from .meridian import PROFILE as MERIDIAN
-from .storytime import PROFILE as STORYTIME
 from .synthpost import PROFILE as SYNTHPOST
 
 
-_CHANNELS: tuple[ChannelProfile, ...] = (SYNTHPOST, MERIDIAN, BEYOND, STORYTIME)
+_CHANNELS: tuple[ChannelProfile, ...] = (SYNTHPOST,)
 CHANNELS: Mapping[ChannelId, ChannelProfile] = MappingProxyType(
     {profile.channel_id: profile for profile in _CHANNELS}
 )
@@ -54,11 +51,8 @@ def profile_for_story(repository: Any, story_id: str) -> ChannelProfile:
 
 
 __all__ = [
-    "BEYOND",
     "CHANNELS",
     "DEFAULT_CHANNEL_ID",
-    "MERIDIAN",
-    "STORYTIME",
     "SYNTHPOST",
     "BrandTheme",
     "ChannelId",

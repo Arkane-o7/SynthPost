@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from dataclasses import FrozenInstanceError
@@ -55,178 +54,36 @@ class StreamlinedStudioTests(unittest.TestCase):
 
         self.assertEqual(
             [profile.channel_id for profile in profiles],
-            ["synthpost", "meridian", "beyond", "storytime"],
+            ["synthpost"],
         )
-        self.assertEqual(get_channel_profile("meridian").name, "Meridian")
-        self.assertEqual(
-            get_channel_profile("meridian").default_target_duration_seconds,
-            900,
-        )
-        self.assertNotEqual(
-            get_channel_profile("meridian").voice_profile,
-            get_channel_profile("beyond").voice_profile,
-        )
-        self.assertNotEqual(
-            get_channel_profile("meridian").template_pack,
-            get_channel_profile("synthpost").template_pack,
-        )
+        self.assertEqual(get_channel_profile("synthpost").name, "SynthPost")
         with self.assertRaises(FrozenInstanceError):
             profiles[0].name = "Changed"  # type: ignore[misc]
 
-    def test_projects_are_channel_scoped_and_episodes_inherit_profile(self) -> None:
+    def test_projects_episodes_candidates_and_jobs_default_to_synthpost(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
-            repository = Repository(Path(temp) / "channels.sqlite3")
+            repository = Repository(Path(temp) / "synthpost-only.sqlite3")
             try:
-                legacy = repository.create_project("Legacy")
-                meridian = repository.create_project(
-                    "Markets", channel_id="meridian"
-                )
-                beyond = repository.create_project("World", channel_id="beyond")
-
-                episode = repository.create_episode(
-                    meridian.project_id, "Money episode"
-                )
-
-                legacy_data = legacy.model_dump(mode="json")
-                legacy_data.pop("channel_id")
-                legacy_data.pop("profile_version")
-                with repository.connection:
-                    repository.connection.execute(
-                        "UPDATE projects SET data = ? WHERE project_id = ?",
-                        (json.dumps(legacy_data), legacy.project_id),
-                    )
-
-                self.assertEqual(
-                    repository.get_project(legacy.project_id).channel_id,
-                    "synthpost",
-                )
-                self.assertEqual(
-                    [
-                        item.project_id
-                        for item in repository.list_projects(channel_id="meridian")
-                    ],
-                    [meridian.project_id],
-                )
-                self.assertEqual(
-                    [
-                        item.project_id
-                        for item in repository.list_projects(channel_id="beyond")
-                    ],
-                    [beyond.project_id],
-                )
-                self.assertEqual(
-                    [
-                        item.project_id
-                        for item in repository.list_projects(channel_id="synthpost")
-                    ],
-                    [legacy.project_id],
-                )
-                self.assertEqual(episode.channel_id, meridian.channel_id)
-                self.assertEqual(
-                    episode.profile_version, meridian.profile_version
-                )
-                self.assertEqual(
-                    repository.list_episodes(channel_id="synthpost"), []
-                )
-                self.assertEqual(
-                    repository.list_episodes(channel_id="meridian")[0].episode_id,
-                    episode.episode_id,
-                )
-            finally:
-                repository.close()
-
-    def test_candidate_cannot_cross_channel_episode_boundary(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repository = Repository(Path(temp) / "candidate-channel.sqlite3")
-            try:
-                project = repository.create_project(
-                    "Meridian", channel_id="meridian"
-                )
-                episode = repository.create_episode(project.project_id)
+                project = repository.create_project("SynthPost")
+                episode = repository.create_episode(project.project_id, "Episode")
                 candidate = StoryCandidate(
-                    channel_id="beyond",
-                    title="World story",
-                    source_name="Test desk",
-                )
-                repository.upsert_candidate(candidate)
-
-                with self.assertRaisesRegex(ValueError, "Cannot add a beyond story"):
-                    repository.select_candidate(
-                        candidate.candidate_id, episode.episode_id
-                    )
-                self.assertEqual(
-                    repository.get_episode(episode.episode_id).story_ids, []
-                )
-            finally:
-                repository.close()
-
-    def test_candidate_lists_are_channel_scoped_with_legacy_fallback(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repository = Repository(Path(temp) / "candidate-list-channel.sqlite3")
-            try:
-                synthpost = StoryCandidate(
-                    candidate_id="cand_synthpost",
                     title="AI platform launch",
                     source_name="Test desk",
                 )
-                meridian = StoryCandidate(
-                    candidate_id="cand_meridian",
-                    channel_id="meridian",
-                    title="Central bank changes rates",
-                    source_name="Test desk",
-                )
-                repository.upsert_candidate(synthpost)
-                repository.upsert_candidate(meridian)
+                repository.upsert_candidate(candidate)
+                job = repository.create_job("discovery", episode_id=episode.episode_id)
 
+                self.assertEqual(project.channel_id, "synthpost")
+                self.assertEqual(episode.channel_id, "synthpost")
+                self.assertEqual(candidate.channel_id, "synthpost")
+                self.assertEqual(job.channel_id, "synthpost")
                 self.assertEqual(
-                    [
-                        item.candidate_id
-                        for item in repository.list_candidates(
-                            channel_id="synthpost", include_expired=True
-                        )
-                    ],
-                    [synthpost.candidate_id],
-                )
-                self.assertEqual(
-                    [
-                        item.candidate_id
-                        for item in repository.list_candidates(
-                            channel_id="meridian", include_expired=True
-                        )
-                    ],
-                    [meridian.candidate_id],
-                )
-            finally:
-                repository.close()
-
-    def test_jobs_infer_and_filter_channel_without_schema_migration(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repository = Repository(Path(temp) / "job-channel.sqlite3")
-            try:
-                project = repository.create_project(
-                    "Beyond", channel_id="beyond"
-                )
-                episode = repository.create_episode(project.project_id)
-                beyond_job = repository.create_job(
-                    "discovery", episode_id=episode.episode_id
-                )
-                synthpost_job = repository.create_job("discovery")
-
-                self.assertEqual(beyond_job.channel_id, "beyond")
-                self.assertEqual(synthpost_job.channel_id, "synthpost")
-                self.assertEqual(
-                    [
-                        job.job_id
-                        for job in repository.list_jobs(channel_id="beyond")
-                    ],
-                    [beyond_job.job_id],
+                    [item.project_id for item in repository.list_projects(channel_id="synthpost")],
+                    [project.project_id],
                 )
                 self.assertEqual(
-                    [
-                        job.job_id
-                        for job in repository.list_jobs(channel_id="synthpost")
-                    ],
-                    [synthpost_job.job_id],
+                    [item.candidate_id for item in repository.list_candidates(channel_id="synthpost", include_expired=True)],
+                    [candidate.candidate_id],
                 )
             finally:
                 repository.close()

@@ -174,7 +174,7 @@ export const AutonomyRunControl: React.FC<{
             : run?.status === "ready_for_review"
               ? "Research, script, media, narration, render, and final checks are complete. Nothing was uploaded."
               : isRunning
-                ? `${run?.engine || "Hermes"} is working through ${run?.current_stage?.replace(/_/g, " ") || activeJob?.stage || "production"}. You can close Studio; the workers keep going.`
+                ? `${run?.engine || "Hermes"} is working through ${run?.current_stage?.replace(/_/g, " ") || activeJob?.stage || "production"}. You can close Synthea Studio; the workers keep going.`
                 : "One command researches, writes, voices, illustrates, edits, renders, and checks a production MP4 while you are away."}
         </p>
       </div>

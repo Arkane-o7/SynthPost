@@ -1,10 +1,10 @@
-# SynthPost Studio V2 Rebuild Final Report
+# Synthea Studio Rebuild Final Report
 
 Date: 2026-07-03
 
 ## 1. Architecture summary
 
-SynthPost Studio V2 is a local-first editorial production application built around the retained render shell. It uses:
+Synthea Studio is a local-first editorial production application built around the retained render shell. It uses:
 
 - FastAPI backend in `pipeline/api/`
 - SQLite state with versioned migration in `pipeline/migrations/001_initial.sql`
@@ -255,7 +255,7 @@ Structured error responses are returned by FastAPI exception handlers for valida
 
 ## 8. Frontend pages
 
-Frontend: `web/`, named **SynthPost Studio**.
+Frontend: `web/`, named **Synthea Studio**.
 
 Main navigation:
 
@@ -422,7 +422,7 @@ Installs:
 
 - Python requirements
 - Remotion package dependencies
-- SynthPost Studio web dependencies
+- Synthea Studio web dependencies
 
 ## 14. Development commands
 
@@ -466,7 +466,7 @@ Includes:
 
 - Python compile checks
 - Remotion TypeScript typecheck
-- SynthPost Studio TypeScript typecheck
+- Synthea Studio TypeScript typecheck
 
 Passed:
 

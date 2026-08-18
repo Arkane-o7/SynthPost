@@ -1075,7 +1075,7 @@ def run_loop(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run the local SynthPost Studio SQLite-backed worker."
+        description="Run the local Synthea Studio SQLite-backed worker."
     )
     parser.add_argument(
         "--once", action="store_true", help="Run one queued job and exit."

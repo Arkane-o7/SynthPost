@@ -22,14 +22,14 @@ class StudioErrorBoundary extends React.Component<
     return (
       <main className="studio-crash-screen">
         <div className="studio-crash-card">
-          <span className="studio-crash-kicker">Studio recovery</span>
+          <span className="studio-crash-kicker">Synthea Studio recovery</span>
           <h1>This screen could not be displayed</h1>
           <p>
             Synthea hit an interface error. Reload to reconnect without
             changing any episode or render data.
           </p>
           <button type="button" onClick={() => window.location.reload()}>
-            Reload Studio
+            Reload Synthea Studio
           </button>
         </div>
       </main>

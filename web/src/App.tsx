@@ -20,7 +20,7 @@ const Main: React.FC = () => {
       {studio.loading ? (
         <div className="empty-state" style={{ marginTop: 80 }}>
           <div className="empty-state-icon">⏳</div>
-          <div className="empty-state-title">Loading Studio…</div>
+          <div className="empty-state-title">Loading Synthea Studio…</div>
           <p className="empty-state-desc">
             Connecting to local SQLite database.
           </p>

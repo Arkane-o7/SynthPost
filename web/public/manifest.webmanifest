@@ -1,7 +1,7 @@
 {
-  "name": "SynthPost Remote Studio",
-  "short_name": "SynthPost",
-  "description": "Remote command, review, and render control for the SynthPost production laptop.",
+  "name": "Synthea Studio",
+  "short_name": "Synthea",
+  "description": "Remote command, review, and render control for the SynthPost production pipeline.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#03070b",

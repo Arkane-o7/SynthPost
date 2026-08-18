@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pipeline.channels import ChannelId, get_channel_profile
+from pipeline.channels import ChannelId
 from pipeline.models import EditorialFitAssessment, SourceDefinition
 from pipeline.storage import PROJECT_ROOT
 
@@ -49,8 +49,6 @@ def assess_editorial_fit(
     summary: str,
     channel_id: ChannelId = "synthpost",
 ) -> EditorialFitAssessment:
-    if channel_id != "synthpost":
-        return _assess_channel_fit(source, title, summary, channel_id)
     charter = load_editorial_charter()
     text = f"{title} {summary}".casefold()
     padded_text = f" {text} "
@@ -202,108 +200,6 @@ def assess_editorial_fit(
         india_relevance=round(min(1.0, 0.42 + 0.2 * len(india_terms)), 3)
         if has_explicit_india_angle
         else 0.0,
-        reasons=reasons,
-    )
-
-
-_CHANNEL_TOPIC_TERMS: dict[ChannelId, dict[str, tuple[str, ...]]] = {
-    "synthpost": {},
-    "meridian": {
-        "markets": ("market", "stocks", "bonds", "equity", "investor", "trading"),
-        "companies": ("company", "business", "earnings", "revenue", "merger", "bankruptcy"),
-        "economics": ("economy", "inflation", "interest rate", "central bank", "gdp", "currency"),
-        "financial_systems": ("bank", "credit", "debt", "mortgage", "fund", "capital", "finance"),
-    },
-    "beyond": {
-        "geopolitics": ("war", "conflict", "diplomacy", "sanctions", "border", "military"),
-        "world_news": ("government", "election", "president", "minister", "parliament", "protest"),
-        "global_economy": ("trade", "tariff", "oil", "shipping", "currency", "global economy"),
-        "security": ("security", "attack", "ceasefire", "treaty", "nuclear", "defence", "defense"),
-    },
-}
-
-
-def _assess_channel_fit(
-    source: SourceDefinition,
-    title: str,
-    summary: str,
-    channel_id: ChannelId,
-) -> EditorialFitAssessment:
-    """Score non-SynthPost desks without inheriting the India-specific charter."""
-
-    profile = get_channel_profile(channel_id)
-    text = f"{title} {summary}".casefold()
-    topic_hits = {
-        topic: [term for term in terms if _contains(text, term)]
-        for topic, terms in _CHANNEL_TOPIC_TERMS[channel_id].items()
-    }
-    primary_topic = max(topic_hits, key=lambda topic: len(topic_hits[topic]))
-    matched_topics = [topic for topic, terms in topic_hits.items() if terms]
-    consequence_terms = _matched_phrases(
-        text,
-        [
-            "policy", "law", "court", "prices", "jobs", "trade", "security",
-            "industry", "market", "economy", "public", "supply chain", "investment",
-            "regulation", "election", "conflict", "bank", "debt",
-        ],
-    )
-    development_terms = _matched_phrases(
-        text,
-        [
-            "approves", "bans", "cuts", "raises", "launches", "passes", "rules",
-            "signs", "invests", "acquires", "merges", "files", "strikes", "orders",
-            "announces", "reports", "falls", "rises",
-        ],
-    )
-    visual_terms = _matched_phrases(
-        text,
-        ["data", "chart", "map", "document", "speech", "protest", "factory", "port", "market"],
-    )
-    criteria: list[str] = []
-    if matched_topics:
-        criteria.append("channel_subject")
-    if consequence_terms:
-        criteria.append("consequence")
-    if development_terms:
-        criteria.append("new_development")
-    if visual_terms:
-        criteria.append("visual_explainability")
-    if source.reliability_score >= 0.7:
-        criteria.append("credible_evidence")
-
-    rejection_signals: list[str] = []
-    if not matched_topics:
-        rejection_signals.append("outside_channel_focus")
-    if any(term in text for term in ("celebrity gossip", "horoscope", "shopping deal", "coupon")):
-        rejection_signals.append("low_consequence_lifestyle_content")
-
-    score = min(
-        1.0,
-        0.12
-        + min(0.42, sum(len(terms) for terms in topic_hits.values()) * 0.07)
-        + min(0.24, len(consequence_terms) * 0.06)
-        + min(0.14, len(development_terms) * 0.07)
-        + (0.08 if source.reliability_score >= 0.7 else 0.0),
-    )
-    if rejection_signals:
-        score = min(score, 0.24)
-    eligible = score >= 0.48 and not rejection_signals
-    strengths = [item.replace("_", " ") for item in criteria]
-    reasons = [
-        f"{profile.name} fit {round(score * 100)}%",
-        *strengths,
-        *(f"Off-channel signal: {item.replace('_', ' ')}" for item in rejection_signals),
-    ]
-    return EditorialFitAssessment(
-        charter_version=f"{channel_id}.{profile.profile_version}",
-        score=round(score, 3),
-        eligible=eligible,
-        primary_topic=primary_topic,
-        matched_criteria=criteria,
-        strengths=strengths,
-        penalties=[item.replace("_", " ") for item in rejection_signals],
-        rejection_signals=rejection_signals,
-        india_relevance=0.0,
         reasons=reasons,
     )
 

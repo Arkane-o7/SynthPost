@@ -234,6 +234,31 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             repository.close()
             temp.cleanup()
 
+    def test_workers_ignore_jobs_from_removed_channels(self) -> None:
+        temp = tempfile.TemporaryDirectory()
+        repository = Repository(Path(temp.name) / "removed-channel-jobs.sqlite3")
+        try:
+            legacy = repository.create_job("discovery")
+            legacy_data = legacy.model_dump(mode="json")
+            legacy_data["channel_id"] = "meridian"
+            repository.connection.execute(
+                "UPDATE render_jobs SET data = ? WHERE job_id = ?",
+                (json.dumps(legacy_data), legacy.job_id),
+            )
+            active = repository.create_job("research")
+
+            self.assertEqual(
+                [job.job_id for job in repository.list_jobs(limit=500)],
+                [active.job_id],
+            )
+            self.assertEqual(recover_stale_jobs(repository), 0)
+            claimed = repository.claim_next_job("editorial")
+            self.assertIsNotNone(claimed)
+            self.assertEqual(claimed.job_id, active.job_id)
+        finally:
+            repository.close()
+            temp.cleanup()
+
     def test_stale_job_fails_after_automatic_retry_budget_is_exhausted(self) -> None:
         temp = tempfile.TemporaryDirectory()
         repository = Repository(Path(temp.name) / "stale-exhausted.sqlite3")
@@ -3689,68 +3714,6 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
                 choose_template("context", visual, 1), "split_anchor_visual"
             )
 
-    def test_meridian_uses_native_scene_grammar_without_changing_synthpost(self) -> None:
-        evidence = VisualCandidate(
-            story_id="story_channel_templates",
-            provider="unit",
-            media_type=MediaType.image,
-            content_role=ContentRole.evidence,
-            rights_tier=RightsTier.green,
-            review_status="approved",
-        )
-        self.assertEqual(
-            choose_template(
-                "context",
-                evidence,
-                1,
-                template_policy="meridian_editorial_v3",
-            ),
-            "meridian_clipping_board",
-        )
-        self.assertEqual(
-            choose_template(
-                "context",
-                None,
-                1,
-                template_policy="meridian_editorial_v3",
-            ),
-            "meridian_presenter_canvas",
-        )
-        self.assertEqual(
-            choose_template(
-                "context",
-                evidence,
-                1,
-                template_policy="synthpost_fast_explainer_v1",
-            ),
-            "split_anchor_visual",
-        )
-
-        expected = {
-            (MediaType.video, ContentRole.primary_footage): "meridian_evidence_reel",
-            (MediaType.document, ContentRole.document): "meridian_document_desk",
-            (MediaType.chart, ContentRole.data): "meridian_data_board",
-            (MediaType.image, ContentRole.person): "meridian_explainer_stage",
-        }
-        for (media_type, content_role), template_id in expected.items():
-            visual = VisualCandidate(
-                story_id="story_channel_templates",
-                provider="unit",
-                media_type=media_type,
-                content_role=content_role,
-                rights_tier=RightsTier.green,
-                review_status="approved",
-            )
-            self.assertEqual(
-                choose_template(
-                    "context",
-                    visual,
-                    1,
-                    template_policy="meridian_editorial_v3",
-                ),
-                template_id,
-            )
-
     def test_validation_rejects_blacklisted_card_templates(self) -> None:
         plan = TimelinePlan(
             story_id="story_blacklisted_template",
@@ -3925,8 +3888,8 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             episode_id = episode.episode_id
             candidate = add_manual_story(
                 repository,
-                title="Unit story for SynthPost Studio",
-                body="SynthPost Studio keeps renderer approvals explicit. The timeline uses approved media and blocks unsafe rights states.",
+                title="Unit story for Synthea Studio",
+                body="Synthea Studio keeps renderer approvals explicit. The timeline uses approved media and blocks unsafe rights states.",
                 episode_id=episode.episode_id,
             )
             selected = repository.select_candidate(
@@ -3938,8 +3901,8 @@ class V2WorkflowAndPipelineTests(unittest.TestCase):
             script = save_manual_script(
                 repository,
                 story_id,
-                "Unit story for SynthPost Studio",
-                "SynthPost Studio keeps renderer approvals explicit. "
+                "Unit story for Synthea Studio",
+                "Synthea Studio keeps renderer approvals explicit. "
                 "Editors can change the headline while the same layout remains on screen.\n\n"
                 "The approved timeline becomes the rendering source of truth.",
             )

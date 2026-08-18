@@ -1,1 +1,1 @@
-"""Feature-focused HTTP routers for SynthPost Studio."""
+"""Feature-focused HTTP routers for Synthea Studio."""

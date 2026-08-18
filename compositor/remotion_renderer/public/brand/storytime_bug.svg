@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 72" role="img" aria-labelledby="title">
-  <title id="title">Sidequest</title>
-  <rect width="260" height="72" rx="20" fill="#FFF8EA"/>
-  <path d="M18 46c16-25 29 13 45-11 13-20 27 14 42-8" fill="none" stroke="#FFB85C" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="31" cy="24" r="7" fill="#7C5CFC"/>
-  <circle cx="59" cy="27" r="7" fill="#7C5CFC"/>
-  <path d="M33 42c8 8 18 8 26 0" fill="none" stroke="#292234" stroke-width="5" stroke-linecap="round"/>
-  <text x="118" y="47" fill="#292234" font-family="Impact, Arial Black, sans-serif" font-size="35" letter-spacing="2">SIDEQUEST</text>
-</svg>

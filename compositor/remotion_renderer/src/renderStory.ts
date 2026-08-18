@@ -12,7 +12,6 @@ import { spawnSync } from "node:child_process";
 import type {
   AnchorRenderWindow,
   HeadlineItem,
-  PngPresenter,
   PublicMedia,
   StoryProps,
   TimedVisual,
@@ -54,9 +53,6 @@ const templateToCompositionId: Record<string, string> = {
   source_clip_full_screen: "FullScreenNewsVisuals",
   timeline_story: "timeline-story",
   timeline_story_synthpost: "timeline-story-synthpost",
-  timeline_story_meridian: "timeline-story-meridian",
-  timeline_story_beyond: "timeline-story-beyond",
-  timeline_story_storytime: "timeline-story-storytime",
   approved_timeline: "timeline-story",
 };
 
@@ -650,141 +646,13 @@ const main = async () => {
     timelineSegments.length === 0 ||
     timelineSegments.some((segment) => segment.anchor.visible);
   const anchor =
-    presenterProvider !== "png_puppet" &&
     timelineNeedsAnchor &&
     (anchorPath || !visualOnlyTemplate)
       ? await stageMedia(anchorPath, generatedDir, undefined, true)
       : undefined;
 
   let narrationAudio: PublicMedia | undefined;
-  let presenter: PngPresenter | undefined;
-  if (presenterProvider === "png_puppet") {
-    const presenterManifestPath = String(
-      direction.presenter_manifest_path ?? "",
-    );
-    const resolvedPresenterManifest = await resolveInput(presenterManifestPath);
-    if (!resolvedPresenterManifest || isRemote(resolvedPresenterManifest)) {
-      throw new Error(
-        `PNG presenter manifest was not found: ${presenterManifestPath}`,
-      );
-    }
-    const presenterManifest =
-      await readJson<Record<string, any>>(resolvedPresenterManifest);
-    if (
-      presenterManifest.contract_version !==
-      "synthea.presenter.png_puppet.v1"
-    ) {
-      throw new Error("Unsupported PNG presenter character contract.");
-    }
-    const rawPoses =
-      presenterManifest.poses &&
-      typeof presenterManifest.poses === "object" &&
-      !Array.isArray(presenterManifest.poses)
-        ? presenterManifest.poses
-        : {};
-    const directionPoses =
-      direction.presenter_pose_paths &&
-      typeof direction.presenter_pose_paths === "object" &&
-      !Array.isArray(direction.presenter_pose_paths)
-        ? direction.presenter_pose_paths
-        : {};
-    const poses: Record<string, PublicMedia> = {};
-    for (const [name, posePath] of Object.entries({
-      ...rawPoses,
-      ...directionPoses,
-    })) {
-      const staged = await stageMedia(
-        String(posePath ?? ""),
-        generatedDir,
-        undefined,
-        true,
-      );
-      if (staged.kind !== "image") {
-        throw new Error(`PNG presenter pose ${name} must be an image.`);
-      }
-      poses[name] = staged;
-    }
-    const neutral =
-      poses.neutral ??
-      (await stageMedia(
-        String(direction.presenter_neutral_path ?? ""),
-        generatedDir,
-        undefined,
-        true,
-      ));
-    const speaking =
-      poses.speaking ??
-      (direction.presenter_speaking_path
-        ? await stageMedia(
-            String(direction.presenter_speaking_path),
-            generatedDir,
-            undefined,
-            true,
-          )
-        : neutral);
-    if (neutral.kind !== "image" || speaking.kind !== "image") {
-      throw new Error("PNG presenter neutral and speaking poses must be images.");
-    }
-    poses.neutral = neutral;
-    poses.speaking = speaking;
-    narrationAudio = await stageMedia(
-      String(
-        direction.narration_audio_path ??
-          manifest.narration?.audio_path ??
-          "",
-      ),
-      generatedDir,
-      undefined,
-      true,
-    );
-    if (narrationAudio.kind !== "audio") {
-      throw new Error(
-        "PNG presenter requires a standalone narration audio file.",
-      );
-    }
-    const animation = presenterManifest.animation ?? {};
-    const beats = Array.isArray(manifest.narration?.beats)
-      ? manifest.narration.beats
-      : [];
-    presenter = {
-      provider: "png_puppet",
-      characterId: String(
-        presenterManifest.character_id ?? "meridian_analyst",
-      ),
-      neutral,
-      speaking,
-      poses,
-      speechWindows: beats
-        .map((beat: Record<string, unknown>) => ({
-          start: Number(beat.start_time),
-          speechEnd: Number(beat.speech_end_time ?? beat.end_time),
-          end: Number(beat.end_time),
-        }))
-        .filter(
-          (window: { start: number; speechEnd: number; end: number }) =>
-            Number.isFinite(window.start) &&
-            Number.isFinite(window.speechEnd) &&
-            Number.isFinite(window.end) &&
-            window.speechEnd > window.start &&
-            window.end >= window.speechEnd,
-        ),
-      talkCadenceFps: Number(animation.talk_cadence_fps ?? 7),
-      breathCycleSeconds: Number(animation.breath_cycle_seconds ?? 4.8),
-      breathScale: Number(animation.breath_scale ?? 0.006),
-      entrySeconds: Number(animation.entry_seconds ?? 0.45),
-      editorialMotion: {
-        defaultPose: String(animation.default_pose ?? "neutral"),
-        defaultPlacement: animation.default_placement ?? "lower_right",
-        defaultMotion: animation.default_motion ?? "pop",
-        width: Number(animation.default_width ?? 1320),
-        shadow: animation.shadow !== false,
-      },
-      layout: presenterManifest.layout ?? {},
-    };
-    if (!presenter.speechWindows.length) {
-      throw new Error("PNG presenter requires exact narration beat windows.");
-    }
-  } else if (timelineSegments.length) {
+  if (timelineSegments.length) {
     const narrationPath = String(
       direction.narration_audio_path ??
         direction.avatar_audio_path ??
@@ -1015,7 +883,6 @@ const main = async () => {
       direction.background_music_volume,
     ),
     soundEffects,
-    presenter,
     visuals,
     timelineSegments,
     points: (manifest.points ?? []).map((point: any) => ({

@@ -1,4 +1,4 @@
-"""Validated HTTP request contracts for the SynthPost Studio API."""
+"""Validated HTTP request contracts for the Synthea Studio API."""
 
 from __future__ import annotations
 

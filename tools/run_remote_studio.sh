@@ -10,7 +10,7 @@ mkdir -p "$STATE_DIR"
 if ! mkdir "$INSTANCE_LOCK_DIR" 2>/dev/null; then
   existing_pid="$(cat "$INSTANCE_LOCK_DIR/pid" 2>/dev/null || true)"
   if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
-    echo "SynthPost Remote Studio is already running (PID $existing_pid)." >&2
+    echo "Synthea Studio is already running (PID $existing_pid)." >&2
     echo "Stop that instance before starting another one." >&2
     exit 1
   fi
@@ -200,10 +200,10 @@ curl -fsS http://127.0.0.1:8765/api/health >/dev/null
 
 "${TAILSCALE_CMD[@]}" serve --bg 8765
 echo
-echo "SynthPost Remote Studio is live inside your private tailnet:"
+echo "Synthea Studio is live inside your private tailnet:"
 "${TAILSCALE_CMD[@]}" serve status
 echo
-echo "Open the HTTPS URL above on your phone. Press Ctrl+C to stop the Studio and remove remote access."
+echo "Open the HTTPS URL above on your phone. Press Ctrl+C to stop Synthea Studio and remove remote access."
 
 while kill -0 "$api_pid" >/dev/null 2>&1; do
   if ! kill -0 "$worker_supervisor_pid" >/dev/null 2>&1; then

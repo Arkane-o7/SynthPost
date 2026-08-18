@@ -1,4 +1,4 @@
-# SynthPost Studio
+# Synthea Studio
 
 ![Platform](https://img.shields.io/badge/platform-macOS-000000?logo=apple)
 ![Backend](https://img.shields.io/badge/backend-FastAPI-009688?logo=fastapi&logoColor=white)
@@ -6,10 +6,6 @@
 ![Workflow](https://img.shields.io/badge/workflow-local--first-22c55e)
 
 SynthPost is a local-first, AI-assisted newsroom and video-production system for researching stories, editing scripts and visuals, planning a timeline, rendering an avatar-led composition, and exporting a finished episode. Editorial state and job queues stay on the Mac in SQLite; render inputs and outputs remain inspectable local files.
-
-<p align="center">
-  <img src="assets/channels/meridian/presenter/poses/neutral.png" alt="SynthPost presenter" width="360">
-</p>
 
 ```mermaid
 flowchart LR
@@ -34,8 +30,6 @@ flowchart LR
 - Editable, validated multi-template timelines
 - Local avatar/lip-sync rendering through the retained Avatar Engine, consuming SynthPost's canonical narration
 - Remotion composition and FFmpeg episode assembly
-- Sidequest storytime-animation production with a procedural recurring cast,
-  script-derived scene direction, and approved memory cutaways
 - Hermes-powered unattended production from story discovery through a strictly checked, versioned MP4
 - React Studio with job progress, logs, retries, previews, and mobile/private Tailscale access
 - Configurable multi-process worker pools for parallel projects and episode renders
@@ -171,7 +165,6 @@ Episode/project data is ignored by Git and is not removed by normal setup or che
 - [Unattended production](docs/AUTONOMY.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [dots.tts voice cloning and expression](docs/TTS.md)
-- [Sidequest storytime animation](docs/STORYTIME_ANIMATION.md)
 - [Development](docs/DEVELOPMENT.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [Contributing](CONTRIBUTING.md)

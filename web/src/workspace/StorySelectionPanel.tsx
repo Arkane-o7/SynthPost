@@ -50,19 +50,6 @@ export const StorySelectionPanel: React.FC = () => {
     return true;
   });
 
-  const recommendedCount = studio.candidates.filter(
-    (c) => assignmentLane(c) === "recommended",
-  ).length;
-  const globalWatchCount = studio.candidates.filter(
-    (c) => assignmentLane(c) === "global_watch",
-  ).length;
-  const unassessedCount = studio.candidates.filter(
-    (c) => assignmentLane(c) === "unassessed",
-  ).length;
-  const filteredCount = studio.candidates.filter(
-    (c) => assignmentLane(c) === "rejected",
-  ).length;
-
   const act = async (fn: () => Promise<unknown>) => {
     try {
       studio.setError("");
@@ -126,24 +113,6 @@ export const StorySelectionPanel: React.FC = () => {
           <b>{Math.round(activeDiscovery.progress)}%</b>
         </div>
       )}
-
-      <section className="editorial-charter-strip">
-        <div>
-          <span className="editorial-charter-kicker">Global assignment desk · charter v1.2</span>
-          <strong>Global shifts. India consequences.</strong>
-          <p>
-            Technology, AI, science, business, infrastructure and geopolitical power—selected
-            for global consequence and a concrete India angle. Local crime, ceremonies,
-            appointments and routine political churn are filtered out.
-          </p>
-        </div>
-        <div className="editorial-charter-counts" aria-label="Editorial fit summary">
-          <span><b>{recommendedCount}</b> recommended</span>
-          <span><b>{globalWatchCount}</b> global watch</span>
-          <span><b>{unassessedCount}</b> desk review</span>
-          <span><b>{filteredCount}</b> filtered out</span>
-        </div>
-      </section>
 
       {/* Filters */}
       <div className="filter-toolbar story-selection-filters" style={{ marginBottom: 16 }}>

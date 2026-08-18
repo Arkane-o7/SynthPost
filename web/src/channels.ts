@@ -12,7 +12,7 @@ export type ChannelPresentation = {
   accentGlow: string;
 };
 
-export const CHANNEL_IDS: ChannelId[] = ["synthpost", "meridian", "beyond", "storytime"];
+export const CHANNEL_IDS: ChannelId[] = ["synthpost"];
 
 const CHANNEL_PRESENTATIONS: Record<ChannelId, ChannelPresentation> = {
   synthpost: {
@@ -25,39 +25,6 @@ const CHANNEL_PRESENTATIONS: Record<ChannelId, ChannelPresentation> = {
     accentHover: "#f03038",
     accentSoft: "rgba(228, 28, 35, 0.14)",
     accentGlow: "rgba(228, 28, 35, 0.28)",
-  },
-  meridian: {
-    channelId: "meridian",
-    name: "Meridian",
-    initials: "M",
-    tagline: "Money · markets · systems",
-    description: "Financial systems, markets, companies and economic power.",
-    accent: "#d5a847",
-    accentHover: "#e7bb5e",
-    accentSoft: "rgba(213, 168, 71, 0.14)",
-    accentGlow: "rgba(213, 168, 71, 0.26)",
-  },
-  beyond: {
-    channelId: "beyond",
-    name: "Beyond",
-    initials: "B",
-    tagline: "World news · geopolitics",
-    description: "International news, geopolitics and global affairs.",
-    accent: "#4f8cff",
-    accentHover: "#6aa0ff",
-    accentSoft: "rgba(79, 140, 255, 0.14)",
-    accentGlow: "rgba(79, 140, 255, 0.28)",
-  },
-  storytime: {
-    channelId: "storytime",
-    name: "Sidequest",
-    initials: "SQ",
-    tagline: "Stories · mishaps · detours",
-    description: "Animated personal stories, awkward moments and everyday observations.",
-    accent: "#7c5cfc",
-    accentHover: "#9278ff",
-    accentSoft: "rgba(124, 92, 252, 0.16)",
-    accentGlow: "rgba(124, 92, 252, 0.3)",
   },
 };
 

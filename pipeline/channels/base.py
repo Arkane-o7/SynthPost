@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 
-ChannelId = Literal["synthpost", "meridian", "beyond", "storytime"]
+ChannelId = Literal["synthpost"]
 DEFAULT_CHANNEL_ID: ChannelId = "synthpost"
 
 
@@ -173,8 +173,8 @@ def _optional_path(value: str | None) -> str | None:
 def resolved_production(profile: ChannelProfile) -> dict[str, Any]:
     """Resolve per-channel overrides without leaking one channel into another.
 
-    SynthPost retains the legacy environment variables for compatibility. Meridian
-    and Beyond intentionally use only their own SYNTHEA_<CHANNEL>_* variables and
+    SynthPost retains the legacy environment variables for compatibility. Other
+    channels intentionally use only their own SYNTHEA_<CHANNEL>_* variables and
     package defaults.
     """
 

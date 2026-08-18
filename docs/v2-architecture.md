@@ -1,6 +1,6 @@
-# SynthPost Studio V2 Architecture
+# Synthea Studio Architecture
 
-SynthPost Studio is a local-first newsroom production editor built around the retained renderer shell.
+Synthea Studio is a local-first newsroom production editor built around the retained renderer shell.
 
 ## Design principles
 
@@ -38,7 +38,7 @@ projects/<project_id>/episodes/<episode_id>/media_inbox/
   manifest_builder.py                   Approved state → renderer story.json
   run_episode.py                        High-level orchestration/smoke command
 
-web/                                    SynthPost Studio React/Vite frontend
+web/                                    Synthea Studio React/Vite frontend
 compositor/remotion_renderer/src/registry/templates.ts
                                         Renderer-side template registry
 ```
@@ -258,7 +258,7 @@ It requires:
 
 It writes a backward-compatible manifest for the retained `pipeline.run_story` and records an artifact row.
 
-## Frontend: SynthPost Studio
+## Frontend: Synthea Studio
 
 `web/` is a React/Vite desktop editor with:
 

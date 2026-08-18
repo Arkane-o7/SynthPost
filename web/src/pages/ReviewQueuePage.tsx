@@ -179,7 +179,7 @@ export const ReviewQueuePage: React.FC<{
           onClick={onOpenCommandCenter}
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          Studio
+          Synthea Studio
         </button>
         <div className="review-queue-heading">
           <div className="review-queue-kicker">Morning screening room</div>
@@ -204,7 +204,7 @@ export const ReviewQueuePage: React.FC<{
             description="Start a YOLO production from an episode. Finished MP4s will wait here; SynthPost never uploads them automatically."
           >
             <button className="btn-primary" onClick={onOpenCommandCenter}>
-              Return to Studio
+              Return to Synthea Studio
             </button>
           </EmptyState>
         </section>

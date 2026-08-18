@@ -44,14 +44,14 @@ def create_demo_episode(
             project.project_id, "Local V2 vertical slice", render_profile=render_profile
         )
         body = (
-            "SynthPost Studio is being rebuilt as a local-first newsroom production editor. "
+            "Synthea Studio is being rebuilt as a local-first newsroom production editor. "
             "The retained renderer can consume an approved timeline, stage visual media, and render a story through Remotion. "
             "The new application stores projects, episodes, sources, scripts, visuals, timelines, jobs, and artifacts in SQLite. "
             "Human approval remains required before final rendering, especially for visual rights and generated scripts."
         )
         candidate = add_manual_story(
             repository,
-            title="SynthPost Studio V2 rebuild reaches manual vertical slice",
+            title="Synthea Studio V2 rebuild reaches manual vertical slice",
             body=body,
             category="technology",
             episode_id=episode.episode_id,
@@ -64,9 +64,9 @@ def create_demo_episode(
         script = save_manual_script(
             repository,
             story_id,
-            "SynthPost Studio V2 rebuild reaches manual vertical slice",
+            "Synthea Studio V2 rebuild reaches manual vertical slice",
             """
-SynthPost Studio now starts from a clean rendering shell instead of the old automated newsroom pipeline.
+Synthea Studio now starts from a clean rendering shell instead of the old automated newsroom pipeline.
 
 The first vertical slice is deliberately editorial: create an episode, select a story, review a script, approve visuals, build a timeline, and only then render.
 

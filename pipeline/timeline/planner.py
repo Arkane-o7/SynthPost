@@ -113,8 +113,6 @@ def choose_audio_mode(
         authored_source_clip
         and template_id in {
             "fullscreen_news_visual",
-            "meridian_evidence_reel",
-            "storytime_memory_cutaway",
         }
         and visual is not None
         and visual.media_type == MediaType.video
@@ -141,188 +139,6 @@ def select_template(
     last = previous[-1] if previous else None
     anchor_like = {"fullscreen_anchor", "fallback_anchor"}
 
-    if template_policy.startswith("meridian_"):
-        if visual is None or _is_fallback_visual(visual):
-            return TemplateDecision(
-                "meridian_presenter_canvas",
-                {
-                    "meridian_presenter_canvas": 100.0,
-                    "meridian_explainer_stage": 28.0,
-                },
-                [
-                    "Meridian uses an open presenter canvas when no strong evidence visual is available"
-                ],
-            )
-
-        scores = {
-            "meridian_evidence_reel": 42.0,
-            "meridian_document_desk": 36.0,
-            "meridian_clipping_board": 36.0,
-            "meridian_data_board": 36.0,
-            "meridian_explainer_stage": 40.0,
-            "meridian_presenter_canvas": 10.0,
-        }
-        reasons: dict[str, list[str]] = {template: [] for template in scores}
-
-        def meridian_boost(template: str, amount: float, reason: str) -> None:
-            scores[template] += amount
-            reasons[template].append(reason)
-
-        if visual.media_type == MediaType.video:
-            meridian_boost(
-                "meridian_evidence_reel",
-                58.0,
-                "source footage should remain full-frame and free of added broadcast chrome",
-            )
-        if visual.content_role in {
-            ContentRole.primary_footage,
-            ContentRole.atmosphere,
-        }:
-            meridian_boost(
-                "meridian_evidence_reel",
-                44.0,
-                "primary evidence and observational footage should own the frame",
-            )
-        if visual.media_type == MediaType.document or visual.content_role == ContentRole.document:
-            meridian_boost(
-                "meridian_document_desk",
-                64.0,
-                "filings and reports use the physical document desk treatment",
-            )
-        elif visual.content_role == ContentRole.evidence:
-            meridian_boost(
-                "meridian_clipping_board",
-                46.0,
-                "still-image evidence reads as an editorial clipping rather than a news card",
-            )
-        if visual.media_type in {MediaType.chart, MediaType.map} or visual.content_role in {
-            ContentRole.data,
-            ContentRole.location,
-        }:
-            meridian_boost(
-                "meridian_data_board",
-                66.0,
-                "quantitative and geographic evidence belongs on the analysis board",
-            )
-        if visual.content_role in {
-            ContentRole.context,
-            ContentRole.explanation,
-            ContentRole.person,
-        }:
-            meridian_boost(
-                "meridian_explainer_stage",
-                48.0,
-                "context and mechanisms use the flexible editorial collage stage",
-            )
-        selected = max(scores, key=scores.get)
-        return TemplateDecision(
-            selected,
-            scores,
-            reasons[selected]
-            or [
-                "Meridian selected the strongest evidence-first editorial treatment"
-            ],
-        )
-
-    if template_policy.startswith("storytime_"):
-        text = script_text.strip().lower()
-        opening = section in {"cold_open", "hook", "intro", "opening"} or index == 0
-        closing = section in {"conclusion", "outro", "takeaway"} or (
-            total_sections is not None and index == total_sections - 1
-        )
-        dialogue = any(
-            marker in text
-            for marker in ('"', "“", "”", " said ", " asked ", " told me ")
-        )
-        imagined = any(
-            marker in text
-            for marker in (
-                "imagine",
-                "imagined",
-                "felt like",
-                "as if",
-                "in my head",
-                "i thought",
-                "i was convinced",
-            )
-        )
-        montage = any(
-            marker in text
-            for marker in (
-                "every time",
-                "again and again",
-                "for weeks",
-                "for days",
-                "eventually",
-                "one after another",
-                "first ",
-                "then ",
-            )
-        )
-        location = section in {"context", "setup", "background", "scene"} or any(
-            marker in text
-            for marker in (
-                "school",
-                "classroom",
-                "office",
-                "home",
-                "house",
-                "airport",
-                "restaurant",
-                "store",
-                "street",
-                "online",
-            )
-        )
-        if visual is not None and not _is_fallback_visual(visual):
-            memory_reference = (
-                visual.provider == "local_upload"
-                or visual.media_type == MediaType.document
-                or visual.content_role
-                in {
-                    ContentRole.primary_footage,
-                    ContentRole.evidence,
-                    ContentRole.document,
-                }
-            )
-            if memory_reference and visual.media_type in {
-                MediaType.image,
-                MediaType.video,
-                MediaType.document,
-            }:
-                return TemplateDecision(
-                    "storytime_memory_cutaway",
-                    {"storytime_memory_cutaway": 100.0},
-                    ["an approved real memory reference should be shown as a tactile insert"],
-                )
-            if visual.media_type == MediaType.map:
-                return TemplateDecision(
-                    "storytime_establishing_doodle",
-                    {"storytime_establishing_doodle": 100.0},
-                    ["a location reference belongs inside the establishing doodle"],
-                )
-        if opening:
-            selected = "storytime_cold_open"
-            reason = "the opening starts inside the story's immediate visual problem"
-        elif closing or any(marker in text for marker in ("turns out", "so yeah", "anyway")):
-            selected = "storytime_punchline_button"
-            reason = "the beat needs a held reaction or callback button"
-        elif dialogue:
-            selected = "storytime_dialogue_two_shot"
-            reason = "remembered dialogue reads most clearly as a two-character exchange"
-        elif imagined:
-            selected = "storytime_imagination_burst"
-            reason = "the narration explicitly shifts into an exaggerated inner picture"
-        elif montage:
-            selected = "storytime_motion_montage"
-            reason = "repetition or elapsed time benefits from a rhythmic mini-scene montage"
-        elif location:
-            selected = "storytime_establishing_doodle"
-            reason = "the beat establishes a place before the next action"
-        else:
-            selected = "storytime_character_stage"
-            reason = "one expressive character action can carry this narration beat"
-        return TemplateDecision(selected, {selected: 100.0}, [reason])
 
     if visual is None or _is_fallback_visual(visual):
         intentional_anchor = section in ANCHOR_BEATS or index == 0
@@ -344,11 +160,6 @@ def select_template(
     def boost(template: str, amount: float, reason: str) -> None:
         scores[template] += amount
         reasons[template].append(reason)
-
-    if template_policy.startswith("beyond_"):
-        boost("fullscreen_news_visual", 18, "Beyond prioritizes verified primary news footage")
-        boost("fullscreen_anchor", 8, "Beyond retains an anchor-led newsroom rhythm")
-        boost("split_anchor_visual", -6, "Beyond avoids defaulting every report to a split screen")
 
     if section in ANCHOR_BEATS:
         boost("fullscreen_anchor", 46, "section is a direct-address editorial beat")
@@ -571,134 +382,6 @@ def retention_template_decision(
         scores,
         [reason, *decision.reasons],
     )
-
-
-def meridian_presenter_cue(
-    *,
-    section_type: str,
-    section_index: int,
-    total_sections: int,
-    shot_index: int,
-    global_shot_index: int,
-    has_visual: bool,
-) -> tuple[bool, dict[str, object]]:
-    """Choose sparse, deterministic narrator appearances for Meridian.
-
-    The character is an editorial accent rather than a permanent anchor. The
-    cue is persisted into the timeline so editors and rerenders see the same
-    pose, placement, and entrance motion.
-    """
-
-    section = section_type.strip().lower()
-    direct_address = section in ANCHOR_BEATS
-    boundary = section_index == 0 or section_index == total_sections - 1
-    visible = (
-        not has_visual
-        or (
-            shot_index == 0
-            and (
-                direct_address
-                or boundary
-                or global_shot_index % 4 == 0
-            )
-        )
-    )
-    poses = ("neutral", "pointing", "thinking", "reacting", "speaking")
-    placements = (
-        "lower_right",
-        "lower_left",
-        "edge_right",
-        "right",
-        "edge_left",
-        "left",
-    )
-    motions = ("pop", "slide", "peek", "hop", "drift")
-    # Keep the character stable across consecutive beats in the same
-    # presenter-only section. A new section may deliberately move it.
-    cue_index = section_index * 3
-    pose = poses[cue_index % len(poses)]
-    if section in {"uncertainty", "caveat"}:
-        pose = "thinking"
-    elif section in {"hook", "cold_open"}:
-        pose = "reacting"
-    elif section in {"evidence", "key_developments", "development"}:
-        pose = "pointing"
-    return visible, {
-        "pose": pose,
-        "placement": placements[cue_index % len(placements)],
-        "motion": motions[cue_index % len(motions)],
-        "width": 1320 if has_visual else 1550,
-    }
-
-
-def storytime_scene_cue(
-    *,
-    script_text: str,
-    section_type: str,
-    section_index: int,
-    shot_index: int,
-) -> dict[str, object]:
-    """Derive a stable limited-animation cue from the authored narration beat."""
-
-    text = script_text.strip().lower()
-    mood = "neutral"
-    mood_markers = (
-        ("panic", ("panic", "terrified", "horrified", "oh no", "disaster")),
-        ("awkward", ("awkward", "embarrass", "cringe", "silence", "stared")),
-        ("excited", ("excited", "amazing", "finally", "couldn't wait", "best")),
-        ("annoyed", ("annoyed", "frustrat", "angry", "ridiculous", "seriously")),
-        ("sad", ("sad", "hurt", "lonely", "disappoint", "regret")),
-        ("confused", ("confused", "no idea", "what was happening", "why would")),
-    )
-    for candidate, markers in mood_markers:
-        if any(marker in text for marker in markers):
-            mood = candidate
-            break
-
-    location = "memory_space"
-    locations = (
-        ("school", ("school", "class", "teacher", "cafeteria", "campus")),
-        ("office", ("office", "meeting", "boss", "coworker", "at work")),
-        ("home", ("home", "house", "room", "kitchen", "family")),
-        ("online", ("online", "website", "app", "chat", "message", "internet")),
-        ("travel", ("airport", "plane", "train", "hotel", "trip", "travel")),
-        ("street", ("street", "store", "restaurant", "mall", "outside")),
-    )
-    for candidate, markers in locations:
-        if any(marker in text for marker in markers):
-            location = candidate
-            break
-
-    dialogue = any(
-        marker in text
-        for marker in ('"', "“", "”", " said ", " asked ", " told me ")
-    )
-    action = "talk"
-    actions = (
-        ("run", ("ran", "running", "rushed", "chased")),
-        ("hide", ("hid", "hide", "avoided", "pretended not")),
-        ("point", ("pointed", "showed", "look at")),
-        ("freeze", ("froze", "stopped", "silent", "stared")),
-        ("celebrate", ("won", "celebrat", "finally", "worked")),
-        ("fall", ("fell", "tripped", "dropped", "crashed")),
-    )
-    for candidate, markers in actions:
-        if any(marker in text for marker in markers):
-            action = candidate
-            break
-
-    words = [word.strip(".,!?;:()[]{}\"'") for word in script_text.split()]
-    accent_text = " ".join(word for word in words if word)[:44]
-    return {
-        "mood": mood,
-        "location": location,
-        "action": action,
-        "cast_size": 2 if dialogue else 1,
-        "shot": ("close", "medium", "wide")[(section_index + shot_index) % 3],
-        "accent_text": accent_text,
-        "section_type": section_type,
-        "variation": (section_index * 3 + shot_index) % 7,
-    }
 
 
 def source_audio_visuals_by_section(
@@ -1085,13 +768,12 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 script_text=beat_text,
                 template_policy=template_policy,
             )
-            if not template_policy.startswith(("meridian_", "storytime_")):
-                decision = retention_template_decision(
-                    decision,
-                    visual,
-                    shot_index,
-                    segments[-1].template.template_id if segments else None,
-                )
+            decision = retention_template_decision(
+                decision,
+                visual,
+                shot_index,
+                segments[-1].template.template_id if segments else None,
+            )
             template_id = decision.template_id
             render_visual = (
                 visual
@@ -1099,61 +781,19 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                 in {
                     "split_anchor_visual",
                     "fullscreen_news_visual",
-                    "meridian_evidence_reel",
-                    "meridian_document_desk",
-                    "meridian_clipping_board",
-                    "meridian_data_board",
-                    "meridian_explainer_stage",
-                    "storytime_memory_cutaway",
-                    "storytime_establishing_doodle",
                 }
                 else None
             )
             audio_mode = choose_audio_mode(template_id, render_visual)
-            meridian_visible = False
-            meridian_cue: dict[str, object] = {}
-            storytime_cue: dict[str, object] = {}
-            if template_policy.startswith("meridian_"):
-                meridian_visible, meridian_cue = meridian_presenter_cue(
-                    section_type=section.section_type,
-                    section_index=index,
-                    total_sections=len(script.sections),
-                    shot_index=shot_index,
-                    global_shot_index=len(segments),
-                    has_visual=render_visual is not None,
-                )
-            elif template_policy.startswith("storytime_"):
-                storytime_cue = storytime_scene_cue(
-                    script_text=beat_text,
-                    section_type=section.section_type,
-                    section_index=index,
-                    shot_index=shot_index,
-                )
             anchor = SegmentAnchor(
-                visible=(
-                    meridian_visible
-                    if template_policy.startswith("meridian_")
-                    else (
-                        template_id != "storytime_memory_cutaway"
-                        if template_policy.startswith("storytime_")
-                        else template_id != "fullscreen_news_visual"
-                    )
-                ),
+                visible=template_id != "fullscreen_news_visual",
                 # Narration can continue while the anchor is off screen. Only
                 # an audible fullscreen source clip replaces the anchor voice.
                 speaking=audio_mode != AudioMode.source,
                 camera=(
-                    "editorial_overlay"
-                    if template_policy.startswith("meridian_")
-                    else (
-                        "procedural_stage"
-                        if template_policy.startswith("storytime_")
-                        else (
-                            "front_close"
-                            if template_id != "fullscreen_anchor"
-                            else "landscape_intro"
-                        )
-                    )
+                    "front_close"
+                    if template_id != "fullscreen_anchor"
+                    else "landscape_intro"
                 ),
             )
             source_volume = 1.0 if audio_mode == AudioMode.source else 0.0
@@ -1228,16 +868,6 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
                             "scores": decision.scores,
                             "reasons": decision.reasons,
                         },
-                        "meridian_presenter": (
-                            meridian_cue
-                            if template_policy.startswith("meridian_")
-                            else None
-                        ),
-                        "storytime": (
-                            storytime_cue
-                            if template_policy.startswith("storytime_")
-                            else None
-                        ),
                     },
                 ),
                 status=ApprovalStatus.review,
@@ -1261,15 +891,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
             source_segment_visual.audio_mode = "original"
             source_segment_visual.trim_start = trim_start
             source_segment_visual.trim_end = trim_end
-            source_template_id = (
-                "meridian_evidence_reel"
-                if template_policy.startswith("meridian_")
-                else (
-                    "storytime_memory_cutaway"
-                    if template_policy.startswith("storytime_")
-                    else "fullscreen_news_visual"
-                )
-            )
+            source_template_id = "fullscreen_news_visual"
             source_segment = TimelineSegment(
                 segment_id=f"seg_{len(segments) + 1:03d}",
                 section_id=section.section_id,
@@ -1322,15 +944,7 @@ def generate_timeline(repository, story_id: str) -> TimelinePlan:
             fallback_duration = _estimated_narration_duration(
                 source_clip.fallback_narration
             )
-            fallback_template_id = (
-                "meridian_presenter_canvas"
-                if template_policy.startswith("meridian_")
-                else (
-                    "storytime_character_stage"
-                    if template_policy.startswith("storytime_")
-                    else "fallback_anchor"
-                )
-            )
+            fallback_template_id = "fallback_anchor"
             source_segment = TimelineSegment(
                 segment_id=f"seg_{len(segments) + 1:03d}",
                 section_id=section.section_id,

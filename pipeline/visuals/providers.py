@@ -761,7 +761,7 @@ def generate_script_visual_cards(repository, story_id: str) -> list[VisualCandid
                 "Automatic safe fallback: keep the presenter on screen without "
                 "generating or displaying synthetic imagery."
             ),
-            creator="SynthPost Studio",
+            creator="Synthea Studio",
             relevance_score=0.0,
             visual_quality_score=1.0,
             source_authority=1.0,

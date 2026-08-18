@@ -199,13 +199,11 @@ class RemotionRenderingSurfaceTests(unittest.TestCase):
         root = (REMOTION_SRC / "Root.tsx").read_text(encoding="utf-8")
         render_story = (REMOTION_SRC / "renderStory.ts").read_text(encoding="utf-8")
         brand = (REMOTION_SRC / "styles" / "brand.ts").read_text(encoding="utf-8")
-        for channel in ("synthpost", "meridian", "beyond", "storytime"):
+        for channel in ("synthpost",):
             self.assertIn(f'id="timeline-story-{channel}"', root)
             self.assertIn(f"timeline_story_{channel}", render_story)
         self.assertIn("production.brand?.accent", render_story)
         self.assertIn("--synthea-accent", brand)
-        self.assertIn('component={MeridianStory}', root)
-        self.assertIn('component={StorytimeStory}', root)
         self.assertIn('id="timeline-story-synthpost"', root)
         self.assertIn('component={TimelineStory}', root)
 

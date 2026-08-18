@@ -20,9 +20,9 @@ export class AppErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <main className="empty-state" role="alert" style={{ marginTop: 80 }}>
-          <div className="empty-state-title">Studio could not render this view</div>
+          <div className="empty-state-title">Synthea Studio could not render this view</div>
           <p className="empty-state-desc">{this.state.error.message}</p>
-          <button onClick={() => window.location.reload()}>Reload Studio</button>
+          <button onClick={() => window.location.reload()}>Reload Synthea Studio</button>
         </main>
       );
     }

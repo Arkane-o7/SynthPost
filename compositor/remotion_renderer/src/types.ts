@@ -93,78 +93,7 @@ export type HeadlineItem = {
   end?: number;
 };
 
-export type PresenterSpeechWindow = {
-  start: number;
-  speechEnd: number;
-  end: number;
-};
-
-export type PngPresenter = {
-  provider: "png_puppet";
-  characterId: string;
-  neutral: PublicMedia;
-  speaking: PublicMedia;
-  poses: Record<string, PublicMedia>;
-  speechWindows: PresenterSpeechWindow[];
-  talkCadenceFps: number;
-  breathCycleSeconds: number;
-  breathScale: number;
-  entrySeconds: number;
-  editorialMotion?: {
-    defaultPose?: string;
-    defaultPlacement?: MeridianPresenterPlacement;
-    defaultMotion?: MeridianPresenterMotion;
-    width?: number;
-    shadow?: boolean;
-  };
-  layout: {
-    split?: {
-      width?: number;
-      scale?: number;
-      x?: number;
-      y?: number;
-    };
-    fullscreen?: {
-      width?: number;
-      scale?: number;
-      x?: number;
-      y?: number;
-    };
-  };
-};
-
-export type MeridianPresenterPlacement =
-  | "left"
-  | "right"
-  | "center"
-  | "lower_left"
-  | "lower_right"
-  | "edge_left"
-  | "edge_right";
-
-export type MeridianPresenterMotion =
-  | "pop"
-  | "slide"
-  | "drift"
-  | "peek"
-  | "hop";
-
-export type MeridianPresenterCue = {
-  pose?: string;
-  previousPose?: string;
-  poseChangeAt?: number;
-  poseTransitionSeconds?: number;
-  poseTransition?: "cut" | "blur" | "whip";
-  placement?: MeridianPresenterPlacement;
-  motion?: MeridianPresenterMotion;
-  width?: number;
-  x?: number;
-  y?: number;
-  scale?: number;
-  rotate?: number;
-};
-
-export type MeridianInternalEvent = {
+export type TimelineInternalEvent = {
   eventId: string;
   type:
     | "add_evidence"
@@ -196,7 +125,7 @@ export type TimelineSegmentProps = {
   visualRole?: string;
   transitionIn?: string;
   transitionOut?: string;
-  internalEvents?: MeridianInternalEvent[];
+  internalEvents?: TimelineInternalEvent[];
   sceneAssets?: Record<string, TimedVisual>;
   scriptText: string;
   anchor: {
@@ -261,7 +190,6 @@ export type StoryProps = {
     start: number;
     volume?: number;
   }>;
-  presenter?: PngPresenter;
   visuals: TimedVisual[];
   points: NewsPoint[];
   logo?: PublicMedia;

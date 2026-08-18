@@ -41,7 +41,7 @@ export function ThemeToggle({ compact = false }: { compact?: boolean }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={compact ? "end" : "start"} side={compact ? "bottom" : "right"}>
-        <DropdownMenuLabel>Studio theme</DropdownMenuLabel>
+        <DropdownMenuLabel>Synthea Studio theme</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {OPTIONS.map(({ value, label, icon: Icon }) => (
           <DropdownMenuItem key={value} onSelect={() => setTheme(value)}>

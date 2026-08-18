@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -34,7 +33,6 @@ from ..storage import (
 )
 
 SAMPLE_RATE = 48_000
-EDGE_TTS_PACKAGE = "edge-tts==7.2.8"
 
 
 class NarrationNotReadyError(ValueError):
@@ -114,10 +112,10 @@ def _request(
     settings = config.get_settings().narration
     production = resolved_production(channel_profile)
     provider = str(production["narrator_provider"])
-    if provider not in {"dots_tts", "edge_tts"}:
+    if provider != "dots_tts":
         raise ValueError(
             f"Unsupported narrator provider {provider!r} for {channel_profile.name}; "
-            "expected 'dots_tts' or 'edge_tts'"
+            "expected 'dots_tts'"
         )
     units = _units(script)
     request_units: list[dict[str, Any]] = []
@@ -190,41 +188,9 @@ def _worker_command(
     audio_path: Path,
     result_path: Path,
 ) -> list[str]:
-    provider = str(request["provider"])
-    if provider == "dots_tts":
-        return [
-            _tts_python(),
-            str(PROJECT_ROOT / "pipeline" / "narration" / "dots_worker.py"),
-            str(request_path),
-            str(audio_path),
-            str(result_path),
-        ]
-
-    worker = str(PROJECT_ROOT / "pipeline" / "narration" / "edge_worker.py")
-    if request.get("test_mode"):
-        return [
-            _tts_python(),
-            worker,
-            str(request_path),
-            str(audio_path),
-            str(result_path),
-        ]
-    uv = shutil.which("uv")
-    if not uv:
-        raise RuntimeError(
-            "Sidequest Edge narration requires `uv` so its pinned neural TTS "
-            f"runtime ({EDGE_TTS_PACKAGE}) can run without modifying SynthPost's venv."
-        )
     return [
-        uv,
-        "run",
-        "--quiet",
-        "--with",
-        EDGE_TTS_PACKAGE,
-        "--python",
         _tts_python(),
-        "python",
-        worker,
+        str(PROJECT_ROOT / "pipeline" / "narration" / "dots_worker.py"),
         str(request_path),
         str(audio_path),
         str(result_path),
@@ -421,11 +387,7 @@ def generate_narration(
             ["test_synthesizer=true"]
             if test_mode
             else [
-                (
-                    "timing_uses_native_word_boundaries_on_pcm_sample_clock"
-                    if request["provider"] == "edge_tts"
-                    else "timing_is_sample_exact_not_forced_alignment"
-                ),
+                "timing_is_sample_exact_not_forced_alignment",
                 "synthetic_voice_disclosure_required",
             ]
         ),

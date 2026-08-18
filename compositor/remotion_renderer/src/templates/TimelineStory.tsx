@@ -13,7 +13,6 @@ import { AnchorPanel } from "../components/AnchorPanel";
 import { AnchorVideoLayer } from "../components/AnchorVideoLayer";
 import { DesignCanvas } from "../components/DesignCanvas";
 import { LowerThird } from "../components/LowerThird";
-import { MeridianPngNarrator } from "../components/MeridianPngNarrator";
 import { mediaSrc } from "../components/media";
 import { NewsVisualPanel } from "../components/NewsVisualPanel";
 import { SourceLabel } from "../components/SourceLabel";
@@ -252,20 +251,12 @@ const RetainedSplitSegment: React.FC<{
         mixBlendMode: "screen",
       }}
     />
-    {story.presenter?.provider === "png_puppet" ? (
-      <MeridianPngNarrator
-        presenter={story.presenter}
-        narrationStart={segment.narrationStart ?? segment.start}
-        variant="split"
-      />
-    ) : (
-      <AnchorPanel
-        anchor={story.anchor}
-        chromaKey={story.anchorChromaKey}
-        muted={mutedAnchor}
-        startFrom={startFrom}
-      />
-    )}
+    <AnchorPanel
+      anchor={story.anchor}
+      chromaKey={story.anchorChromaKey}
+      muted={mutedAnchor}
+      startFrom={startFrom}
+    />
     <NewsVisualPanel
       visuals={[relativeSegmentVisual(segment, visual)]}
       sourceLabel={story.sourceLabel}
@@ -349,24 +340,16 @@ const RetainedFullScreenAnchorSegment: React.FC<{
       color: brand.white,
     }}
   >
-    {story.presenter?.provider === "png_puppet" ? (
-      <MeridianPngNarrator
-        presenter={story.presenter}
-        narrationStart={segment.narrationStart ?? segment.start}
-        variant="fullscreen"
-      />
-    ) : (
-      <AnchorVideoLayer
-        anchor={story.anchor}
-        chromaKey={story.anchorChromaKey}
-        crop={fullAnchorCrop}
-        muted={mutedAnchor}
-        startFrom={startFrom}
-        mediaFilter="saturate(0.92) contrast(1.03) brightness(0.88)"
-        overlay="linear-gradient(180deg, rgba(2,8,16,0.10) 0%, rgba(2,8,16,0.04) 44%, rgba(2,8,16,0.42) 78%, rgba(2,8,16,0.68) 100%), linear-gradient(90deg, rgba(2,8,16,0.28) 0%, transparent 26%, transparent 74%, rgba(2,8,16,0.30) 100%)"
-        style={{ left: 0, top: 0, width: "100%", height: "100%" }}
-      />
-    )}
+    <AnchorVideoLayer
+      anchor={story.anchor}
+      chromaKey={story.anchorChromaKey}
+      crop={fullAnchorCrop}
+      muted={mutedAnchor}
+      startFrom={startFrom}
+      mediaFilter="saturate(0.92) contrast(1.03) brightness(0.88)"
+      overlay="linear-gradient(180deg, rgba(2,8,16,0.10) 0%, rgba(2,8,16,0.04) 44%, rgba(2,8,16,0.42) 78%, rgba(2,8,16,0.68) 100%), linear-gradient(90deg, rgba(2,8,16,0.28) 0%, transparent 26%, transparent 74%, rgba(2,8,16,0.30) 100%)"
+      style={{ left: 0, top: 0, width: "100%", height: "100%" }}
+    />
     <AbsoluteFill
       style={{
         opacity: 0.12,

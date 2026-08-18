@@ -1272,14 +1272,12 @@ class Repository:
         job_type: str | None = None,
         autonomy_run_id: str | None = None,
     ) -> list[RenderJob]:
-        filters: list[str] = []
-        params: list[Any] = []
-        if channel_id is not None:
-            get_channel_profile(channel_id)
-            filters.append(
-                "COALESCE(json_extract(data, '$.channel_id'), 'synthpost') = ?"
-            )
-            params.append(channel_id)
+        selected_channel_id = channel_id or DEFAULT_CHANNEL_ID
+        get_channel_profile(selected_channel_id)
+        filters: list[str] = [
+            "COALESCE(json_extract(data, '$.channel_id'), ?) = ?"
+        ]
+        params: list[Any] = [DEFAULT_CHANNEL_ID, selected_channel_id]
         if story_id is not None:
             filters.append("story_id = ?")
             params.append(story_id)
@@ -1328,12 +1326,14 @@ class Repository:
                 safe_pair_params.extend([left, right, right, left])
             safe_pair_sql = " OR ".join(safe_pair_checks) or "0"
             clauses = [
+                "COALESCE(json_extract(candidate.data, '$.channel_id'), ?) = ?",
                 "candidate.status = 'queued'",
                 "(candidate.available_at IS NULL OR candidate.available_at <= ?)",
                 f"""
                 NOT EXISTS (
                   SELECT 1 FROM render_jobs AS running
                   WHERE running.status IN ('running', 'cancel_requested')
+                    AND COALESCE(json_extract(running.data, '$.channel_id'), ?) = ?
                     AND (
                       (candidate.story_id IS NOT NULL
                        AND running.story_id = candidate.story_id)
@@ -1347,7 +1347,14 @@ class Repository:
                 )
                 """,
             ]
-            params: list[Any] = [due_at, *safe_pair_params]
+            params: list[Any] = [
+                DEFAULT_CHANNEL_ID,
+                DEFAULT_CHANNEL_ID,
+                due_at,
+                DEFAULT_CHANNEL_ID,
+                DEFAULT_CHANNEL_ID,
+                *safe_pair_params,
+            ]
             if lane_value:
                 clauses.append("candidate.queue_lane = ?")
                 params.append(lane_value)

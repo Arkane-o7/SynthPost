@@ -1276,7 +1276,7 @@ def narrative_brief_prompt(
 ) -> str:
     prompt_pack = narrative_research_pack_for_prompt(pack)
     return f"""
-You are SynthPost Studio's narrative brief architect. Plan one coherent spoken
+You are Synthea Studio's narrative brief architect. Plan one coherent spoken
 news story before any prose is drafted.
 
 {charter_prompt_context(show_format=normalize_narration_mode(narration_mode, target_duration_seconds=target_duration_seconds, primary_topic=primary_topic))}
@@ -1310,7 +1310,7 @@ def narrative_draft_prompt(
     target_words = target_word_count(target_duration_seconds)
     minimum_beats = max(3, math.ceil(target_words / 55))
     return f"""
-You are SynthPost Studio's senior narrative writer. Write one uninterrupted,
+You are Synthea Studio's senior narrative writer. Write one uninterrupted,
 coherent spoken-news narration from the brief and research below.
 
 {charter_prompt_context(show_format=normalize_narration_mode(narration_mode, target_duration_seconds=target_duration_seconds, primary_topic=primary_topic))}
@@ -1347,7 +1347,7 @@ def narrative_repair_prompt(
     narration_mode: NarrationMode | str,
 ) -> str:
     return f"""
-You are SynthPost Studio's narrative continuity editor. Rewrite the complete
+You are Synthea Studio's narrative continuity editor. Rewrite the complete
 narration as one coherent spoken story and fix every reported quality failure.
 
 {charter_prompt_context(show_format=normalize_narration_mode(narration_mode, target_duration_seconds=target_duration_seconds, primary_topic=primary_topic))}
@@ -1750,7 +1750,7 @@ remain continuous; never write a sentence that promises an upcoming audible clip
 """.strip()
     )
     return f"""
-You are SynthPost Studio's senior newsroom writer. Create a grounded, visual-first section-based news script.
+You are Synthea Studio's senior newsroom writer. Create a grounded, visual-first section-based news script.
 
 {editorial_context}
 
@@ -2017,7 +2017,7 @@ continuous anchor narration without promising an audible clip."""
             "research": section_research_context(compact_pack, base.claim_ids),
         }
         prompt = f"""
-You are performing a long-form section expansion for SynthPost Studio.
+You are performing a long-form section expansion for Synthea Studio.
 Write only this one section of a grounded spoken-news script.
 
 {charter_prompt_context(show_format=normalize_narration_mode(narration_mode, target_duration_seconds=target_duration_seconds))}
